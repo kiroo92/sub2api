@@ -24,8 +24,8 @@
       ></div>
     </div>
 
-    <!-- Content Container -->
-    <div class="relative z-10 w-full max-w-md">
+    <!-- Content Container - only show when settings are loaded to prevent flicker -->
+    <div v-if="isReady" class="relative z-10 w-full max-w-md animate-fade-in">
       <!-- Logo/Brand -->
       <div class="mb-8 text-center">
         <!-- Custom Logo or Default Logo -->
@@ -62,24 +62,35 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getPublicSettings } from '@/api/auth'
+import { useAppStore } from '@/stores'
 import { sanitizeUrl } from '@/utils/url'
 
-const siteName = ref('Sub2API')
-const siteLogo = ref('')
-const siteSubtitle = ref('Subscription to API Conversion Platform')
+const appStore = useAppStore()
+
+// Track if settings are ready to display
+// If settings are already loaded (e.g., from cache or injected config), show immediately
+const isReady = ref(appStore.publicSettingsLoaded)
+
+// Use cached settings from appStore (no flicker)
+const siteName = computed(() => appStore.siteName || 'Sub2API')
+const siteLogo = computed(() => {
+  const logo = appStore.siteLogo
+  return logo ? sanitizeUrl(logo, { allowRelative: true }) : ''
+})
+const siteSubtitle = computed(() => appStore.cachedPublicSettings?.site_subtitle || 'Subscription to API Conversion Platform')
 
 const currentYear = computed(() => new Date().getFullYear())
 
 onMounted(async () => {
-  try {
-    const settings = await getPublicSettings()
-    siteName.value = settings.site_name || 'Sub2API'
-    siteLogo.value = sanitizeUrl(settings.site_logo || '', { allowRelative: true })
-    siteSubtitle.value = settings.site_subtitle || 'Subscription to API Conversion Platform'
-  } catch (error) {
-    console.error('Failed to load public settings:', error)
+  // If already loaded, we're done
+  if (appStore.publicSettingsLoaded) {
+    isReady.value = true
+    return
   }
+  
+  // Fetch public settings if not already loaded
+  await appStore.fetchPublicSettings()
+  isReady.value = true
 })
 </script>
 
