@@ -13,7 +13,8 @@ This directory contains files for deploying Sub2API on Linux servers.
 
 | File | Description |
 |------|-------------|
-| `docker-compose.yml` | Docker Compose configuration |
+| `docker-compose.yml` | Docker Compose configuration (pre-built image) |
+| `docker-compose.build.yml` | Docker Compose configuration (build from source) |
 | `.env.example` | Docker environment variables template |
 | `DOCKER.md` | Docker Hub documentation |
 | `install.sh` | One-click binary installation script |
@@ -24,7 +25,7 @@ This directory contains files for deploying Sub2API on Linux servers.
 
 ## Docker Deployment (Recommended)
 
-### Quick Start
+### Quick Start (Pre-built Image)
 
 ```bash
 # Clone repository
@@ -44,6 +45,41 @@ docker-compose logs -f sub2api
 # Access Web UI
 # http://localhost:8080
 ```
+
+### Build from Source
+
+If you want to build from source code (for development or customization):
+
+```bash
+# Clone repository
+git clone https://github.com/Wei-Shaw/sub2api.git
+cd sub2api/deploy
+
+# Configure environment
+cp .env.example .env
+nano .env  # Set POSTGRES_PASSWORD (required)
+
+# Build and start all services
+docker-compose -f docker-compose.build.yml up -d --build
+
+# View logs
+docker-compose -f docker-compose.build.yml logs -f sub2api
+
+# Rebuild after code changes
+docker-compose -f docker-compose.build.yml up -d --build
+
+# Access Web UI
+# http://localhost:8080
+```
+
+**Build Arguments (optional):**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GOPROXY` | `https://goproxy.cn,direct` | Go module proxy |
+| `GOSUMDB` | `sum.golang.google.cn` | Go checksum database |
+| `VERSION` | `dev` | Version string |
+| `COMMIT` | `local` | Git commit hash |
 
 ### How Auto-Setup Works
 
