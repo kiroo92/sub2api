@@ -2675,6 +2675,19 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		return nil, fmt.Errorf("parse request: empty request")
 	}
 
+	// 防止非 Anthropic/Antigravity 平台的账号被错误地通过 Claude 端点转发。
+	// 例如 OpenAI 账号的 token 发到 Anthropic API 会导致 401 并触发 failover 禁用账号。
+	if account.Platform != PlatformAnthropic && account.Platform != PlatformAntigravity {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"type": "error",
+			"error": gin.H{
+				"type":    "invalid_request_error",
+				"message": fmt.Sprintf("Account platform %q is not compatible with /v1/messages endpoint", account.Platform),
+			},
+		})
+		return nil, fmt.Errorf("platform mismatch: account %d platform=%s not compatible with claude endpoint", account.ID, account.Platform)
+	}
+
 	body := parsed.Body
 	reqModel := parsed.Model
 	reqStream := parsed.Stream
