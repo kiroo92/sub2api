@@ -135,8 +135,15 @@ func applyCodexOAuthTransform(reqBody map[string]any, isCodexCLI bool) codexTran
 	}
 
 	// 续链场景保留 item_reference 与 id，避免 call_id 上下文丢失。
+	// 但 store=false 时上游不会持久化 item，引用必然失败，
+	// 因此即使续链也必须移除 item_reference 并清理 id 字段。
+	storeFalse := false
+	if v, ok := reqBody["store"].(bool); ok && !v {
+		storeFalse = true
+	}
 	if input, ok := reqBody["input"].([]any); ok {
-		input = filterCodexInput(input, needsToolContinuation)
+		preserveRefs := needsToolContinuation && !storeFalse
+		input = filterCodexInput(input, preserveRefs)
 		reqBody["input"] = input
 		result.Modified = true
 	}

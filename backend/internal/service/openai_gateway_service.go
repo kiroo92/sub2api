@@ -1163,6 +1163,16 @@ func (s *OpenAIGatewayService) handleErrorResponse(ctx context.Context, resp *ht
 	var statusCode int
 
 	switch resp.StatusCode {
+	case 400, 404, 409, 422:
+		// Client errors: pass through upstream status and message so the caller
+		// can act on the real problem (e.g. referencing a non-persisted response ID).
+		statusCode = resp.StatusCode
+		errType = "invalid_request_error"
+		if upstreamMsg != "" {
+			errMsg = upstreamMsg
+		} else {
+			errMsg = "Upstream request rejected"
+		}
 	case 401:
 		statusCode = http.StatusBadGateway
 		errType = "upstream_error"

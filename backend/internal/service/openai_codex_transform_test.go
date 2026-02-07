@@ -11,7 +11,8 @@ import (
 )
 
 func TestApplyCodexOAuthTransform_ToolContinuationPreservesInput(t *testing.T) {
-	// 续链场景：保留 item_reference 与 id，但不再强制 store=true。
+	// 续链场景 + store=false：item_reference 被移除（上游不持久化，引用必然 404），
+	// function_call_output 保留但 id 被清理，call_id 保留用于工具调用关联。
 	setupCodexCache(t)
 
 	reqBody := map[string]any{
@@ -25,25 +26,23 @@ func TestApplyCodexOAuthTransform_ToolContinuationPreservesInput(t *testing.T) {
 
 	applyCodexOAuthTransform(reqBody, false)
 
-	// 未显式设置 store=true，默认为 false。
+	// store 强制为 false（OAuth 账号）。
 	store, ok := reqBody["store"].(bool)
 	require.True(t, ok)
 	require.False(t, store)
 
 	input, ok := reqBody["input"].([]any)
 	require.True(t, ok)
-	require.Len(t, input, 2)
+	// item_reference 被移除，只剩 function_call_output。
+	require.Len(t, input, 1)
 
-	// 校验 input[0] 为 map，避免断言失败导致测试中断。
 	first, ok := input[0].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, "item_reference", first["type"])
-	require.Equal(t, "ref1", first["id"])
-
-	// 校验 input[1] 为 map，确保后续字段断言安全。
-	second, ok := input[1].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "o1", second["id"])
+	require.Equal(t, "function_call_output", first["type"])
+	require.Equal(t, "call_1", first["call_id"])
+	// id 被清理（store=false 下无意义）。
+	_, hasID := first["id"]
+	require.False(t, hasID)
 }
 
 func TestApplyCodexOAuthTransform_ExplicitStoreFalsePreserved(t *testing.T) {
