@@ -996,7 +996,7 @@ func (r *stubAPIKeyRepoForHandler) GetByKeyForAuth(context.Context, string) (*se
 }
 func (r *stubAPIKeyRepoForHandler) Update(context.Context, *service.APIKey) error { return nil }
 func (r *stubAPIKeyRepoForHandler) Delete(context.Context, int64) error           { return nil }
-func (r *stubAPIKeyRepoForHandler) ListByUserID(_ context.Context, _ int64, _ pagination.PaginationParams) ([]service.APIKey, *pagination.PaginationResult, error) {
+func (r *stubAPIKeyRepoForHandler) ListByUserID(_ context.Context, _ int64, _ pagination.PaginationParams, _ service.APIKeyListFilters) ([]service.APIKey, *pagination.PaginationResult, error) {
 	return nil, nil, nil
 }
 func (r *stubAPIKeyRepoForHandler) VerifyOwnership(context.Context, int64, []int64) ([]int64, error) {
@@ -2130,6 +2130,14 @@ func (r *stubAccountRepoForHandler) UpdateExtra(context.Context, int64, map[stri
 }
 func (r *stubAccountRepoForHandler) BulkUpdate(context.Context, []int64, service.AccountBulkUpdate) (int64, error) {
 	return 0, nil
+}
+
+func (r *stubAccountRepoForHandler) IncrementQuotaUsed(context.Context, int64, float64) error {
+	return nil
+}
+
+func (r *stubAccountRepoForHandler) ResetQuotaUsed(context.Context, int64) error {
+	return nil
 }
 
 // ==================== Stub: SoraClient (用于 SoraGatewayService) ====================

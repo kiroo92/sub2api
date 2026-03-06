@@ -37,6 +37,7 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		nil,
 		nil,
 		cfg,
+		nil,
 	)
 	accountExpirySvc := service.NewAccountExpiryService(nil, time.Second)
 	subscriptionExpirySvc := service.NewSubscriptionExpiryService(nil, time.Second)
@@ -73,6 +74,7 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		geminiOAuthSvc,
 		antigravityOAuthSvc,
 		nil, // openAIGateway
+		nil, // scheduledTestRunner
 	)
 
 	require.NotPanics(t, func() {
