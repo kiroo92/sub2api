@@ -8,9 +8,11 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // NewAPIKeyAuthMiddleware 创建 API Key 认证中间件
@@ -60,6 +62,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 
 		// 如果所有header都没有API key
 		if apiKeyString == "" {
+			logAPIKeyAuthFailure(c, "API_KEY_REQUIRED")
 			AbortWithError(c, 401, "API_KEY_REQUIRED", "API key is required in Authorization header (Bearer scheme), x-api-key header, or x-goog-api-key header")
 			return
 		}
@@ -69,6 +72,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		apiKey, err := apiKeyService.GetByKey(c.Request.Context(), apiKeyString)
 		if err != nil {
 			if errors.Is(err, service.ErrAPIKeyNotFound) {
+				logAPIKeyAuthFailure(c, "INVALID_API_KEY", zap.String("api_key_candidate", apiKeyString))
 				AbortWithError(c, 401, "INVALID_API_KEY", "Invalid API key")
 				return
 			}
@@ -82,6 +86,11 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		if !apiKey.IsActive() &&
 			apiKey.Status != service.StatusAPIKeyExpired &&
 			apiKey.Status != service.StatusAPIKeyQuotaExhausted {
+			logAPIKeyAuthFailure(c, "API_KEY_DISABLED",
+				zap.Int64("api_key_id", apiKey.ID),
+				zap.String("api_key_status", apiKey.Status),
+				zap.Int64("user_id", apiKey.UserID),
+			)
 			AbortWithError(c, 401, "API_KEY_DISABLED", "API key is disabled")
 			return
 		}
@@ -99,12 +108,23 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 
 		// 检查关联的用户
 		if apiKey.User == nil {
+			logAPIKeyAuthFailure(c, "USER_NOT_FOUND",
+				zap.Int64("api_key_id", apiKey.ID),
+				zap.String("api_key_status", apiKey.Status),
+				zap.Int64("user_id", apiKey.UserID),
+			)
 			AbortWithError(c, 401, "USER_NOT_FOUND", "User associated with API key not found")
 			return
 		}
 
 		// 检查用户状态
 		if !apiKey.User.IsActive() {
+			logAPIKeyAuthFailure(c, "USER_INACTIVE",
+				zap.Int64("api_key_id", apiKey.ID),
+				zap.String("api_key_status", apiKey.Status),
+				zap.Int64("user_id", apiKey.User.ID),
+				zap.String("user_status", apiKey.User.Status),
+			)
 			AbortWithError(c, 401, "USER_INACTIVE", "User account is not active")
 			return
 		}
@@ -218,6 +238,40 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 
 		c.Next()
 	}
+}
+
+// logAPIKeyAuthFailure logs full request headers and query params for local auth failures.
+func logAPIKeyAuthFailure(c *gin.Context, code string, fields ...zap.Field) {
+	if c == nil || c.Request == nil {
+		return
+	}
+
+	requestHeaders := map[string][]string{}
+	for key, values := range c.Request.Header {
+		copied := make([]string, len(values))
+		copy(copied, values)
+		requestHeaders[key] = copied
+	}
+
+	queryParams := map[string][]string{}
+	for key, values := range c.Request.URL.Query() {
+		copied := make([]string, len(values))
+		copy(copied, values)
+		queryParams[key] = copied
+	}
+
+	logFields := []zap.Field{
+		zap.String("component", "http.auth"),
+		zap.String("auth_failure_code", strings.TrimSpace(code)),
+		zap.String("path", c.Request.URL.Path),
+		zap.String("method", c.Request.Method),
+		zap.String("client_ip", ip.GetTrustedClientIP(c)),
+		zap.Any("request_headers", requestHeaders),
+		zap.Any("query_params", queryParams),
+	}
+	logFields = append(logFields, fields...)
+
+	logger.FromContext(c.Request.Context()).With(logFields...).Warn("api key auth failed")
 }
 
 // GetAPIKeyFromContext 从上下文中获取API key
