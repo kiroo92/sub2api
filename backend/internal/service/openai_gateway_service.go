@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
 	"sort"
 	"strconv"
@@ -888,6 +889,36 @@ func isOpenAIInstructionsRequiredError(upstreamStatusCode int, upstreamMsg strin
 	return false
 }
 
+func isOpenAITransientProcessingError(upstreamStatusCode int, upstreamMsg string, upstreamBody []byte) bool {
+	if upstreamStatusCode != http.StatusBadRequest {
+		return false
+	}
+
+	match := func(text string) bool {
+		lower := strings.ToLower(strings.TrimSpace(text))
+		if lower == "" {
+			return false
+		}
+		if strings.Contains(lower, "an error occurred while processing your request") {
+			return true
+		}
+		return strings.Contains(lower, "you can retry your request") &&
+			strings.Contains(lower, "help.openai.com") &&
+			strings.Contains(lower, "request id")
+	}
+
+	if match(upstreamMsg) {
+		return true
+	}
+	if len(upstreamBody) == 0 {
+		return false
+	}
+	if match(gjson.GetBytes(upstreamBody, "error.message").String()) {
+		return true
+	}
+	return match(string(upstreamBody))
+}
+
 // GenerateSessionHash generates a sticky-session hash for OpenAI requests.
 //
 // Priority:
@@ -1429,6 +1460,67 @@ func (s *OpenAIGatewayService) shouldFailoverUpstreamError(statusCode int) bool 
 	}
 }
 
+func (s *OpenAIGatewayService) shouldFailoverOpenAIUpstreamResponse(statusCode int, upstreamMsg string, upstreamBody []byte) bool {
+	if s.shouldFailoverUpstreamError(statusCode) {
+		return true
+	}
+	return isOpenAITransientProcessingError(statusCode, upstreamMsg, upstreamBody)
+}
+
+func isOpenAIRetryableUpstreamTransportError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	message := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case strings.Contains(message, "unexpected eof"):
+		return true
+	case strings.Contains(message, "http response to https client"):
+		return true
+	case strings.Contains(message, "connection reset by peer"):
+		return true
+	case strings.Contains(message, "broken pipe"):
+		return true
+	case strings.Contains(message, "connection refused"):
+		return true
+	case strings.Contains(message, "no such host"):
+		return true
+	case strings.Contains(message, "i/o timeout"):
+		return true
+	case strings.Contains(message, "tls handshake timeout"):
+		return true
+	default:
+		return false
+	}
+}
+
+func canOpenAIStreamingFailover(c *gin.Context, firstTokenMs *int) bool {
+	if firstTokenMs != nil {
+		return false
+	}
+	if c == nil || c.Writer == nil {
+		return true
+	}
+	return !c.Writer.Written()
+}
+
+func buildOpenAITransportFailoverResponseBody(message string) []byte {
+	msg := sanitizeUpstreamErrorMessage(strings.TrimSpace(message))
+	if msg == "" {
+		msg = "upstream transport error"
+	}
+	return []byte(`{"error":"` + strings.ReplaceAll(msg, `"`, `\"`) + `"}`)
+}
 func (s *OpenAIGatewayService) handleFailoverSideEffects(ctx context.Context, resp *http.Response, account *Account) {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, body)
@@ -1906,9 +1998,22 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
-		// Ensure the client receives an error response (handlers assume Forward writes on non-failover errors).
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
 		setOpsUpstreamError(c, 0, safeErr, "")
+		if isOpenAIRetryableUpstreamTransportError(err) {
+			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+				Platform:           account.Platform,
+				AccountID:          account.ID,
+				AccountName:        account.Name,
+				UpstreamStatusCode: http.StatusBadGateway,
+				Kind:               "failover",
+				Message:            safeErr,
+			})
+			return nil, &UpstreamFailoverError{
+				StatusCode:   http.StatusBadGateway,
+				ResponseBody: buildOpenAITransportFailoverResponseBody(safeErr),
+			}
+		}
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 			Platform:           account.Platform,
 			AccountID:          account.ID,
@@ -2097,6 +2202,21 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	if err != nil {
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
 		setOpsUpstreamError(c, 0, safeErr, "")
+		if isOpenAIRetryableUpstreamTransportError(err) {
+			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+				Platform:           account.Platform,
+				AccountID:          account.ID,
+				AccountName:        account.Name,
+				UpstreamStatusCode: http.StatusBadGateway,
+				Passthrough:        true,
+				Kind:               "failover",
+				Message:            safeErr,
+			})
+			return nil, &UpstreamFailoverError{
+				StatusCode:   http.StatusBadGateway,
+				ResponseBody: buildOpenAITransportFailoverResponseBody(safeErr),
+			}
+		}
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 			Platform:           account.Platform,
 			AccountID:          account.ID,
@@ -2456,6 +2576,24 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		if errors.Is(err, bufio.ErrTooLong) {
 			logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] SSE line too long: account=%d max_size=%d error=%v", account.ID, maxLineSize, err)
 			return &openaiStreamingResultPassthrough{usage: usage, firstTokenMs: firstTokenMs}, err
+		}
+		if isOpenAIRetryableUpstreamTransportError(err) && canOpenAIStreamingFailover(c, firstTokenMs) {
+			safeErr := sanitizeUpstreamErrorMessage(err.Error())
+			setOpsUpstreamError(c, http.StatusBadGateway, safeErr, "")
+			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+				Platform:           account.Platform,
+				AccountID:          account.ID,
+				AccountName:        account.Name,
+				UpstreamStatusCode: http.StatusBadGateway,
+				UpstreamRequestID:  upstreamRequestID,
+				Passthrough:        true,
+				Kind:               "failover",
+				Message:            safeErr,
+			})
+			return &openaiStreamingResultPassthrough{usage: usage, firstTokenMs: firstTokenMs}, &UpstreamFailoverError{
+				StatusCode:   http.StatusBadGateway,
+				ResponseBody: buildOpenAITransportFailoverResponseBody(safeErr),
+			}
 		}
 		logger.LegacyPrintf("service.openai_gateway",
 			"[OpenAI passthrough] 流读取异常中断: account=%d request_id=%s err=%v",
@@ -2844,6 +2982,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 
 	usage := &OpenAIUsage{}
 	var firstTokenMs *int
+	upstreamRequestID := strings.TrimSpace(resp.Header.Get("x-request-id"))
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
 	if s.cfg != nil && s.cfg.Gateway.MaxLineSize > 0 {
@@ -2940,6 +3079,23 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			logger.LegacyPrintf("service.openai_gateway", "SSE line too long: account=%d max_size=%d error=%v", account.ID, maxLineSize, scanErr)
 			sendErrorEvent("response_too_large")
 			return resultWithUsage(), scanErr, true
+		}
+		if isOpenAIRetryableUpstreamTransportError(scanErr) && canOpenAIStreamingFailover(c, firstTokenMs) {
+			safeErr := sanitizeUpstreamErrorMessage(scanErr.Error())
+			setOpsUpstreamError(c, http.StatusBadGateway, safeErr, "")
+			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+				Platform:           account.Platform,
+				AccountID:          account.ID,
+				AccountName:        account.Name,
+				UpstreamStatusCode: http.StatusBadGateway,
+				UpstreamRequestID:  upstreamRequestID,
+				Kind:               "failover",
+				Message:            safeErr,
+			})
+			return resultWithUsage(), &UpstreamFailoverError{
+				StatusCode:   http.StatusBadGateway,
+				ResponseBody: buildOpenAITransportFailoverResponseBody(safeErr),
+			}, true
 		}
 		sendErrorEvent("stream_read_error")
 		return resultWithUsage(), fmt.Errorf("stream read error: %w", scanErr), true
