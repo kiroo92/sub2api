@@ -4019,7 +4019,7 @@ func normalizeOpenAICompactRequestBody(body []byte) ([]byte, bool, error) {
 	}
 
 	normalized := []byte(`{}`)
-	for _, field := range []string{"model", "input", "instructions", "previous_response_id"} {
+	for _, field := range []string{"model", "input", "instructions", "previous_response_id", "conversation", "prompt_cache_key"} {
 		value := gjson.GetBytes(body, field)
 		if !value.Exists() {
 			continue
