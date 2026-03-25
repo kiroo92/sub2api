@@ -1695,6 +1695,15 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	}
 
 	originalBody := body
+	if account != nil && account.Type == AccountTypeAPIKey && isOpenAIResponsesCompactPath(c) {
+		normalizedBody, normalized, err := normalizeOpenAICompactRequestBody(body)
+		if err != nil {
+			return nil, err
+		}
+		if normalized {
+			body = normalizedBody
+		}
+	}
 	reqModel, reqStream, promptCacheKey := extractOpenAIRequestMetaFromBody(body)
 	originalModel := reqModel
 
@@ -1921,9 +1930,11 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 	}
 
-	// 仅在 WSv2 模式保留 previous_response_id，其他模式（HTTP/WSv1）统一过滤。
-	// 注意：该规则同样适用于 Codex CLI 请求，避免 WSv1 向上游透传不支持字段。
-	if wsDecision.Transport != OpenAIUpstreamTransportResponsesWebsocketV2 {
+	// previous_response_id 默认仅在 WSv2 模式保留。
+	// 例外：OpenAI API Key 的 /responses/compact 需要兼容官方 compact schema，允许通过 previous_response_id 续链。
+	keepPreviousResponseID := wsDecision.Transport == OpenAIUpstreamTransportResponsesWebsocketV2 ||
+		(account != nil && account.Type == AccountTypeAPIKey && isOpenAIResponsesCompactPath(c))
+	if !keepPreviousResponseID {
 		if _, has := reqBody["previous_response_id"]; has {
 			delete(reqBody, "previous_response_id")
 			bodyModified = true
