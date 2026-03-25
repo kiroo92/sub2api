@@ -4019,7 +4019,8 @@ func normalizeOpenAICompactRequestBody(body []byte) ([]byte, bool, error) {
 	}
 
 	normalized := []byte(`{}`)
-	for _, field := range []string{"model", "input", "instructions", "previous_response_id", "conversation", "prompt_cache_key"} {
+	// Align with the official /responses/compact request schema.
+	for _, field := range []string{"model", "input", "instructions", "previous_response_id", "prompt_cache_key"} {
 		value := gjson.GetBytes(body, field)
 		if !value.Exists() {
 			continue
