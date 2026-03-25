@@ -47,6 +47,64 @@ func resolveOpenAIForwardDefaultMappedModel(apiKey *service.APIKey, fallbackMode
 	return strings.TrimSpace(apiKey.Group.DefaultMappedModel)
 }
 
+type openAIResponsesRequestLogSummary struct {
+	FirstUpstreamStatus    int
+	FirstUpstreamAccountID int64
+	LastUpstreamStatus     int
+	LastUpstreamAccountID  int64
+}
+
+func (s *openAIResponsesRequestLogSummary) RecordUpstreamFailure(accountID int64, statusCode int) {
+	if s == nil || statusCode <= 0 {
+		return
+	}
+	if s.FirstUpstreamStatus == 0 {
+		s.FirstUpstreamStatus = statusCode
+		s.FirstUpstreamAccountID = accountID
+	}
+	s.LastUpstreamStatus = statusCode
+	s.LastUpstreamAccountID = accountID
+}
+
+func appendOpenAIResponsesRequestLogFields(fields []zap.Field, summary *openAIResponsesRequestLogSummary, switchCount int, streamStarted bool) []zap.Field {
+	if summary == nil {
+		summary = &openAIResponsesRequestLogSummary{}
+	}
+	fields = append(fields,
+		zap.Int("first_upstream_status", summary.FirstUpstreamStatus),
+		zap.Int64("first_upstream_account_id", summary.FirstUpstreamAccountID),
+		zap.Int("last_upstream_status", summary.LastUpstreamStatus),
+		zap.Int64("last_upstream_account_id", summary.LastUpstreamAccountID),
+		zap.Int("switch_count", switchCount),
+		zap.Bool("stream_started", streamStarted),
+	)
+	return fields
+}
+
+func openAIResponsesStreamStartedBeforeRetry(c *gin.Context, streamStarted bool, writerSizeBeforeForward int) bool {
+	if streamStarted {
+		return true
+	}
+	if c == nil || c.Writer == nil {
+		return false
+	}
+	if c.Writer.Size() != writerSizeBeforeForward {
+		return true
+	}
+	return c.Writer.Written() && writerSizeBeforeForward < 0
+}
+
+func normalizeOpenAIResponsesMaxAccountSwitches(configured int) int {
+	switch {
+	case configured <= 0:
+		return 2
+	case configured > 2:
+		return 2
+	default:
+		return configured
+	}
+}
+
 // NewOpenAIGatewayHandler creates a new OpenAIGatewayHandler
 func NewOpenAIGatewayHandler(
 	gatewayService *service.OpenAIGatewayService,
@@ -222,10 +280,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	sessionHash := h.gatewayService.GenerateSessionHash(c, sessionHashBody)
 
 	maxAccountSwitches := h.maxAccountSwitches
+	maxAccountSwitches = normalizeOpenAIResponsesMaxAccountSwitches(maxAccountSwitches)
 	switchCount := 0
 	failedAccountIDs := make(map[int64]struct{})
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
+	requestLogSummary := &openAIResponsesRequestLogSummary{}
 
 	for {
 		// Select account supporting the requested model
@@ -240,10 +300,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			service.OpenAIUpstreamTransportAny,
 		)
 		if err != nil {
-			reqLog.Warn("openai.account_select_failed",
+			reqLog.Warn("openai.account_select_failed", appendOpenAIResponsesRequestLogFields([]zap.Field{
 				zap.Error(err),
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
-			)
+			}, requestLogSummary, switchCount, streamStarted)...)
 			if len(failedAccountIDs) == 0 {
 				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "Service temporarily unavailable", streamStarted)
 				return
@@ -284,6 +344,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		// Forward request
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()
+		writerSizeBeforeForward := c.Writer.Size()
 		result, err := h.gatewayService.Forward(c.Request.Context(), c, account, body)
 		forwardDurationMs := time.Since(forwardStart).Milliseconds()
 		if accountReleaseFunc != nil {
@@ -301,18 +362,28 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		if err != nil {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
+				requestLogSummary.RecordUpstreamFailure(account.ID, failoverErr.StatusCode)
 				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+				if openAIResponsesStreamStartedBeforeRetry(c, streamStarted, writerSizeBeforeForward) {
+					streamStarted = true
+					reqLog.Warn("openai.upstream_failover_after_stream_started", appendOpenAIResponsesRequestLogFields([]zap.Field{
+						zap.Int64("account_id", account.ID),
+						zap.Int("upstream_status", failoverErr.StatusCode),
+					}, requestLogSummary, switchCount, streamStarted)...)
+					h.handleFailoverExhausted(c, failoverErr, true)
+					return
+				}
 				// 池模式：同账号重试
 				if failoverErr.RetryableOnSameAccount {
 					retryLimit := account.GetPoolModeRetryCount()
 					if sameAccountRetryCount[account.ID] < retryLimit {
 						sameAccountRetryCount[account.ID]++
-						reqLog.Warn("openai.pool_mode_same_account_retry",
+						reqLog.Warn("openai.pool_mode_same_account_retry", appendOpenAIResponsesRequestLogFields([]zap.Field{
 							zap.Int64("account_id", account.ID),
 							zap.Int("upstream_status", failoverErr.StatusCode),
 							zap.Int("retry_limit", retryLimit),
 							zap.Int("retry_count", sameAccountRetryCount[account.ID]),
-						)
+						}, requestLogSummary, switchCount, streamStarted)...)
 						select {
 						case <-c.Request.Context().Done():
 							return
@@ -321,29 +392,33 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 						continue
 					}
 				}
-				h.gatewayService.RecordOpenAIAccountSwitch()
 				failedAccountIDs[account.ID] = struct{}{}
 				lastFailoverErr = failoverErr
 				if switchCount >= maxAccountSwitches {
+					reqLog.Warn("openai.upstream_failover_exhausted", appendOpenAIResponsesRequestLogFields([]zap.Field{
+						zap.Int64("account_id", account.ID),
+						zap.Int("upstream_status", failoverErr.StatusCode),
+						zap.Int("max_switches", maxAccountSwitches),
+					}, requestLogSummary, switchCount, streamStarted)...)
 					h.handleFailoverExhausted(c, failoverErr, streamStarted)
 					return
 				}
 				switchCount++
-				reqLog.Warn("openai.upstream_failover_switching",
+				h.gatewayService.RecordOpenAIAccountSwitch()
+				reqLog.Warn("openai.upstream_failover_switching", appendOpenAIResponsesRequestLogFields([]zap.Field{
 					zap.Int64("account_id", account.ID),
 					zap.Int("upstream_status", failoverErr.StatusCode),
-					zap.Int("switch_count", switchCount),
 					zap.Int("max_switches", maxAccountSwitches),
-				)
+				}, requestLogSummary, switchCount, streamStarted)...)
 				continue
 			}
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
 			wroteFallback := h.ensureForwardErrorResponse(c, streamStarted)
-			fields := []zap.Field{
+			fields := appendOpenAIResponsesRequestLogFields([]zap.Field{
 				zap.Int64("account_id", account.ID),
 				zap.Bool("fallback_error_response_written", wroteFallback),
 				zap.Error(err),
-			}
+			}, requestLogSummary, switchCount, streamStarted)
 			if shouldLogOpenAIForwardFailureAsWarn(c, wroteFallback) {
 				reqLog.Warn("openai.forward_failed", fields...)
 				return
@@ -390,10 +465,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				).Error("openai.record_usage_failed", zap.Error(err))
 			}
 		})
-		reqLog.Debug("openai.request_completed",
+		if result != nil && result.Stream {
+			streamStarted = true
+		}
+		reqLog.Debug("openai.request_completed", appendOpenAIResponsesRequestLogFields([]zap.Field{
 			zap.Int64("account_id", account.ID),
-			zap.Int("switch_count", switchCount),
-		)
+		}, requestLogSummary, switchCount, streamStarted)...)
 		return
 	}
 }

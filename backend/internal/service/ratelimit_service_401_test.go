@@ -16,6 +16,7 @@ import (
 type rateLimitAccountRepoStub struct {
 	mockAccountRepoForGemini
 	setErrorCalls          int
+	setRateLimitedCalls    int
 	tempCalls              int
 	updateCredentialsCalls int
 	lastCredentials        map[string]any
@@ -30,6 +31,11 @@ func (r *rateLimitAccountRepoStub) SetError(ctx context.Context, id int64, error
 
 func (r *rateLimitAccountRepoStub) SetTempUnschedulable(ctx context.Context, id int64, until time.Time, reason string) error {
 	r.tempCalls++
+	return nil
+}
+
+func (r *rateLimitAccountRepoStub) SetRateLimited(ctx context.Context, id int64, resetAt time.Time) error {
+	r.setRateLimitedCalls++
 	return nil
 }
 
@@ -157,4 +163,44 @@ func TestRateLimitService_HandleUpstreamError_OAuth401UsesCredentialsUpdater(t *
 	require.True(t, shouldDisable)
 	require.Equal(t, 1, repo.updateCredentialsCalls)
 	require.NotEmpty(t, repo.lastCredentials["expires_at"])
+}
+
+func TestRateLimitService_HandleOpenAIResponsesFailoverError_PoolMode401StillExitsScheduling(t *testing.T) {
+	repo := &rateLimitAccountRepoStub{}
+	service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	account := &Account{
+		ID:       201,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"pool_mode": true,
+			"api_key":   "sk-test",
+		},
+	}
+
+	shouldDisable := service.HandleOpenAIResponsesFailoverError(context.Background(), account, http.StatusUnauthorized, http.Header{}, []byte("unauthorized"))
+
+	require.True(t, shouldDisable)
+	require.Equal(t, 1, repo.setErrorCalls)
+	require.Equal(t, 0, repo.tempCalls)
+	require.Equal(t, 0, repo.updateCredentialsCalls)
+}
+
+func TestRateLimitService_HandleOpenAIResponsesFailoverError_429SkipsPersistentRateLimitState(t *testing.T) {
+	repo := &rateLimitAccountRepoStub{}
+	service := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	account := &Account{
+		ID:       202,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+	}
+
+	shouldDisable := service.HandleOpenAIResponsesFailoverError(context.Background(), account, http.StatusTooManyRequests, http.Header{
+		"x-request-id": []string{"rid-429"},
+	}, []byte(`{"error":{"message":"rate limit exceeded"}}`))
+
+	require.False(t, shouldDisable)
+	require.Equal(t, 0, repo.setRateLimitedCalls)
+	require.Equal(t, 0, repo.setErrorCalls)
+	require.Equal(t, 0, repo.tempCalls)
 }

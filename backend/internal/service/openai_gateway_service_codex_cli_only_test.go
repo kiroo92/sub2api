@@ -332,3 +332,75 @@ func TestOpenAIGatewayService_Forward_TransientProcessingErrorTriggersFailover(t
 	require.Contains(t, string(failoverErr.ResponseBody), "An error occurred while processing your request")
 	require.False(t, c.Writer.Written(), "service 层应返回 failover 错误给上层换号，而不是直接向客户端写响应")
 }
+
+func TestOpenAIGatewayService_Forward_AuthAndRateLimitFailoverDoNotRetrySameAccount(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name       string
+		statusCode int
+		body       string
+	}{
+		{
+			name:       "401",
+			statusCode: http.StatusUnauthorized,
+			body:       `{"error":{"message":"invalid api key","type":"authentication_error"}}`,
+		},
+		{
+			name:       "429",
+			statusCode: http.StatusTooManyRequests,
+			body:       `{"error":{"message":"rate limit exceeded","type":"rate_limit_error"}}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
+			c.Request.Header.Set("User-Agent", "codex_cli_rs/0.1.0")
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			upstream := &httpUpstreamRecorder{
+				resp: &http.Response{
+					StatusCode: tt.statusCode,
+					Header: http.Header{
+						"Content-Type": []string{"application/json"},
+						"x-request-id": []string{"rid-failover"},
+					},
+					Body: io.NopCloser(strings.NewReader(tt.body)),
+				},
+			}
+			svc := &OpenAIGatewayService{
+				cfg: &config.Config{
+					Gateway: config.GatewayConfig{ForceCodexCLI: false},
+				},
+				httpUpstream: upstream,
+			}
+			account := &Account{
+				ID:          1001,
+				Name:        "pool-account",
+				Platform:    PlatformOpenAI,
+				Type:        AccountTypeAPIKey,
+				Concurrency: 1,
+				Credentials: map[string]any{
+					"api_key":   "sk-test",
+					"pool_mode": true,
+				},
+				Status:         StatusActive,
+				Schedulable:    true,
+				RateMultiplier: f64p(1),
+			}
+			body := []byte(`{"model":"gpt-5.1","stream":true,"input":[{"type":"text","text":"hello"}]}`)
+
+			_, err := svc.Forward(context.Background(), c, account, body)
+			require.Error(t, err)
+
+			var failoverErr *UpstreamFailoverError
+			require.ErrorAs(t, err, &failoverErr)
+			require.Equal(t, tt.statusCode, failoverErr.StatusCode)
+			require.False(t, failoverErr.RetryableOnSameAccount, "401/429 for /responses should switch account instead of retrying same account")
+			require.False(t, c.Writer.Written(), "service 层应返回 failover 错误给上层换号，而不是直接向客户端写响应")
+		})
+	}
+}

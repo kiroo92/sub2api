@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	coderws "github.com/coder/websocket"
@@ -20,6 +23,68 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
+
+var handlerStructuredLogCaptureMu sync.Mutex
+
+type handlerInMemoryLogSink struct {
+	mu     sync.Mutex
+	events []*logger.LogEvent
+}
+
+func (s *handlerInMemoryLogSink) WriteLogEvent(event *logger.LogEvent) {
+	if event == nil {
+		return
+	}
+	cloned := *event
+	if event.Fields != nil {
+		cloned.Fields = make(map[string]any, len(event.Fields))
+		for k, v := range event.Fields {
+			cloned.Fields[k] = v
+		}
+	}
+	s.mu.Lock()
+	s.events = append(s.events, &cloned)
+	s.mu.Unlock()
+}
+
+func (s *handlerInMemoryLogSink) ContainsFieldValue(field, substr string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, ev := range s.events {
+		if ev == nil || ev.Fields == nil {
+			continue
+		}
+		if v, ok := ev.Fields[field]; ok && strings.Contains(fmt.Sprint(v), substr) {
+			return true
+		}
+	}
+	return false
+}
+
+func captureHandlerStructuredLog(t *testing.T) (*handlerInMemoryLogSink, func()) {
+	t.Helper()
+	handlerStructuredLogCaptureMu.Lock()
+
+	err := logger.Init(logger.InitOptions{
+		Level:       "debug",
+		Format:      "json",
+		ServiceName: "sub2api",
+		Environment: "test",
+		Output: logger.OutputOptions{
+			ToStdout: true,
+			ToFile:   false,
+		},
+		Sampling: logger.SamplingOptions{Enabled: false},
+	})
+	require.NoError(t, err)
+
+	sink := &handlerInMemoryLogSink{}
+	logger.SetSink(sink)
+	return sink, func() {
+		logger.SetSink(nil)
+		handlerStructuredLogCaptureMu.Unlock()
+	}
+}
 
 func TestOpenAIHandleStreamingAwareError_JSONEscaping(t *testing.T) {
 	tests := []struct {
@@ -167,6 +232,75 @@ func TestOpenAIEnsureForwardErrorResponse_DoesNotOverrideWrittenResponse(t *test
 	require.False(t, wrote)
 	require.Equal(t, http.StatusTeapot, w.Code)
 	assert.Equal(t, "already written", w.Body.String())
+}
+
+func TestOpenAIResponsesRequestLogSummary_RecordUpstreamFailure(t *testing.T) {
+	summary := &openAIResponsesRequestLogSummary{}
+
+	summary.RecordUpstreamFailure(101, http.StatusUnauthorized)
+	summary.RecordUpstreamFailure(202, http.StatusTooManyRequests)
+
+	require.Equal(t, http.StatusUnauthorized, summary.FirstUpstreamStatus)
+	require.Equal(t, int64(101), summary.FirstUpstreamAccountID)
+	require.Equal(t, http.StatusTooManyRequests, summary.LastUpstreamStatus)
+	require.Equal(t, int64(202), summary.LastUpstreamAccountID)
+}
+
+func TestOpenAIResponsesStreamStartedBeforeRetry(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("false_when_no_output_written", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+		sizeBeforeForward := c.Writer.Size()
+		require.False(t, openAIResponsesStreamStartedBeforeRetry(c, false, sizeBeforeForward))
+	})
+
+	t.Run("true_when_writer_size_changed", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+		sizeBeforeForward := c.Writer.Size()
+		_, err := c.Writer.Write([]byte("data: {\"type\":\"response.output_text.delta\"}\n\n"))
+		require.NoError(t, err)
+		require.True(t, openAIResponsesStreamStartedBeforeRetry(c, false, sizeBeforeForward))
+	})
+
+	t.Run("true_when_stream_already_started", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+		require.True(t, openAIResponsesStreamStartedBeforeRetry(c, true, c.Writer.Size()))
+	})
+}
+
+func TestAppendOpenAIResponsesRequestLogFields(t *testing.T) {
+	logSink, restore := captureHandlerStructuredLog(t)
+	defer restore()
+
+	summary := &openAIResponsesRequestLogSummary{}
+	summary.RecordUpstreamFailure(101, http.StatusUnauthorized)
+	summary.RecordUpstreamFailure(202, http.StatusTooManyRequests)
+
+	logger.L().Info("openai.responses_test_log", appendOpenAIResponsesRequestLogFields(nil, summary, 1, true)...)
+
+	require.True(t, logSink.ContainsFieldValue("first_upstream_status", "401"))
+	require.True(t, logSink.ContainsFieldValue("first_upstream_account_id", "101"))
+	require.True(t, logSink.ContainsFieldValue("last_upstream_status", "429"))
+	require.True(t, logSink.ContainsFieldValue("last_upstream_account_id", "202"))
+	require.True(t, logSink.ContainsFieldValue("switch_count", "1"))
+	require.True(t, logSink.ContainsFieldValue("stream_started", "true"))
+}
+
+func TestNormalizeOpenAIResponsesMaxAccountSwitches(t *testing.T) {
+	require.Equal(t, 2, normalizeOpenAIResponsesMaxAccountSwitches(0))
+	require.Equal(t, 1, normalizeOpenAIResponsesMaxAccountSwitches(1))
+	require.Equal(t, 2, normalizeOpenAIResponsesMaxAccountSwitches(2))
+	require.Equal(t, 2, normalizeOpenAIResponsesMaxAccountSwitches(3))
 }
 
 func TestShouldLogOpenAIForwardFailureAsWarn(t *testing.T) {

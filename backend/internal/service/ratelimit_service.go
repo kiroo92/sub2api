@@ -88,6 +88,11 @@ const (
 	ErrorPolicyTempUnscheduled                          // 临时不可调度规则命中
 )
 
+type upstreamErrorHandlingOptions struct {
+	bypassPoolModeSkip  bool
+	skip429StatePersist bool
+}
+
 // CheckErrorPolicy 检查自定义错误码和临时不可调度规则。
 // 自定义错误码开启时覆盖后续所有逻辑（包括临时不可调度）。
 func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Account, statusCode int, responseBody []byte) ErrorPolicyResult {
@@ -110,10 +115,29 @@ func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Accoun
 // HandleUpstreamError 处理上游错误响应，标记账号状态
 // 返回是否应该停止该账号的调度
 func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte) (shouldDisable bool) {
+	return s.handleUpstreamError(ctx, account, statusCode, headers, responseBody, upstreamErrorHandlingOptions{})
+}
+
+// HandleOpenAIResponsesFailoverError 仅用于 OpenAI /responses 请求内 failover。
+// 约束：
+// 1. 401 即使在 pool mode 也要尽快退出调度；
+// 2. 429 只影响当前请求内切号，不落持久 rate_limited 状态。
+func (s *RateLimitService) HandleOpenAIResponsesFailoverError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte) (shouldDisable bool) {
+	opts := upstreamErrorHandlingOptions{}
+	switch statusCode {
+	case http.StatusUnauthorized:
+		opts.bypassPoolModeSkip = true
+	case http.StatusTooManyRequests:
+		opts.skip429StatePersist = true
+	}
+	return s.handleUpstreamError(ctx, account, statusCode, headers, responseBody, opts)
+}
+
+func (s *RateLimitService) handleUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte, opts upstreamErrorHandlingOptions) (shouldDisable bool) {
 	customErrorCodesEnabled := account.IsCustomErrorCodesEnabled()
 
 	// 池模式默认不标记本地账号状态；仅当用户显式配置自定义错误码时按本地策略处理。
-	if account.IsPoolMode() && !customErrorCodesEnabled {
+	if account.IsPoolMode() && !customErrorCodesEnabled && !opts.bypassPoolModeSkip {
 		slog.Info("pool_mode_error_skipped", "account_id", account.ID, "status_code", statusCode)
 		return false
 	}
@@ -213,6 +237,11 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 		)
 		shouldDisable = s.handle403(ctx, account, upstreamMsg, responseBody)
 	case 429:
+		if opts.skip429StatePersist {
+			slog.Info("openai_responses_429_failover_skipped_state_persist", "account_id", account.ID, "platform", account.Platform)
+			shouldDisable = false
+			break
+		}
 		s.handle429(ctx, account, headers, responseBody)
 		shouldDisable = false
 	case 529:
