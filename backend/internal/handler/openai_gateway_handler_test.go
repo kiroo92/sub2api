@@ -303,6 +303,16 @@ func TestNormalizeOpenAIResponsesMaxAccountSwitches(t *testing.T) {
 	require.Equal(t, 2, normalizeOpenAIResponsesMaxAccountSwitches(3))
 }
 
+func TestOpenAIResponsesSupportsSeamlessFailover(t *testing.T) {
+	require.True(t, openAIResponsesSupportsSeamlessFailover(http.StatusUnauthorized))
+	require.True(t, openAIResponsesSupportsSeamlessFailover(http.StatusTooManyRequests))
+	require.True(t, openAIResponsesSupportsSeamlessFailover(http.StatusServiceUnavailable))
+
+	require.False(t, openAIResponsesSupportsSeamlessFailover(http.StatusForbidden))
+	require.False(t, openAIResponsesSupportsSeamlessFailover(http.StatusBadGateway))
+	require.False(t, openAIResponsesSupportsSeamlessFailover(http.StatusPaymentRequired))
+}
+
 func TestShouldLogOpenAIForwardFailureAsWarn(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

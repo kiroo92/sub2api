@@ -105,6 +105,15 @@ func normalizeOpenAIResponsesMaxAccountSwitches(configured int) int {
 	}
 }
 
+func openAIResponsesSupportsSeamlessFailover(statusCode int) bool {
+	switch statusCode {
+	case http.StatusUnauthorized, http.StatusTooManyRequests, http.StatusServiceUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // NewOpenAIGatewayHandler creates a new OpenAIGatewayHandler
 func NewOpenAIGatewayHandler(
 	gatewayService *service.OpenAIGatewayService,
@@ -391,6 +400,14 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 						}
 						continue
 					}
+				}
+				if !openAIResponsesSupportsSeamlessFailover(failoverErr.StatusCode) {
+					reqLog.Warn("openai.upstream_failover_not_seamless", appendOpenAIResponsesRequestLogFields([]zap.Field{
+						zap.Int64("account_id", account.ID),
+						zap.Int("upstream_status", failoverErr.StatusCode),
+					}, requestLogSummary, switchCount, streamStarted)...)
+					h.handleFailoverExhausted(c, failoverErr, streamStarted)
+					return
 				}
 				failedAccountIDs[account.ID] = struct{}{}
 				lastFailoverErr = failoverErr
