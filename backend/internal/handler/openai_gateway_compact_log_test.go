@@ -14,14 +14,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var handlerStructuredLogCaptureMu sync.Mutex
+var compactHandlerStructuredLogCaptureMu sync.Mutex
 
-type handlerInMemoryLogSink struct {
+type compactHandlerInMemoryLogSink struct {
 	mu     sync.Mutex
 	events []*logger.LogEvent
 }
 
-func (s *handlerInMemoryLogSink) WriteLogEvent(event *logger.LogEvent) {
+func (s *compactHandlerInMemoryLogSink) WriteLogEvent(event *logger.LogEvent) {
 	if event == nil {
 		return
 	}
@@ -37,7 +37,7 @@ func (s *handlerInMemoryLogSink) WriteLogEvent(event *logger.LogEvent) {
 	s.mu.Unlock()
 }
 
-func (s *handlerInMemoryLogSink) ContainsMessageAtLevel(substr, level string) bool {
+func (s *compactHandlerInMemoryLogSink) ContainsMessageAtLevel(substr, level string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	wantLevel := strings.ToLower(strings.TrimSpace(level))
@@ -52,7 +52,7 @@ func (s *handlerInMemoryLogSink) ContainsMessageAtLevel(substr, level string) bo
 	return false
 }
 
-func (s *handlerInMemoryLogSink) ContainsFieldValue(field, substr string) bool {
+func (s *compactHandlerInMemoryLogSink) ContainsFieldValue(field, substr string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, ev := range s.events {
@@ -66,9 +66,9 @@ func (s *handlerInMemoryLogSink) ContainsFieldValue(field, substr string) bool {
 	return false
 }
 
-func captureHandlerStructuredLog(t *testing.T) (*handlerInMemoryLogSink, func()) {
+func captureCompactHandlerStructuredLog(t *testing.T) (*compactHandlerInMemoryLogSink, func()) {
 	t.Helper()
-	handlerStructuredLogCaptureMu.Lock()
+	compactHandlerStructuredLogCaptureMu.Lock()
 
 	err := logger.Init(logger.InitOptions{
 		Level:       "debug",
@@ -83,11 +83,11 @@ func captureHandlerStructuredLog(t *testing.T) (*handlerInMemoryLogSink, func())
 	})
 	require.NoError(t, err)
 
-	sink := &handlerInMemoryLogSink{}
+	sink := &compactHandlerInMemoryLogSink{}
 	logger.SetSink(sink)
 	return sink, func() {
 		logger.SetSink(nil)
-		handlerStructuredLogCaptureMu.Unlock()
+		compactHandlerStructuredLogCaptureMu.Unlock()
 	}
 }
 
@@ -110,7 +110,7 @@ func TestIsOpenAIRemoteCompactPath(t *testing.T) {
 
 func TestLogOpenAIRemoteCompactOutcome_Succeeded(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	logSink, restore := captureHandlerStructuredLog(t)
+	logSink, restore := captureCompactHandlerStructuredLog(t)
 	defer restore()
 
 	rec := httptest.NewRecorder()
@@ -136,7 +136,7 @@ func TestLogOpenAIRemoteCompactOutcome_Succeeded(t *testing.T) {
 
 func TestLogOpenAIRemoteCompactOutcome_Failed(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	logSink, restore := captureHandlerStructuredLog(t)
+	logSink, restore := captureCompactHandlerStructuredLog(t)
 	defer restore()
 
 	rec := httptest.NewRecorder()
@@ -156,7 +156,7 @@ func TestLogOpenAIRemoteCompactOutcome_Failed(t *testing.T) {
 
 func TestLogOpenAIRemoteCompactOutcome_NonCompactSkips(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	logSink, restore := captureHandlerStructuredLog(t)
+	logSink, restore := captureCompactHandlerStructuredLog(t)
 	defer restore()
 
 	rec := httptest.NewRecorder()
@@ -173,7 +173,7 @@ func TestLogOpenAIRemoteCompactOutcome_NonCompactSkips(t *testing.T) {
 
 func TestOpenAIResponses_CompactUnauthorizedLogsFailed(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	logSink, restore := captureHandlerStructuredLog(t)
+	logSink, restore := captureCompactHandlerStructuredLog(t)
 	defer restore()
 
 	rec := httptest.NewRecorder()

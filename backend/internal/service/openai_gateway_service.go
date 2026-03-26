@@ -1894,6 +1894,14 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 	}
 
+	// OAuth compact 等变换可能会移除 stream 字段；此处以当前请求体为准重新同步，
+	// 避免后续仍按旧的流式判定进入 SSE 处理分支。
+	if v, ok := reqBody["stream"].(bool); ok {
+		reqStream = v
+	} else {
+		reqStream = false
+	}
+
 	// Handle max_output_tokens based on platform and account type
 	if !isCodexCLI {
 		if maxOutputTokens, hasMaxOutputTokens := reqBody["max_output_tokens"]; hasMaxOutputTokens {
