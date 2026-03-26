@@ -2669,6 +2669,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	usage := &OpenAIUsage{}
 	var firstTokenMs *int
 	clientDisconnected := false
+	downstreamStarted := false
 	sawDone := false
 	sawTerminalEvent := false
 	upstreamRequestID := strings.TrimSpace(resp.Header.Get("x-request-id"))
@@ -2685,6 +2686,11 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	for scanner.Scan() {
 		line := scanner.Text()
 		if data, ok := extractOpenAISSEDataLine(line); ok {
+			if !downstreamStarted {
+				if failoverErr, ok := s.buildOpenAIStreamingFailoverError(ctx, c, resp, account, []byte(data)); ok {
+					return &openaiStreamingResultPassthrough{usage: usage, firstTokenMs: firstTokenMs}, failoverErr
+				}
+			}
 			dataBytes := []byte(data)
 			trimmedData := strings.TrimSpace(data)
 			if trimmedData == "[DONE]" {
@@ -2706,6 +2712,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Client disconnected during streaming, continue draining upstream for usage: account=%d", account.ID)
 			} else {
 				flusher.Flush()
+				downstreamStarted = true
 			}
 		}
 	}
@@ -3272,6 +3279,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 	errorEventSent := false
 	clientDisconnected := false // 客户端断开后继续 drain 上游以收集 usage
 	sawTerminalEvent := false
+	downstreamStarted := false
 	sendErrorEvent := func(reason string) {
 		if errorEventSent || clientDisconnected {
 			return
@@ -3288,7 +3296,9 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 		}
 		if err := flushBuffered(); err != nil {
 			clientDisconnected = true
+			return
 		}
+		downstreamStarted = true
 	}
 
 	needModelReplace := originalModel != mappedModel
@@ -3373,6 +3383,8 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 					if err := flushBuffered(); err != nil {
 						clientDisconnected = true
 						logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming flush, continuing to drain upstream for billing")
+					} else {
+						downstreamStarted = true
 					}
 				}
 			}
@@ -3398,6 +3410,8 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 				if err := flushBuffered(); err != nil {
 					clientDisconnected = true
 					logger.LegacyPrintf("service.openai_gateway", "Client disconnected during streaming flush, continuing to drain upstream for billing")
+				} else {
+					downstreamStarted = true
 				}
 			}
 		}
@@ -3407,6 +3421,11 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 	if streamInterval <= 0 && keepaliveInterval <= 0 {
 		defer putSSEScannerBuf64K(scanBuf)
 		for scanner.Scan() {
+			if !downstreamStarted {
+				if failoverErr, ok := s.buildOpenAIStreamingFailoverError(ctx, c, resp, account, []byte(extractDataLineForFailover(scanner.Text()))); ok {
+					return resultWithUsage(), failoverErr
+				}
+			}
 			processSSELine(scanner.Text(), true)
 		}
 		if result, err, done := handleScanErr(scanner.Err()); done {
@@ -3456,6 +3475,11 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			if result, err, done := handleScanErr(ev.err); done {
 				return result, err
 			}
+			if !downstreamStarted {
+				if failoverErr, ok := s.buildOpenAIStreamingFailoverError(ctx, c, resp, account, []byte(extractDataLineForFailover(ev.line))); ok {
+					return resultWithUsage(), failoverErr
+				}
+			}
 			processSSELine(ev.line, len(events) == 0)
 
 		case <-intervalCh:
@@ -3475,6 +3499,9 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			return resultWithUsage(), fmt.Errorf("stream data interval timeout")
 
 		case <-keepaliveCh:
+			if !downstreamStarted {
+				continue
+			}
 			if clientDisconnected {
 				continue
 			}
@@ -3489,7 +3516,9 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			if err := flushBuffered(); err != nil {
 				clientDisconnected = true
 				logger.LegacyPrintf("service.openai_gateway", "Client disconnected during keepalive flush, continuing to drain upstream for billing")
+				continue
 			}
+			downstreamStarted = true
 		}
 	}
 
@@ -3509,6 +3538,14 @@ func extractOpenAISSEDataLine(line string) (string, bool) {
 		start++
 	}
 	return line[start:], true
+}
+
+func extractDataLineForFailover(line string) string {
+	data, ok := extractOpenAISSEDataLine(line)
+	if !ok {
+		return ""
+	}
+	return data
 }
 
 func (s *OpenAIGatewayService) replaceModelInSSELine(line, fromModel, toModel string) string {
@@ -3717,6 +3754,102 @@ func extractOpenAISSEErrorMessage(payload []byte) string {
 		}
 	}
 	return sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(payload)))
+}
+
+func parseOpenAISSEErrorFields(payload []byte) (code string, errType string, errMessage string) {
+	if len(payload) == 0 {
+		return "", "", ""
+	}
+
+	values := gjson.GetManyBytes(
+		payload,
+		"error.code",
+		"error.type",
+		"error.message",
+		"response.error.code",
+		"response.error.type",
+		"response.error.message",
+	)
+
+	code = strings.TrimSpace(values[0].String())
+	if code == "" {
+		code = strings.TrimSpace(values[3].String())
+	}
+	errType = strings.TrimSpace(values[1].String())
+	if errType == "" {
+		errType = strings.TrimSpace(values[4].String())
+	}
+	errMessage = strings.TrimSpace(values[2].String())
+	if errMessage == "" {
+		errMessage = strings.TrimSpace(values[5].String())
+	}
+	if errMessage == "" {
+		errMessage = extractOpenAISSEErrorMessage(payload)
+	}
+	return code, errType, errMessage
+}
+
+func (s *OpenAIGatewayService) buildOpenAIStreamingFailoverError(
+	ctx context.Context,
+	c *gin.Context,
+	resp *http.Response,
+	account *Account,
+	payload []byte,
+) (*UpstreamFailoverError, bool) {
+	if len(payload) == 0 || account == nil {
+		return nil, false
+	}
+
+	eventType := strings.TrimSpace(gjson.GetBytes(payload, "type").String())
+	switch eventType {
+	case "error", "response.failed":
+	default:
+		return nil, false
+	}
+
+	codeRaw, errTypeRaw, upstreamMsg := parseOpenAISSEErrorFields(payload)
+	upstreamMsg = sanitizeUpstreamErrorMessage(strings.TrimSpace(upstreamMsg))
+
+	statusCode := openAIWSErrorHTTPStatusFromRaw(codeRaw, errTypeRaw)
+	if statusCode == http.StatusBadGateway && isOpenAITransientProcessingError(http.StatusBadRequest, upstreamMsg, payload) {
+		statusCode = http.StatusBadRequest
+	}
+	if !s.shouldFailoverOpenAIUpstreamResponse(statusCode, upstreamMsg, payload) {
+		return nil, false
+	}
+
+	if upstreamMsg == "" {
+		upstreamMsg = "Upstream request failed"
+	}
+
+	upstreamDetail := ""
+	if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
+		maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes
+		if maxBytes <= 0 {
+			maxBytes = 2048
+		}
+		upstreamDetail = truncateString(string(payload), maxBytes)
+	}
+	setOpsUpstreamError(c, statusCode, upstreamMsg, upstreamDetail)
+	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+		Platform:           account.Platform,
+		AccountID:          account.ID,
+		AccountName:        account.Name,
+		UpstreamStatusCode: statusCode,
+		UpstreamRequestID:  resp.Header.Get("x-request-id"),
+		Kind:               "failover",
+		Message:            upstreamMsg,
+		Detail:             upstreamDetail,
+	})
+	if s.rateLimitService != nil {
+		s.rateLimitService.HandleUpstreamError(ctx, account, statusCode, resp.Header, payload)
+	}
+
+	return &UpstreamFailoverError{
+		StatusCode:             statusCode,
+		ResponseBody:           append([]byte(nil), payload...),
+		RetryableOnSameAccount: account.IsPoolMode() && (isPoolModeRetryableStatus(statusCode) || isOpenAITransientProcessingError(statusCode, upstreamMsg, payload)),
+	}, true
 }
 
 func (s *OpenAIGatewayService) writeOpenAINonStreamingProtocolError(resp *http.Response, c *gin.Context, message string) error {

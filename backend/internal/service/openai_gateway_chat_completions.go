@@ -165,7 +165,7 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	var result *OpenAIForwardResult
 	var handleErr error
 	if clientStream {
-		result, handleErr = s.handleChatStreamingResponse(resp, c, originalModel, mappedModel, includeUsage, startTime)
+		result, handleErr = s.handleChatStreamingResponse(resp, c, account, originalModel, mappedModel, includeUsage, startTime)
 	} else {
 		result, handleErr = s.handleChatBufferedStreamingResponse(resp, c, originalModel, mappedModel, startTime)
 	}
@@ -291,6 +291,7 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
 func (s *OpenAIGatewayService) handleChatStreamingResponse(
 	resp *http.Response,
 	c *gin.Context,
+	account *Account,
 	originalModel string,
 	mappedModel string,
 	includeUsage bool,
@@ -305,7 +306,6 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
-	c.Writer.WriteHeader(http.StatusOK)
 
 	state := apicompat.NewResponsesEventToChatState()
 	state.Model = originalModel
@@ -314,6 +314,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 	var usage OpenAIUsage
 	var firstTokenMs *int
 	firstChunk := true
+	streamCommitted := false
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -334,7 +335,20 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		}
 	}
 
-	processDataLine := func(payload string) bool {
+	commitStream := func() {
+		if streamCommitted {
+			return
+		}
+		c.Writer.WriteHeader(http.StatusOK)
+		streamCommitted = true
+	}
+
+	processDataLine := func(payload string) (bool, *UpstreamFailoverError) {
+		if !streamCommitted {
+			if failoverErr, ok := s.buildOpenAIStreamingFailoverError(c.Request.Context(), c, resp, account, []byte(payload)); ok {
+				return false, failoverErr
+			}
+		}
 		if firstChunk {
 			firstChunk = false
 			ms := int(time.Since(startTime).Milliseconds())
@@ -347,7 +361,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 				zap.Error(err),
 				zap.String("request_id", requestID),
 			)
-			return false
+			return false, nil
 		}
 
 		// Extract usage from completion events
@@ -364,6 +378,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 
 		chunks := apicompat.ResponsesEventToChatChunks(&event, state)
 		for _, chunk := range chunks {
+			commitStream()
 			sse, err := apicompat.ChatChunkToSSE(chunk)
 			if err != nil {
 				logger.L().Warn("openai chat_completions stream: failed to marshal chunk",
@@ -376,16 +391,17 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 				logger.L().Info("openai chat_completions stream: client disconnected",
 					zap.String("request_id", requestID),
 				)
-				return true
+				return true, nil
 			}
 		}
 		if len(chunks) > 0 {
 			c.Writer.Flush()
 		}
-		return false
+		return false, nil
 	}
 
 	finalizeStream := func() (*OpenAIForwardResult, error) {
+		commitStream()
 		if finalChunks := apicompat.FinalizeResponsesChatStream(state); len(finalChunks) > 0 {
 			for _, chunk := range finalChunks {
 				sse, err := apicompat.ChatChunkToSSE(chunk)
@@ -423,7 +439,11 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			if !strings.HasPrefix(line, "data: ") || line == "data: [DONE]" {
 				continue
 			}
-			if processDataLine(line[6:]) {
+			clientDisconnected, failoverErr := processDataLine(line[6:])
+			if failoverErr != nil {
+				return resultWithUsage(), failoverErr
+			}
+			if clientDisconnected {
 				return resultWithUsage(), nil
 			}
 		}
@@ -478,11 +498,18 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			if !strings.HasPrefix(line, "data: ") || line == "data: [DONE]" {
 				continue
 			}
-			if processDataLine(line[6:]) {
+			clientDisconnected, failoverErr := processDataLine(line[6:])
+			if failoverErr != nil {
+				return resultWithUsage(), failoverErr
+			}
+			if clientDisconnected {
 				return resultWithUsage(), nil
 			}
 
 		case <-keepaliveTicker.C:
+			if !streamCommitted {
+				continue
+			}
 			if time.Since(lastDataAt) < keepaliveInterval {
 				continue
 			}

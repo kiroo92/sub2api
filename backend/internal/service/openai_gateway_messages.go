@@ -180,7 +180,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	var result *OpenAIForwardResult
 	var handleErr error
 	if clientStream {
-		result, handleErr = s.handleAnthropicStreamingResponse(resp, c, originalModel, mappedModel, startTime)
+		result, handleErr = s.handleAnthropicStreamingResponse(resp, c, account, originalModel, mappedModel, startTime)
 	} else {
 		// Client wants JSON: buffer the streaming response and assemble a JSON reply.
 		result, handleErr = s.handleAnthropicBufferedStreamingResponse(resp, c, originalModel, mappedModel, startTime)
@@ -315,6 +315,7 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
 func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	resp *http.Response,
 	c *gin.Context,
+	account *Account,
 	originalModel string,
 	mappedModel string,
 	startTime time.Time,
@@ -328,13 +329,13 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
-	c.Writer.WriteHeader(http.StatusOK)
 
 	state := apicompat.NewResponsesEventToAnthropicState()
 	state.Model = originalModel
 	var usage OpenAIUsage
 	var firstTokenMs *int
 	firstChunk := true
+	streamCommitted := false
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -358,7 +359,20 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 
 	// processDataLine handles a single "data: ..." SSE line from upstream.
 	// Returns (clientDisconnected bool).
-	processDataLine := func(payload string) bool {
+	commitStream := func() {
+		if streamCommitted {
+			return
+		}
+		c.Writer.WriteHeader(http.StatusOK)
+		streamCommitted = true
+	}
+
+	processDataLine := func(payload string) (bool, *UpstreamFailoverError) {
+		if !streamCommitted {
+			if failoverErr, ok := s.buildOpenAIStreamingFailoverError(c.Request.Context(), c, resp, account, []byte(payload)); ok {
+				return false, failoverErr
+			}
+		}
 		if firstChunk {
 			firstChunk = false
 			ms := int(time.Since(startTime).Milliseconds())
@@ -371,7 +385,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 				zap.Error(err),
 				zap.String("request_id", requestID),
 			)
-			return false
+			return false, nil
 		}
 
 		// Extract usage from completion events
@@ -389,6 +403,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 		// Convert to Anthropic events
 		events := apicompat.ResponsesEventToAnthropicEvents(&event, state)
 		for _, evt := range events {
+			commitStream()
 			sse, err := apicompat.ResponsesAnthropicEventToSSE(evt)
 			if err != nil {
 				logger.L().Warn("openai messages stream: failed to marshal event",
@@ -401,18 +416,19 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 				logger.L().Info("openai messages stream: client disconnected",
 					zap.String("request_id", requestID),
 				)
-				return true
+				return true, nil
 			}
 		}
 		if len(events) > 0 {
 			c.Writer.Flush()
 		}
-		return false
+		return false, nil
 	}
 
 	// finalizeStream sends any remaining Anthropic events and returns the result.
 	finalizeStream := func() (*OpenAIForwardResult, error) {
 		if finalEvents := apicompat.FinalizeResponsesAnthropicStream(state); len(finalEvents) > 0 {
+			commitStream()
 			for _, evt := range finalEvents {
 				sse, err := apicompat.ResponsesAnthropicEventToSSE(evt)
 				if err != nil {
@@ -448,7 +464,11 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 			if !strings.HasPrefix(line, "data: ") || line == "data: [DONE]" {
 				continue
 			}
-			if processDataLine(line[6:]) {
+			clientDisconnected, failoverErr := processDataLine(line[6:])
+			if failoverErr != nil {
+				return resultWithUsage(), failoverErr
+			}
+			if clientDisconnected {
 				return resultWithUsage(), nil
 			}
 		}
@@ -504,11 +524,18 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 			if !strings.HasPrefix(line, "data: ") || line == "data: [DONE]" {
 				continue
 			}
-			if processDataLine(line[6:]) {
+			clientDisconnected, failoverErr := processDataLine(line[6:])
+			if failoverErr != nil {
+				return resultWithUsage(), failoverErr
+			}
+			if clientDisconnected {
 				return resultWithUsage(), nil
 			}
 
 		case <-keepaliveTicker.C:
+			if !streamCommitted {
+				continue
+			}
 			if time.Since(lastDataAt) < keepaliveInterval {
 				continue
 			}
