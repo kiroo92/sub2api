@@ -24,6 +24,7 @@ func RegisterUserRoutes(
 		{
 			user.GET("/profile", h.User.GetProfile)
 			user.GET("/invite", h.User.GetInvite)
+			user.POST("/invite/bind", h.User.BindInvite)
 			user.PUT("/password", h.User.ChangePassword)
 			user.PUT("", h.User.UpdateProfile)
 

@@ -34,6 +34,10 @@ type UpdateProfileRequest struct {
 	Username *string `json:"username"`
 }
 
+type BindInviteRequest struct {
+	ReferralCode string `json:"referral_code" binding:"required"`
+}
+
 // GetProfile handles getting user profile
 // GET /api/v1/users/me
 func (h *UserHandler) GetProfile(c *gin.Context) {
@@ -71,6 +75,39 @@ func (h *UserHandler) GetInvite(c *gin.Context) {
 	}
 
 	response.Success(c, invite)
+}
+
+// BindInvite handles binding referral code for current user
+func (h *UserHandler) BindInvite(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	if h.inviteService == nil {
+		response.InternalError(c, "Invite service unavailable")
+		return
+	}
+
+	var req BindInviteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	binding, err := h.inviteService.BindReferralForUser(c.Request.Context(), subject.UserID, req.ReferralCode)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{
+		"binding": gin.H{
+			"inviter_user_id": binding.InviterUserID,
+			"inviter_code":    binding.InviterCode,
+			"bound_at":        binding.CreatedAt,
+		},
+	})
 }
 
 // ChangePassword handles changing user password
