@@ -14,6 +14,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/invitebinding"
+	"github.com/Wei-Shaw/sub2api/ent/invitecode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
@@ -371,6 +373,51 @@ func (_c *UserCreate) AddPromoCodeUsages(v ...*PromoCodeUsage) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddPromoCodeUsageIDs(ids...)
+}
+
+// AddInviteCodeIDs adds the "invite_codes" edge to the InviteCode entity by IDs.
+func (_c *UserCreate) AddInviteCodeIDs(ids ...int64) *UserCreate {
+	_c.mutation.AddInviteCodeIDs(ids...)
+	return _c
+}
+
+// AddInviteCodes adds the "invite_codes" edges to the InviteCode entity.
+func (_c *UserCreate) AddInviteCodes(v ...*InviteCode) *UserCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddInviteCodeIDs(ids...)
+}
+
+// AddInvitedUserIDs adds the "invited_users" edge to the InviteBinding entity by IDs.
+func (_c *UserCreate) AddInvitedUserIDs(ids ...int64) *UserCreate {
+	_c.mutation.AddInvitedUserIDs(ids...)
+	return _c
+}
+
+// AddInvitedUsers adds the "invited_users" edges to the InviteBinding entity.
+func (_c *UserCreate) AddInvitedUsers(v ...*InviteBinding) *UserCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddInvitedUserIDs(ids...)
+}
+
+// AddInviteBindingIDs adds the "invite_binding" edge to the InviteBinding entity by IDs.
+func (_c *UserCreate) AddInviteBindingIDs(ids ...int64) *UserCreate {
+	_c.mutation.AddInviteBindingIDs(ids...)
+	return _c
+}
+
+// AddInviteBinding adds the "invite_binding" edges to the InviteBinding entity.
+func (_c *UserCreate) AddInviteBinding(v ...*InviteBinding) *UserCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddInviteBindingIDs(ids...)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -761,6 +808,54 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(promocodeusage.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.InviteCodesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.InviteCodesTable,
+			Columns: []string{user.InviteCodesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(invitecode.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.InvitedUsersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.InvitedUsersTable,
+			Columns: []string{user.InvitedUsersColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(invitebinding.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.InviteBindingIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.InviteBindingTable,
+			Columns: []string{user.InviteBindingColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(invitebinding.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {

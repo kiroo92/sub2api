@@ -11,13 +11,15 @@ import (
 
 // UserHandler handles user-related requests
 type UserHandler struct {
-	userService *service.UserService
+	userService   *service.UserService
+	inviteService *service.InviteService
 }
 
 // NewUserHandler creates a new UserHandler
-func NewUserHandler(userService *service.UserService) *UserHandler {
+func NewUserHandler(userService *service.UserService, inviteService *service.InviteService) *UserHandler {
 	return &UserHandler{
-		userService: userService,
+		userService:   userService,
+		inviteService: inviteService,
 	}
 }
 
@@ -48,6 +50,27 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 	}
 
 	response.Success(c, dto.UserFromService(userData))
+}
+
+// GetInvite handles getting current user invite info
+func (h *UserHandler) GetInvite(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	if h.inviteService == nil {
+		response.InternalError(c, "Invite service unavailable")
+		return
+	}
+
+	invite, err := h.inviteService.GetInviteInfoForUser(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, invite)
 }
 
 // ChangePassword handles changing user password

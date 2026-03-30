@@ -105,6 +105,30 @@ func (f IdempotencyRecordFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.IdempotencyRecordMutation", m)
 }
 
+// The InviteBindingFunc type is an adapter to allow the use of ordinary
+// function as InviteBinding mutator.
+type InviteBindingFunc func(context.Context, *ent.InviteBindingMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f InviteBindingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.InviteBindingMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.InviteBindingMutation", m)
+}
+
+// The InviteCodeFunc type is an adapter to allow the use of ordinary
+// function as InviteCode mutator.
+type InviteCodeFunc func(context.Context, *ent.InviteCodeMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f InviteCodeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.InviteCodeMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.InviteCodeMutation", m)
+}
+
 // The PromoCodeFunc type is an adapter to allow the use of ordinary
 // function as PromoCode mutator.
 type PromoCodeFunc func(context.Context, *ent.PromoCodeMutation) (ent.Value, error)

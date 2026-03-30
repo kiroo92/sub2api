@@ -30,6 +30,12 @@ type Group func(*sql.Selector)
 // IdempotencyRecord is the predicate function for idempotencyrecord builders.
 type IdempotencyRecord func(*sql.Selector)
 
+// InviteBinding is the predicate function for invitebinding builders.
+type InviteBinding func(*sql.Selector)
+
+// InviteCode is the predicate function for invitecode builders.
+type InviteCode func(*sql.Selector)
+
 // PromoCode is the predicate function for promocode builders.
 type PromoCode func(*sql.Selector)
 

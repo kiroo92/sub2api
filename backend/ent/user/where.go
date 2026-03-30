@@ -1157,6 +1157,75 @@ func HasPromoCodeUsagesWith(preds ...predicate.PromoCodeUsage) predicate.User {
 	})
 }
 
+// HasInviteCodes applies the HasEdge predicate on the "invite_codes" edge.
+func HasInviteCodes() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, InviteCodesTable, InviteCodesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasInviteCodesWith applies the HasEdge predicate on the "invite_codes" edge with a given conditions (other predicates).
+func HasInviteCodesWith(preds ...predicate.InviteCode) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newInviteCodesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasInvitedUsers applies the HasEdge predicate on the "invited_users" edge.
+func HasInvitedUsers() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, InvitedUsersTable, InvitedUsersColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasInvitedUsersWith applies the HasEdge predicate on the "invited_users" edge with a given conditions (other predicates).
+func HasInvitedUsersWith(preds ...predicate.InviteBinding) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newInvitedUsersStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasInviteBinding applies the HasEdge predicate on the "invite_binding" edge.
+func HasInviteBinding() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, InviteBindingTable, InviteBindingColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasInviteBindingWith applies the HasEdge predicate on the "invite_binding" edge with a given conditions (other predicates).
+func HasInviteBindingWith(preds ...predicate.InviteBinding) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newInviteBindingStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // HasUserAllowedGroups applies the HasEdge predicate on the "user_allowed_groups" edge.
 func HasUserAllowedGroups() predicate.User {
 	return predicate.User(func(s *sql.Selector) {

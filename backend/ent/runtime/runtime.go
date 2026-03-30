@@ -13,6 +13,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
+	"github.com/Wei-Shaw/sub2api/ent/invitebinding"
+	"github.com/Wei-Shaw/sub2api/ent/invitecode"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
@@ -499,6 +501,46 @@ func init() {
 	idempotencyrecordDescErrorReason := idempotencyrecordFields[6].Descriptor()
 	// idempotencyrecord.ErrorReasonValidator is a validator for the "error_reason" field. It is called by the builders before save.
 	idempotencyrecord.ErrorReasonValidator = idempotencyrecordDescErrorReason.Validators[0].(func(string) error)
+	invitebindingFields := schema.InviteBinding{}.Fields()
+	_ = invitebindingFields
+	// invitebindingDescCreatedAt is the schema descriptor for created_at field.
+	invitebindingDescCreatedAt := invitebindingFields[3].Descriptor()
+	// invitebinding.DefaultCreatedAt holds the default value on creation for the created_at field.
+	invitebinding.DefaultCreatedAt = invitebindingDescCreatedAt.Default.(func() time.Time)
+	invitecodeFields := schema.InviteCode{}.Fields()
+	_ = invitecodeFields
+	// invitecodeDescCode is the schema descriptor for code field.
+	invitecodeDescCode := invitecodeFields[1].Descriptor()
+	// invitecode.CodeValidator is a validator for the "code" field. It is called by the builders before save.
+	invitecode.CodeValidator = func() func(string) error {
+		validators := invitecodeDescCode.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(code string) error {
+			for _, fn := range fns {
+				if err := fn(code); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// invitecodeDescActive is the schema descriptor for active field.
+	invitecodeDescActive := invitecodeFields[2].Descriptor()
+	// invitecode.DefaultActive holds the default value on creation for the active field.
+	invitecode.DefaultActive = invitecodeDescActive.Default.(bool)
+	// invitecodeDescCreatedAt is the schema descriptor for created_at field.
+	invitecodeDescCreatedAt := invitecodeFields[3].Descriptor()
+	// invitecode.DefaultCreatedAt holds the default value on creation for the created_at field.
+	invitecode.DefaultCreatedAt = invitecodeDescCreatedAt.Default.(func() time.Time)
+	// invitecodeDescUpdatedAt is the schema descriptor for updated_at field.
+	invitecodeDescUpdatedAt := invitecodeFields[4].Descriptor()
+	// invitecode.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	invitecode.DefaultUpdatedAt = invitecodeDescUpdatedAt.Default.(func() time.Time)
+	// invitecode.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	invitecode.UpdateDefaultUpdatedAt = invitecodeDescUpdatedAt.UpdateDefault.(func() time.Time)
 	promocodeFields := schema.PromoCode{}.Fields()
 	_ = promocodeFields
 	// promocodeDescCode is the schema descriptor for code field.

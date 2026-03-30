@@ -71,6 +71,7 @@ type AuthService struct {
 	emailQueueService  *EmailQueueService
 	promoService       *PromoService
 	defaultSubAssigner DefaultSubscriptionAssigner
+	inviteService      *InviteService
 }
 
 type DefaultSubscriptionAssigner interface {
@@ -90,6 +91,7 @@ func NewAuthService(
 	emailQueueService *EmailQueueService,
 	promoService *PromoService,
 	defaultSubAssigner DefaultSubscriptionAssigner,
+	inviteService *InviteService,
 ) *AuthService {
 	return &AuthService{
 		entClient:          entClient,
@@ -103,16 +105,17 @@ func NewAuthService(
 		emailQueueService:  emailQueueService,
 		promoService:       promoService,
 		defaultSubAssigner: defaultSubAssigner,
+		inviteService:      inviteService,
 	}
 }
 
 // Register 用户注册，返回token和用户
 func (s *AuthService) Register(ctx context.Context, email, password string) (string, *User, error) {
-	return s.RegisterWithVerification(ctx, email, password, "", "", "")
+	return s.RegisterWithVerification(ctx, email, password, "", "", "", "")
 }
 
 // RegisterWithVerification 用户注册（支持邮件验证、优惠码和邀请码），返回token和用户
-func (s *AuthService) RegisterWithVerification(ctx context.Context, email, password, verifyCode, promoCode, invitationCode string) (string, *User, error) {
+func (s *AuthService) RegisterWithVerification(ctx context.Context, email, password, verifyCode, promoCode, invitationCode, referralCode string) (string, *User, error) {
 	// 检查是否开放注册（默认关闭：settingService 未配置时不允许注册）
 	if s.settingService == nil || !s.settingService.IsRegistrationEnabled(ctx) {
 		return "", nil, ErrRegDisabled
@@ -224,6 +227,12 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 			if updatedUser, err := s.userRepo.GetByID(ctx, user.ID); err == nil {
 				user = updatedUser
 			}
+		}
+	}
+
+	if strings.TrimSpace(referralCode) != "" && s.inviteService != nil {
+		if _, err := s.inviteService.BindReferralForUser(ctx, user.ID, referralCode); err != nil {
+			logger.LegacyPrintf("service.auth", "[Auth] Failed to bind referral code for user %d: %v", user.ID, err)
 		}
 	}
 

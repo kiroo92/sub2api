@@ -16,6 +16,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
+	"github.com/Wei-Shaw/sub2api/ent/invitebinding"
+	"github.com/Wei-Shaw/sub2api/ent/invitecode"
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
@@ -303,6 +305,60 @@ func (f TraverseIdempotencyRecord) Traverse(ctx context.Context, q ent.Query) er
 		return f(ctx, q)
 	}
 	return fmt.Errorf("unexpected query type %T. expect *ent.IdempotencyRecordQuery", q)
+}
+
+// The InviteBindingFunc type is an adapter to allow the use of ordinary function as a Querier.
+type InviteBindingFunc func(context.Context, *ent.InviteBindingQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f InviteBindingFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.InviteBindingQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.InviteBindingQuery", q)
+}
+
+// The TraverseInviteBinding type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseInviteBinding func(context.Context, *ent.InviteBindingQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseInviteBinding) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseInviteBinding) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.InviteBindingQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.InviteBindingQuery", q)
+}
+
+// The InviteCodeFunc type is an adapter to allow the use of ordinary function as a Querier.
+type InviteCodeFunc func(context.Context, *ent.InviteCodeQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f InviteCodeFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.InviteCodeQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.InviteCodeQuery", q)
+}
+
+// The TraverseInviteCode type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseInviteCode func(context.Context, *ent.InviteCodeQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseInviteCode) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseInviteCode) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.InviteCodeQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.InviteCodeQuery", q)
 }
 
 // The PromoCodeFunc type is an adapter to allow the use of ordinary function as a Querier.
@@ -702,6 +758,10 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.GroupQuery, predicate.Group, group.OrderOption]{typ: ent.TypeGroup, tq: q}, nil
 	case *ent.IdempotencyRecordQuery:
 		return &query[*ent.IdempotencyRecordQuery, predicate.IdempotencyRecord, idempotencyrecord.OrderOption]{typ: ent.TypeIdempotencyRecord, tq: q}, nil
+	case *ent.InviteBindingQuery:
+		return &query[*ent.InviteBindingQuery, predicate.InviteBinding, invitebinding.OrderOption]{typ: ent.TypeInviteBinding, tq: q}, nil
+	case *ent.InviteCodeQuery:
+		return &query[*ent.InviteCodeQuery, predicate.InviteCode, invitecode.OrderOption]{typ: ent.TypeInviteCode, tq: q}, nil
 	case *ent.PromoCodeQuery:
 		return &query[*ent.PromoCodeQuery, predicate.PromoCode, promocode.OrderOption]{typ: ent.TypePromoCode, tq: q}, nil
 	case *ent.PromoCodeUsageQuery:

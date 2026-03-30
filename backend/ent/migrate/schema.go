@@ -487,6 +487,92 @@ var (
 			},
 		},
 	}
+	// InviteBindingsColumns holds the columns for the "invite_bindings" table.
+	InviteBindingsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "invite_code_id", Type: field.TypeInt64},
+		{Name: "inviter_user_id", Type: field.TypeInt64},
+		{Name: "invitee_user_id", Type: field.TypeInt64},
+	}
+	// InviteBindingsTable holds the schema information for the "invite_bindings" table.
+	InviteBindingsTable = &schema.Table{
+		Name:       "invite_bindings",
+		Columns:    InviteBindingsColumns,
+		PrimaryKey: []*schema.Column{InviteBindingsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "invite_bindings_invite_codes_bindings",
+				Columns:    []*schema.Column{InviteBindingsColumns[2]},
+				RefColumns: []*schema.Column{InviteCodesColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "invite_bindings_users_invited_users",
+				Columns:    []*schema.Column{InviteBindingsColumns[3]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "invite_bindings_users_invite_binding",
+				Columns:    []*schema.Column{InviteBindingsColumns[4]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "invitebinding_invitee_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{InviteBindingsColumns[4]},
+			},
+			{
+				Name:    "invitebinding_inviter_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{InviteBindingsColumns[3]},
+			},
+			{
+				Name:    "invitebinding_invite_code_id",
+				Unique:  false,
+				Columns: []*schema.Column{InviteBindingsColumns[2]},
+			},
+		},
+	}
+	// InviteCodesColumns holds the columns for the "invite_codes" table.
+	InviteCodesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "code", Type: field.TypeString, Size: 32},
+		{Name: "active", Type: field.TypeBool, Default: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "user_id", Type: field.TypeInt64},
+	}
+	// InviteCodesTable holds the schema information for the "invite_codes" table.
+	InviteCodesTable = &schema.Table{
+		Name:       "invite_codes",
+		Columns:    InviteCodesColumns,
+		PrimaryKey: []*schema.Column{InviteCodesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "invite_codes_users_invite_codes",
+				Columns:    []*schema.Column{InviteCodesColumns[5]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "invitecode_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{InviteCodesColumns[5]},
+			},
+			{
+				Name:    "invitecode_code",
+				Unique:  true,
+				Columns: []*schema.Column{InviteCodesColumns[1]},
+			},
+		},
+	}
 	// PromoCodesColumns holds the columns for the "promo_codes" table.
 	PromoCodesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -1129,6 +1215,8 @@ var (
 		ErrorPassthroughRulesTable,
 		GroupsTable,
 		IdempotencyRecordsTable,
+		InviteBindingsTable,
+		InviteCodesTable,
 		PromoCodesTable,
 		PromoCodeUsagesTable,
 		ProxiesTable,
@@ -1177,6 +1265,16 @@ func init() {
 	}
 	IdempotencyRecordsTable.Annotation = &entsql.Annotation{
 		Table: "idempotency_records",
+	}
+	InviteBindingsTable.ForeignKeys[0].RefTable = InviteCodesTable
+	InviteBindingsTable.ForeignKeys[1].RefTable = UsersTable
+	InviteBindingsTable.ForeignKeys[2].RefTable = UsersTable
+	InviteBindingsTable.Annotation = &entsql.Annotation{
+		Table: "invite_bindings",
+	}
+	InviteCodesTable.ForeignKeys[0].RefTable = UsersTable
+	InviteCodesTable.Annotation = &entsql.Annotation{
+		Table: "invite_codes",
 	}
 	PromoCodesTable.Annotation = &entsql.Annotation{
 		Table: "promo_codes",

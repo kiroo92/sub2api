@@ -93,6 +93,9 @@ func (User) Edges() []ent.Edge {
 		edge.To("usage_logs", UsageLog.Type),
 		edge.To("attribute_values", UserAttributeValue.Type),
 		edge.To("promo_code_usages", PromoCodeUsage.Type),
+		edge.To("invite_codes", InviteCode.Type),
+		edge.To("invited_users", InviteBinding.Type),
+		edge.To("invite_binding", InviteBinding.Type),
 	}
 }
 

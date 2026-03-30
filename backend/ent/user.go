@@ -75,11 +75,17 @@ type UserEdges struct {
 	AttributeValues []*UserAttributeValue `json:"attribute_values,omitempty"`
 	// PromoCodeUsages holds the value of the promo_code_usages edge.
 	PromoCodeUsages []*PromoCodeUsage `json:"promo_code_usages,omitempty"`
+	// InviteCodes holds the value of the invite_codes edge.
+	InviteCodes []*InviteCode `json:"invite_codes,omitempty"`
+	// InvitedUsers holds the value of the invited_users edge.
+	InvitedUsers []*InviteBinding `json:"invited_users,omitempty"`
+	// InviteBinding holds the value of the invite_binding edge.
+	InviteBinding []*InviteBinding `json:"invite_binding,omitempty"`
 	// UserAllowedGroups holds the value of the user_allowed_groups edge.
 	UserAllowedGroups []*UserAllowedGroup `json:"user_allowed_groups,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [10]bool
+	loadedTypes [13]bool
 }
 
 // APIKeysOrErr returns the APIKeys value or an error if the edge
@@ -163,10 +169,37 @@ func (e UserEdges) PromoCodeUsagesOrErr() ([]*PromoCodeUsage, error) {
 	return nil, &NotLoadedError{edge: "promo_code_usages"}
 }
 
+// InviteCodesOrErr returns the InviteCodes value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) InviteCodesOrErr() ([]*InviteCode, error) {
+	if e.loadedTypes[9] {
+		return e.InviteCodes, nil
+	}
+	return nil, &NotLoadedError{edge: "invite_codes"}
+}
+
+// InvitedUsersOrErr returns the InvitedUsers value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) InvitedUsersOrErr() ([]*InviteBinding, error) {
+	if e.loadedTypes[10] {
+		return e.InvitedUsers, nil
+	}
+	return nil, &NotLoadedError{edge: "invited_users"}
+}
+
+// InviteBindingOrErr returns the InviteBinding value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) InviteBindingOrErr() ([]*InviteBinding, error) {
+	if e.loadedTypes[11] {
+		return e.InviteBinding, nil
+	}
+	return nil, &NotLoadedError{edge: "invite_binding"}
+}
+
 // UserAllowedGroupsOrErr returns the UserAllowedGroups value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) UserAllowedGroupsOrErr() ([]*UserAllowedGroup, error) {
-	if e.loadedTypes[9] {
+	if e.loadedTypes[12] {
 		return e.UserAllowedGroups, nil
 	}
 	return nil, &NotLoadedError{edge: "user_allowed_groups"}
@@ -363,6 +396,21 @@ func (_m *User) QueryAttributeValues() *UserAttributeValueQuery {
 // QueryPromoCodeUsages queries the "promo_code_usages" edge of the User entity.
 func (_m *User) QueryPromoCodeUsages() *PromoCodeUsageQuery {
 	return NewUserClient(_m.config).QueryPromoCodeUsages(_m)
+}
+
+// QueryInviteCodes queries the "invite_codes" edge of the User entity.
+func (_m *User) QueryInviteCodes() *InviteCodeQuery {
+	return NewUserClient(_m.config).QueryInviteCodes(_m)
+}
+
+// QueryInvitedUsers queries the "invited_users" edge of the User entity.
+func (_m *User) QueryInvitedUsers() *InviteBindingQuery {
+	return NewUserClient(_m.config).QueryInvitedUsers(_m)
+}
+
+// QueryInviteBinding queries the "invite_binding" edge of the User entity.
+func (_m *User) QueryInviteBinding() *InviteBindingQuery {
+	return NewUserClient(_m.config).QueryInviteBinding(_m)
 }
 
 // QueryUserAllowedGroups queries the "user_allowed_groups" edge of the User entity.

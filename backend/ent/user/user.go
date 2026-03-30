@@ -65,6 +65,12 @@ const (
 	EdgeAttributeValues = "attribute_values"
 	// EdgePromoCodeUsages holds the string denoting the promo_code_usages edge name in mutations.
 	EdgePromoCodeUsages = "promo_code_usages"
+	// EdgeInviteCodes holds the string denoting the invite_codes edge name in mutations.
+	EdgeInviteCodes = "invite_codes"
+	// EdgeInvitedUsers holds the string denoting the invited_users edge name in mutations.
+	EdgeInvitedUsers = "invited_users"
+	// EdgeInviteBinding holds the string denoting the invite_binding edge name in mutations.
+	EdgeInviteBinding = "invite_binding"
 	// EdgeUserAllowedGroups holds the string denoting the user_allowed_groups edge name in mutations.
 	EdgeUserAllowedGroups = "user_allowed_groups"
 	// Table holds the table name of the user in the database.
@@ -130,6 +136,27 @@ const (
 	PromoCodeUsagesInverseTable = "promo_code_usages"
 	// PromoCodeUsagesColumn is the table column denoting the promo_code_usages relation/edge.
 	PromoCodeUsagesColumn = "user_id"
+	// InviteCodesTable is the table that holds the invite_codes relation/edge.
+	InviteCodesTable = "invite_codes"
+	// InviteCodesInverseTable is the table name for the InviteCode entity.
+	// It exists in this package in order to avoid circular dependency with the "invitecode" package.
+	InviteCodesInverseTable = "invite_codes"
+	// InviteCodesColumn is the table column denoting the invite_codes relation/edge.
+	InviteCodesColumn = "user_id"
+	// InvitedUsersTable is the table that holds the invited_users relation/edge.
+	InvitedUsersTable = "invite_bindings"
+	// InvitedUsersInverseTable is the table name for the InviteBinding entity.
+	// It exists in this package in order to avoid circular dependency with the "invitebinding" package.
+	InvitedUsersInverseTable = "invite_bindings"
+	// InvitedUsersColumn is the table column denoting the invited_users relation/edge.
+	InvitedUsersColumn = "inviter_user_id"
+	// InviteBindingTable is the table that holds the invite_binding relation/edge.
+	InviteBindingTable = "invite_bindings"
+	// InviteBindingInverseTable is the table name for the InviteBinding entity.
+	// It exists in this package in order to avoid circular dependency with the "invitebinding" package.
+	InviteBindingInverseTable = "invite_bindings"
+	// InviteBindingColumn is the table column denoting the invite_binding relation/edge.
+	InviteBindingColumn = "invitee_user_id"
 	// UserAllowedGroupsTable is the table that holds the user_allowed_groups relation/edge.
 	UserAllowedGroupsTable = "user_allowed_groups"
 	// UserAllowedGroupsInverseTable is the table name for the UserAllowedGroup entity.
@@ -434,6 +461,48 @@ func ByPromoCodeUsages(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
+// ByInviteCodesCount orders the results by invite_codes count.
+func ByInviteCodesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newInviteCodesStep(), opts...)
+	}
+}
+
+// ByInviteCodes orders the results by invite_codes terms.
+func ByInviteCodes(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newInviteCodesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByInvitedUsersCount orders the results by invited_users count.
+func ByInvitedUsersCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newInvitedUsersStep(), opts...)
+	}
+}
+
+// ByInvitedUsers orders the results by invited_users terms.
+func ByInvitedUsers(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newInvitedUsersStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByInviteBindingCount orders the results by invite_binding count.
+func ByInviteBindingCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newInviteBindingStep(), opts...)
+	}
+}
+
+// ByInviteBinding orders the results by invite_binding terms.
+func ByInviteBinding(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newInviteBindingStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // ByUserAllowedGroupsCount orders the results by user_allowed_groups count.
 func ByUserAllowedGroupsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -508,6 +577,27 @@ func newPromoCodeUsagesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(PromoCodeUsagesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, PromoCodeUsagesTable, PromoCodeUsagesColumn),
+	)
+}
+func newInviteCodesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(InviteCodesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, InviteCodesTable, InviteCodesColumn),
+	)
+}
+func newInvitedUsersStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(InvitedUsersInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, InvitedUsersTable, InvitedUsersColumn),
+	)
+}
+func newInviteBindingStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(InviteBindingInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, InviteBindingTable, InviteBindingColumn),
 	)
 }
 func newUserAllowedGroupsStep() *sqlgraph.Step {
