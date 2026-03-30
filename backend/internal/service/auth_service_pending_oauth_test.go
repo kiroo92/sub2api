@@ -25,14 +25,15 @@ func newAuthServiceForPendingOAuthTest() *AuthService {
 func TestVerifyPendingOAuthToken_ValidToken(t *testing.T) {
 	svc := newAuthServiceForPendingOAuthTest()
 
-	token, err := svc.CreatePendingOAuthToken("user@example.com", "alice")
+	token, err := svc.CreatePendingOAuthToken("user@example.com", "alice", "REF12345")
 	require.NoError(t, err)
 	require.NotEmpty(t, token)
 
-	email, username, err := svc.VerifyPendingOAuthToken(token)
+	email, username, referralCode, err := svc.VerifyPendingOAuthToken(token)
 	require.NoError(t, err)
 	require.Equal(t, "user@example.com", email)
 	require.Equal(t, "alice", username)
+	require.Equal(t, "REF12345", referralCode)
 }
 
 // TestVerifyPendingOAuthToken_RegularJWTRejected 用普通 access token 尝试验证，应返回 ErrInvalidToken。
@@ -47,7 +48,7 @@ func TestVerifyPendingOAuthToken_RegularJWTRejected(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, _, err = svc.VerifyPendingOAuthToken(accessToken)
+	_, _, _, err = svc.VerifyPendingOAuthToken(accessToken)
 	require.ErrorIs(t, err, ErrInvalidToken)
 }
 
@@ -70,7 +71,7 @@ func TestVerifyPendingOAuthToken_WrongPurpose(t *testing.T) {
 	tokenStr, err := tok.SignedString([]byte(svc.cfg.JWT.Secret))
 	require.NoError(t, err)
 
-	_, _, err = svc.VerifyPendingOAuthToken(tokenStr)
+	_, _, _, err = svc.VerifyPendingOAuthToken(tokenStr)
 	require.ErrorIs(t, err, ErrInvalidToken)
 }
 
@@ -93,7 +94,7 @@ func TestVerifyPendingOAuthToken_MissingPurpose(t *testing.T) {
 	tokenStr, err := tok.SignedString([]byte(svc.cfg.JWT.Secret))
 	require.NoError(t, err)
 
-	_, _, err = svc.VerifyPendingOAuthToken(tokenStr)
+	_, _, _, err = svc.VerifyPendingOAuthToken(tokenStr)
 	require.ErrorIs(t, err, ErrInvalidToken)
 }
 
@@ -116,7 +117,7 @@ func TestVerifyPendingOAuthToken_ExpiredToken(t *testing.T) {
 	tokenStr, err := tok.SignedString([]byte(svc.cfg.JWT.Secret))
 	require.NoError(t, err)
 
-	_, _, err = svc.VerifyPendingOAuthToken(tokenStr)
+	_, _, _, err = svc.VerifyPendingOAuthToken(tokenStr)
 	require.ErrorIs(t, err, ErrInvalidToken)
 }
 
@@ -126,11 +127,11 @@ func TestVerifyPendingOAuthToken_WrongSecret(t *testing.T) {
 		JWT: config.JWTConfig{Secret: "other-secret"},
 	}, nil, nil, nil, nil, nil, nil, nil)
 
-	token, err := other.CreatePendingOAuthToken("user@example.com", "alice")
+	token, err := other.CreatePendingOAuthToken("user@example.com", "alice", "REF12345")
 	require.NoError(t, err)
 
 	svc := newAuthServiceForPendingOAuthTest()
-	_, _, err = svc.VerifyPendingOAuthToken(token)
+	_, _, _, err = svc.VerifyPendingOAuthToken(token)
 	require.ErrorIs(t, err, ErrInvalidToken)
 }
 
@@ -141,6 +142,6 @@ func TestVerifyPendingOAuthToken_TooLong(t *testing.T) {
 	for i := range giant {
 		giant[i] = 'a'
 	}
-	_, _, err := svc.VerifyPendingOAuthToken(string(giant))
+	_, _, _, err := svc.VerifyPendingOAuthToken(string(giant))
 	require.ErrorIs(t, err, ErrInvalidToken)
 }

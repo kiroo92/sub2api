@@ -54,7 +54,12 @@ function startLogin(): void {
   const redirectTo = (route.query.redirect as string) || '/dashboard'
   const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api/v1'
   const normalized = apiBase.replace(/\/$/, '')
-  const startURL = `${normalized}/auth/oauth/linuxdo/start?redirect=${encodeURIComponent(redirectTo)}`
+  const referralCode = ((route.query.ref as string) || '').trim()
+  const params = new URLSearchParams({ redirect: redirectTo })
+  if (referralCode) {
+    params.set('ref', referralCode)
+  }
+  const startURL = `${normalized}/auth/oauth/linuxdo/start?${params.toString()}`
   window.location.href = startURL
 }
 </script>

@@ -343,7 +343,8 @@ export async function resetPassword(request: ResetPasswordRequest): Promise<Rese
  */
 export async function completeLinuxDoOAuthRegistration(
   pendingOAuthToken: string,
-  invitationCode: string
+  invitationCode: string,
+  referralCode?: string
 ): Promise<{ access_token: string; refresh_token: string; expires_in: number; token_type: string }> {
   const { data } = await apiClient.post<{
     access_token: string
@@ -352,7 +353,8 @@ export async function completeLinuxDoOAuthRegistration(
     token_type: string
   }>('/auth/oauth/linuxdo/complete-registration', {
     pending_oauth_token: pendingOAuthToken,
-    invitation_code: invitationCode
+    invitation_code: invitationCode,
+    referral_code: referralCode
   })
   return data
 }
