@@ -3,6 +3,7 @@ package admin
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
@@ -230,6 +231,113 @@ func (h *OpenAIOAuthHandler) RefreshAccountToken(c *gin.Context) {
 	}
 
 	response.Success(c, dto.AccountFromService(updatedAccount))
+}
+
+type OpenAICreateAccountFromAccessTokenRequest struct {
+	AccessToken      string  `json:"access_token"`
+	AT               string  `json:"at"`
+	RefreshToken     string  `json:"refresh_token"`
+	ClientID         string  `json:"client_id"`
+	Email            string  `json:"email"`
+	ChatGPTAccountID string  `json:"chatgpt_account_id"`
+	ChatGPTUserID    string  `json:"chatgpt_user_id"`
+	OrganizationID   string  `json:"organization_id"`
+	PlanType         string  `json:"plan_type"`
+	IDToken          string  `json:"id_token"`
+	ExpiresAt        *int64  `json:"expires_at"`
+	ExpiresIn        *int64  `json:"expires_in"`
+	ProxyID          *int64  `json:"proxy_id"`
+	Name             string  `json:"name"`
+	Concurrency      int     `json:"concurrency"`
+	Priority         int     `json:"priority"`
+	GroupIDs         []int64 `json:"group_ids"`
+}
+
+// CreateAccountFromAccessToken creates a new OpenAI/Sora OAuth account directly from access token.
+// POST /api/v1/admin/openai/create-from-access-token
+// POST /api/v1/admin/sora/create-from-access-token
+func (h *OpenAIOAuthHandler) CreateAccountFromAccessToken(c *gin.Context) {
+	var req OpenAICreateAccountFromAccessTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	accessToken := strings.TrimSpace(req.AccessToken)
+	if accessToken == "" {
+		accessToken = strings.TrimSpace(req.AT)
+	}
+	if accessToken == "" {
+		response.BadRequest(c, "access_token is required")
+		return
+	}
+
+	now := time.Now()
+	expiresAt := now.Add(time.Hour).Unix()
+	if req.ExpiresAt != nil && *req.ExpiresAt > 0 {
+		expiresAt = *req.ExpiresAt
+	} else if req.ExpiresIn != nil {
+		expiresAt = now.Add(time.Duration(*req.ExpiresIn) * time.Second).Unix()
+	}
+	if expiresAt < now.Unix() {
+		response.BadRequest(c, "expires_at must be in the future")
+		return
+	}
+
+	platform := oauthPlatformFromPath(c)
+	clientID := strings.TrimSpace(req.ClientID)
+	if clientID == "" {
+		clientID, _ = openai.OAuthClientConfigByPlatform(platform)
+	}
+
+	tokenInfo := &service.OpenAITokenInfo{
+		AccessToken:      accessToken,
+		RefreshToken:     strings.TrimSpace(req.RefreshToken),
+		IDToken:          strings.TrimSpace(req.IDToken),
+		ExpiresIn:        expiresAt - now.Unix(),
+		ExpiresAt:        expiresAt,
+		ClientID:         clientID,
+		Email:            strings.TrimSpace(req.Email),
+		ChatGPTAccountID: strings.TrimSpace(req.ChatGPTAccountID),
+		ChatGPTUserID:    strings.TrimSpace(req.ChatGPTUserID),
+		OrganizationID:   strings.TrimSpace(req.OrganizationID),
+		PlanType:         strings.TrimSpace(req.PlanType),
+	}
+	if tokenInfo.ExpiresIn < 0 {
+		tokenInfo.ExpiresIn = 0
+	}
+
+	credentials := h.openaiOAuthService.BuildAccountCredentials(tokenInfo)
+
+	name := strings.TrimSpace(req.Name)
+	if name == "" && tokenInfo.Email != "" {
+		name = tokenInfo.Email
+	}
+	if name == "" {
+		if platform == service.PlatformSora {
+			name = "Sora Access Token Account"
+		} else {
+			name = "OpenAI Access Token Account"
+		}
+	}
+
+	account, err := h.adminService.CreateAccount(c.Request.Context(), &service.CreateAccountInput{
+		Name:        name,
+		Platform:    platform,
+		Type:        service.AccountTypeOAuth,
+		Credentials: credentials,
+		Extra:       nil,
+		ProxyID:     req.ProxyID,
+		Concurrency: req.Concurrency,
+		Priority:    req.Priority,
+		GroupIDs:    req.GroupIDs,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, dto.AccountFromService(account))
 }
 
 // CreateAccountFromOAuth creates a new OpenAI/Sora OAuth account from token info

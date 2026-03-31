@@ -307,6 +307,7 @@ func registerOpenAIOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		openai.POST("/refresh-token", h.Admin.OpenAIOAuth.RefreshToken)
 		openai.POST("/accounts/:id/refresh", h.Admin.OpenAIOAuth.RefreshAccountToken)
 		openai.POST("/create-from-oauth", h.Admin.OpenAIOAuth.CreateAccountFromOAuth)
+		openai.POST("/create-from-access-token", h.Admin.OpenAIOAuth.CreateAccountFromAccessToken)
 	}
 }
 
@@ -320,6 +321,7 @@ func registerSoraOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		sora.POST("/rt2at", h.Admin.OpenAIOAuth.RefreshToken)
 		sora.POST("/accounts/:id/refresh", h.Admin.OpenAIOAuth.RefreshAccountToken)
 		sora.POST("/create-from-oauth", h.Admin.OpenAIOAuth.CreateAccountFromOAuth)
+		sora.POST("/create-from-access-token", h.Admin.OpenAIOAuth.CreateAccountFromAccessToken)
 	}
 }
 
