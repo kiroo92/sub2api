@@ -34,6 +34,10 @@ type SchedulerSnapshotService struct {
 	lagFailures   int
 }
 
+func isSchedulerSnapshotExpectedContextError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
 func NewSchedulerSnapshotService(
 	cache SchedulerCache,
 	outboxRepo SchedulerOutboxRepository,
@@ -104,6 +108,9 @@ func (s *SchedulerSnapshotService) ListSchedulableAccounts(ctx context.Context, 
 	if s.cache != nil {
 		cached, hit, err := s.cache.GetSnapshot(ctx, bucket)
 		if err != nil {
+			if isSchedulerSnapshotExpectedContextError(err) {
+				return nil, useMixed, err
+			}
 			logger.LegacyPrintf("service.scheduler_snapshot", "[Scheduler] cache read failed: bucket=%s err=%v", bucket.String(), err)
 		} else if hit {
 			return derefAccounts(cached), useMixed, nil
@@ -138,6 +145,9 @@ func (s *SchedulerSnapshotService) GetAccount(ctx context.Context, accountID int
 	if s.cache != nil {
 		account, err := s.cache.GetAccount(ctx, accountID)
 		if err != nil {
+			if isSchedulerSnapshotExpectedContextError(err) {
+				return nil, err
+			}
 			logger.LegacyPrintf("service.scheduler_snapshot", "[Scheduler] account cache read failed: id=%d err=%v", accountID, err)
 		} else if account != nil {
 			return account, nil

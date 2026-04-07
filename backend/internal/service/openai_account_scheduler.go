@@ -19,6 +19,10 @@ const (
 	openAIAccountScheduleLayerPreviousResponse = "previous_response_id"
 	openAIAccountScheduleLayerSessionSticky    = "session_hash"
 	openAIAccountScheduleLayerLoadBalance      = "load_balance"
+
+	openAIAccountStaticShortlistTopKMultiplier = 8
+	openAIAccountStaticShortlistMinCandidates  = 64
+	openAIAccountStaticShortlistMaxCandidates  = 256
 )
 
 type OpenAIAccountScheduleRequest struct {
@@ -564,6 +568,55 @@ func buildOpenAIWeightedSelectionOrder(
 	return order
 }
 
+func openAIStaticShortlistLimit(topK int) int {
+	if topK <= 0 {
+		topK = 1
+	}
+	limit := topK * openAIAccountStaticShortlistTopKMultiplier
+	if limit < openAIAccountStaticShortlistMinCandidates {
+		limit = openAIAccountStaticShortlistMinCandidates
+	}
+	if limit > openAIAccountStaticShortlistMaxCandidates {
+		limit = openAIAccountStaticShortlistMaxCandidates
+	}
+	return limit
+}
+
+func hashOpenAIShortlistRank(seed uint64, accountID int64) uint64 {
+	x := seed ^ uint64(accountID)
+	x += 0x9e3779b97f4a7c15
+	x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9
+	x = (x ^ (x >> 27)) * 0x94d049bb133111eb
+	x ^= x >> 31
+	return x
+}
+
+func shortlistOpenAIAccounts(accounts []*Account, req OpenAIAccountScheduleRequest, limit int) []*Account {
+	if len(accounts) == 0 {
+		return nil
+	}
+	if limit <= 0 || len(accounts) <= limit {
+		return append([]*Account(nil), accounts...)
+	}
+
+	seed := deriveOpenAISelectionSeed(req)
+	shortlisted := append([]*Account(nil), accounts...)
+	sort.SliceStable(shortlisted, func(i, j int) bool {
+		left := shortlisted[i]
+		right := shortlisted[j]
+		if left.Priority != right.Priority {
+			return left.Priority < right.Priority
+		}
+		leftRank := hashOpenAIShortlistRank(seed, left.ID)
+		rightRank := hashOpenAIShortlistRank(seed, right.ID)
+		if leftRank != rightRank {
+			return leftRank < rightRank
+		}
+		return left.ID < right.ID
+	})
+	return shortlisted[:limit]
+}
+
 func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 	ctx context.Context,
 	req OpenAIAccountScheduleRequest,
@@ -583,7 +636,6 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 	}
 
 	filtered := make([]*Account, 0, len(accounts))
-	loadReq := make([]AccountWithConcurrency, 0, len(accounts))
 	for i := range accounts {
 		account := &accounts[i]
 		if req.ExcludedIDs != nil {
@@ -607,13 +659,20 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 			continue
 		}
 		filtered = append(filtered, account)
+	}
+	if len(filtered) == 0 {
+		return nil, 0, 0, 0, errors.New("no available OpenAI accounts")
+	}
+
+	candidateCount := len(filtered)
+	topK := s.service.openAIWSLBTopK()
+	shortlisted := shortlistOpenAIAccounts(filtered, req, openAIStaticShortlistLimit(topK))
+	loadReq := make([]AccountWithConcurrency, 0, len(shortlisted))
+	for _, account := range shortlisted {
 		loadReq = append(loadReq, AccountWithConcurrency{
 			ID:             account.ID,
 			MaxConcurrency: account.EffectiveLoadFactor(),
 		})
-	}
-	if len(filtered) == 0 {
-		return nil, 0, 0, 0, errors.New("no available OpenAI accounts")
 	}
 
 	loadMap := map[int64]*AccountLoadInfo{}
@@ -623,14 +682,14 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 		}
 	}
 
-	minPriority, maxPriority := filtered[0].Priority, filtered[0].Priority
+	minPriority, maxPriority := shortlisted[0].Priority, shortlisted[0].Priority
 	maxWaiting := 1
 	loadRateSum := 0.0
 	loadRateSumSquares := 0.0
 	minTTFT, maxTTFT := 0.0, 0.0
 	hasTTFTSample := false
-	candidates := make([]openAIAccountCandidateScore, 0, len(filtered))
-	for _, account := range filtered {
+	candidates := make([]openAIAccountCandidateScore, 0, len(shortlisted))
+	for _, account := range shortlisted {
 		loadInfo := loadMap[account.ID]
 		if loadInfo == nil {
 			loadInfo = &AccountLoadInfo{AccountID: account.ID}
@@ -693,7 +752,6 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 			weights.TTFT*ttftFactor
 	}
 
-	topK := s.service.openAIWSLBTopK()
 	if topK > len(candidates) {
 		topK = len(candidates)
 	}
@@ -715,7 +773,7 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 		}
 		result, acquireErr := s.service.tryAcquireAccountSlot(ctx, fresh.ID, fresh.Concurrency)
 		if acquireErr != nil {
-			return nil, len(candidates), topK, loadSkew, acquireErr
+			return nil, candidateCount, topK, loadSkew, acquireErr
 		}
 		if result != nil && result.Acquired {
 			if req.SessionHash != "" {
@@ -725,7 +783,7 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 				Account:     fresh,
 				Acquired:    true,
 				ReleaseFunc: result.ReleaseFunc,
-			}, len(candidates), topK, loadSkew, nil
+			}, candidateCount, topK, loadSkew, nil
 		}
 	}
 
@@ -744,10 +802,10 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 				Timeout:        cfg.FallbackWaitTimeout,
 				MaxWaiting:     cfg.FallbackMaxWaiting,
 			},
-		}, len(candidates), topK, loadSkew, nil
+		}, candidateCount, topK, loadSkew, nil
 	}
 
-	return nil, len(candidates), topK, loadSkew, ErrNoAvailableAccounts
+	return nil, candidateCount, topK, loadSkew, ErrNoAvailableAccounts
 }
 
 func (s *defaultOpenAIAccountScheduler) isAccountTransportCompatible(account *Account, requiredTransport OpenAIUpstreamTransport) bool {

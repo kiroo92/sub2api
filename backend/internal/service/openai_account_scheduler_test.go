@@ -18,6 +18,29 @@ type openAISnapshotCacheStub struct {
 	accountsByID     map[int64]*Account
 }
 
+type schedulerCancelCacheStub struct {
+	SchedulerCache
+	err error
+}
+
+func (s *schedulerCancelCacheStub) GetAccount(ctx context.Context, accountID int64) (*Account, error) {
+	return nil, s.err
+}
+
+type trackingConcurrencyCache struct {
+	stubConcurrencyCache
+	loadBatchAccountIDs [][]int64
+}
+
+func (c *trackingConcurrencyCache) GetAccountsLoadBatch(ctx context.Context, accounts []AccountWithConcurrency) (map[int64]*AccountLoadInfo, error) {
+	ids := make([]int64, 0, len(accounts))
+	for _, account := range accounts {
+		ids = append(ids, account.ID)
+	}
+	c.loadBatchAccountIDs = append(c.loadBatchAccountIDs, ids)
+	return c.stubConcurrencyCache.GetAccountsLoadBatch(ctx, accounts)
+}
+
 func (s *openAISnapshotCacheStub) GetSnapshot(ctx context.Context, bucket SchedulerBucket) ([]*Account, bool, error) {
 	if len(s.snapshotAccounts) == 0 {
 		return nil, false, nil
@@ -64,6 +87,20 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_SessionStickyRateLimite
 	require.NotNil(t, selection.Account)
 	require.Equal(t, int64(31002), selection.Account.ID)
 	require.Equal(t, openAIAccountScheduleLayerLoadBalance, decision.Layer)
+}
+
+func TestSchedulerSnapshotService_GetAccount_ContextCanceledDoesNotLogError(t *testing.T) {
+	sink, cleanup := captureStructuredLog(t)
+	defer cleanup()
+
+	svc := &SchedulerSnapshotService{
+		cache: &schedulerCancelCacheStub{err: context.Canceled},
+	}
+
+	account, err := svc.GetAccount(context.Background(), 12345)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Nil(t, account)
+	require.False(t, sink.ContainsMessage("account cache read failed"))
 }
 
 func TestOpenAIGatewayService_SelectAccountForModelWithExclusions_SkipsFreshlyRateLimitedSnapshotCandidate(t *testing.T) {
@@ -543,6 +580,51 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_LoadBalanceTopKFallback
 	require.Equal(t, 3, decision.CandidateCount)
 	require.Equal(t, 2, decision.TopK)
 	require.Greater(t, decision.LoadSkew, 0.0)
+	if selection.ReleaseFunc != nil {
+		selection.ReleaseFunc()
+	}
+}
+
+func TestOpenAIGatewayService_SelectAccountWithScheduler_LoadBalanceShortlistLimitsDynamicLoadBatch(t *testing.T) {
+	ctx := context.Background()
+	groupID := int64(16)
+	accounts := make([]Account, 0, 300)
+	for i := 0; i < 300; i++ {
+		accounts = append(accounts, Account{
+			ID:          int64(6000 + i),
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeAPIKey,
+			Status:      StatusActive,
+			Schedulable: true,
+			Concurrency: 2,
+			Priority:    0,
+		})
+	}
+
+	trackingCache := &trackingConcurrencyCache{}
+	svc := &OpenAIGatewayService{
+		accountRepo:        stubOpenAIAccountRepo{accounts: accounts},
+		cache:              &stubGatewayCache{},
+		cfg:                &config.Config{},
+		concurrencyService: NewConcurrencyService(trackingCache),
+	}
+
+	selection, decision, err := svc.SelectAccountWithScheduler(
+		ctx,
+		&groupID,
+		"",
+		"session_hash_shortlist_limit",
+		"gpt-5.1",
+		nil,
+		OpenAIUpstreamTransportAny,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, selection)
+	require.NotNil(t, selection.Account)
+	require.Equal(t, openAIAccountScheduleLayerLoadBalance, decision.Layer)
+	require.Equal(t, len(accounts), decision.CandidateCount)
+	require.Len(t, trackingCache.loadBatchAccountIDs, 1)
+	require.Len(t, trackingCache.loadBatchAccountIDs[0], openAIStaticShortlistLimit(svc.openAIWSLBTopK()))
 	if selection.ReleaseFunc != nil {
 		selection.ReleaseFunc()
 	}
