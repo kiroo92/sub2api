@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -18,7 +19,15 @@ var (
 	ErrSchedulerFallbackLimited = errors.New("scheduler db fallback limited")
 )
 
-const outboxEventTimeout = 2 * time.Minute
+const (
+	outboxEventTimeout          = 2 * time.Minute
+	outboxPollReadTimeout       = 10 * time.Second
+	outboxBatchProcessTimeout   = 2 * time.Minute
+	outboxWatermarkWriteTimeout = 5 * time.Second
+	outboxLagCheckTimeout       = 5 * time.Second
+	outboxLagWarnCooldown       = 30 * time.Second
+	outboxRebuildCooldown       = 30 * time.Second
+)
 
 type SchedulerSnapshotService struct {
 	cache         SchedulerCache
@@ -32,6 +41,18 @@ type SchedulerSnapshotService struct {
 	fallbackLimit *fallbackLimiter
 	lagMu         sync.Mutex
 	lagFailures   int
+	outboxMu      sync.Mutex
+	lastLagWarnAt time.Time
+	lastRebuildAt time.Time
+}
+
+type schedulerOutboxBatch struct {
+	oldest      SchedulerOutboxEvent
+	lastID      int64
+	lastUsed    map[int64]time.Time
+	accountIDs  []int64
+	groupIDs    []int64
+	fullRebuild bool
 }
 
 func NewSchedulerSnapshotService(
@@ -225,16 +246,17 @@ func (s *SchedulerSnapshotService) pollOutbox() {
 	if s.outboxRepo == nil || s.cache == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+	readCtx, cancel := context.WithTimeout(context.Background(), outboxPollReadTimeout)
 	defer cancel()
 
-	watermark, err := s.cache.GetOutboxWatermark(ctx)
+	watermark, err := s.cache.GetOutboxWatermark(readCtx)
 	if err != nil {
 		logger.LegacyPrintf("service.scheduler_snapshot", "[Scheduler] outbox watermark read failed: %v", err)
 		return
 	}
 
-	events, err := s.outboxRepo.ListAfter(ctx, watermark, 200)
+	events, err := s.outboxRepo.ListAfter(readCtx, watermark, 200)
 	if err != nil {
 		logger.LegacyPrintf("service.scheduler_snapshot", "[Scheduler] outbox poll failed: %v", err)
 		return
@@ -243,25 +265,34 @@ func (s *SchedulerSnapshotService) pollOutbox() {
 		return
 	}
 
+	batch := coalesceSchedulerOutboxEvents(events)
 	watermarkForCheck := watermark
-	for _, event := range events {
-		eventCtx, cancel := context.WithTimeout(context.Background(), outboxEventTimeout)
-		err := s.handleOutboxEvent(eventCtx, event)
-		cancel()
-		if err != nil {
-			logger.LegacyPrintf("service.scheduler_snapshot", "[Scheduler] outbox handle failed: id=%d type=%s err=%v", event.ID, event.EventType, err)
-			return
-		}
+
+	processCtx, processCancel := context.WithTimeout(context.Background(), outboxBatchProcessTimeout)
+	err = s.handleOutboxBatch(processCtx, batch)
+	processCancel()
+	if err != nil {
+		logger.LegacyPrintf(
+			"service.scheduler_snapshot",
+			"[Scheduler] outbox batch handle failed: first_id=%d last_id=%d err=%v",
+			batch.oldest.ID,
+			batch.lastID,
+			err,
+		)
+		return
 	}
 
-	lastID := events[len(events)-1].ID
-	if err := s.cache.SetOutboxWatermark(ctx, lastID); err != nil {
+	writeCtx, writeCancel := context.WithTimeout(context.Background(), outboxWatermarkWriteTimeout)
+	if err := s.cache.SetOutboxWatermark(writeCtx, batch.lastID); err != nil {
 		logger.LegacyPrintf("service.scheduler_snapshot", "[Scheduler] outbox watermark write failed: %v", err)
 	} else {
-		watermarkForCheck = lastID
+		watermarkForCheck = batch.lastID
 	}
+	writeCancel()
 
-	s.checkOutboxLag(ctx, events[0], watermarkForCheck)
+	lagCtx, lagCancel := context.WithTimeout(context.Background(), outboxLagCheckTimeout)
+	s.checkOutboxLag(lagCtx, batch.oldest, watermarkForCheck)
+	lagCancel()
 }
 
 func (s *SchedulerSnapshotService) handleOutboxEvent(ctx context.Context, event SchedulerOutboxEvent) error {
@@ -284,29 +315,42 @@ func (s *SchedulerSnapshotService) handleOutboxEvent(ctx context.Context, event 
 }
 
 func (s *SchedulerSnapshotService) handleLastUsedEvent(ctx context.Context, payload map[string]any) error {
-	if s.cache == nil || payload == nil {
+	if s.cache == nil {
 		return nil
 	}
-	raw, ok := payload["last_used"].(map[string]any)
-	if !ok || len(raw) == 0 {
-		return nil
-	}
-	updates := make(map[int64]time.Time, len(raw))
-	for key, value := range raw {
-		id, err := strconv.ParseInt(key, 10, 64)
-		if err != nil || id <= 0 {
-			continue
-		}
-		sec, ok := toInt64(value)
-		if !ok || sec <= 0 {
-			continue
-		}
-		updates[id] = time.Unix(sec, 0)
-	}
+	updates := parseLastUsedPayload(payload)
 	if len(updates) == 0 {
 		return nil
 	}
 	return s.cache.UpdateLastUsed(ctx, updates)
+}
+
+func (s *SchedulerSnapshotService) handleOutboxBatch(ctx context.Context, batch schedulerOutboxBatch) error {
+	if batch.fullRebuild {
+		return s.triggerFullRebuild("outbox_batch")
+	}
+
+	if len(batch.lastUsed) > 0 && s.cache != nil {
+		if err := s.cache.UpdateLastUsed(ctx, batch.lastUsed); err != nil {
+			return err
+		}
+	}
+
+	if len(batch.accountIDs) > 0 {
+		payload := map[string]any{
+			"account_ids": int64SliceToAny(batch.accountIDs),
+		}
+		if len(batch.groupIDs) > 0 {
+			payload["group_ids"] = int64SliceToAny(batch.groupIDs)
+		}
+		return s.handleBulkAccountEvent(ctx, payload)
+	}
+
+	if len(batch.groupIDs) > 0 {
+		return s.rebuildByGroupIDs(ctx, batch.groupIDs, "group_change_batch")
+	}
+
+	return nil
 }
 
 func (s *SchedulerSnapshotService) handleBulkAccountEvent(ctx context.Context, payload map[string]any) error {
@@ -556,8 +600,11 @@ func (s *SchedulerSnapshotService) checkOutboxLag(ctx context.Context, oldest Sc
 		return
 	}
 
+	now := time.Now()
 	lag := time.Since(oldest.CreatedAt)
-	if lagSeconds := int(lag.Seconds()); lagSeconds >= s.cfg.Gateway.Scheduling.OutboxLagWarnSeconds && s.cfg.Gateway.Scheduling.OutboxLagWarnSeconds > 0 {
+	if lagSeconds := int(lag.Seconds()); lagSeconds >= s.cfg.Gateway.Scheduling.OutboxLagWarnSeconds &&
+		s.cfg.Gateway.Scheduling.OutboxLagWarnSeconds > 0 &&
+		s.shouldLogOutboxLagWarning(now) {
 		logger.LegacyPrintf("service.scheduler_snapshot", "[Scheduler] outbox lag warning: %ds", lagSeconds)
 	}
 
@@ -567,7 +614,7 @@ func (s *SchedulerSnapshotService) checkOutboxLag(ctx context.Context, oldest Sc
 		failures := s.lagFailures
 		s.lagMu.Unlock()
 
-		if failures >= s.cfg.Gateway.Scheduling.OutboxLagRebuildFailures {
+		if failures >= s.cfg.Gateway.Scheduling.OutboxLagRebuildFailures && s.shouldTriggerOutboxRebuild(now) {
 			logger.LegacyPrintf("service.scheduler_snapshot", "[Scheduler] outbox lag rebuild triggered: lag=%s failures=%d", lag, failures)
 			s.lagMu.Lock()
 			s.lagFailures = 0
@@ -591,6 +638,9 @@ func (s *SchedulerSnapshotService) checkOutboxLag(ctx context.Context, oldest Sc
 		return
 	}
 	if maxID-watermark >= int64(threshold) {
+		if !s.shouldTriggerOutboxRebuild(now) {
+			return
+		}
 		logger.LegacyPrintf("service.scheduler_snapshot", "[Scheduler] outbox backlog rebuild triggered: backlog=%d", maxID-watermark)
 		if err := s.triggerFullRebuild("outbox_backlog"); err != nil {
 			logger.LegacyPrintf("service.scheduler_snapshot", "[Scheduler] outbox backlog rebuild failed: %v", err)
@@ -818,6 +868,129 @@ func parseInt64Slice(value any) []int64 {
 		}
 	}
 	return out
+}
+
+func parseLastUsedPayload(payload map[string]any) map[int64]time.Time {
+	if payload == nil {
+		return nil
+	}
+	raw, ok := payload["last_used"].(map[string]any)
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	updates := make(map[int64]time.Time, len(raw))
+	for key, value := range raw {
+		id, err := strconv.ParseInt(key, 10, 64)
+		if err != nil || id <= 0 {
+			continue
+		}
+		sec, ok := toInt64(value)
+		if !ok || sec <= 0 {
+			continue
+		}
+		ts := time.Unix(sec, 0)
+		if prev, exists := updates[id]; !exists || ts.After(prev) {
+			updates[id] = ts
+		}
+	}
+	return updates
+}
+
+func coalesceSchedulerOutboxEvents(events []SchedulerOutboxEvent) schedulerOutboxBatch {
+	batch := schedulerOutboxBatch{}
+	if len(events) == 0 {
+		return batch
+	}
+
+	accountSet := make(map[int64]struct{}, len(events))
+	groupSet := make(map[int64]struct{}, len(events))
+	lastUsed := make(map[int64]time.Time)
+
+	batch.oldest = events[0]
+	batch.lastID = events[len(events)-1].ID
+
+	for _, event := range events {
+		switch event.EventType {
+		case SchedulerOutboxEventAccountLastUsed:
+			for id, ts := range parseLastUsedPayload(event.Payload) {
+				if prev, exists := lastUsed[id]; !exists || ts.After(prev) {
+					lastUsed[id] = ts
+				}
+			}
+		case SchedulerOutboxEventAccountBulkChanged:
+			addInt64SetFromSlice(accountSet, parseInt64Slice(event.Payload["account_ids"]))
+			addInt64SetFromSlice(groupSet, parseInt64Slice(event.Payload["group_ids"]))
+		case SchedulerOutboxEventAccountGroupsChanged, SchedulerOutboxEventAccountChanged:
+			if event.AccountID != nil && *event.AccountID > 0 {
+				accountSet[*event.AccountID] = struct{}{}
+			}
+			addInt64SetFromSlice(groupSet, parseInt64Slice(event.Payload["group_ids"]))
+		case SchedulerOutboxEventGroupChanged:
+			if event.GroupID != nil && *event.GroupID > 0 {
+				groupSet[*event.GroupID] = struct{}{}
+			}
+		case SchedulerOutboxEventFullRebuild:
+			batch.fullRebuild = true
+		}
+	}
+
+	batch.lastUsed = lastUsed
+	batch.accountIDs = sortedInt64Keys(accountSet)
+	batch.groupIDs = sortedInt64Keys(groupSet)
+	return batch
+}
+
+func addInt64SetFromSlice(dst map[int64]struct{}, values []int64) {
+	for _, value := range values {
+		if value > 0 {
+			dst[value] = struct{}{}
+		}
+	}
+}
+
+func sortedInt64Keys(values map[int64]struct{}) []int64 {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]int64, 0, len(values))
+	for value := range values {
+		out = append(out, value)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i] < out[j]
+	})
+	return out
+}
+
+func int64SliceToAny(values []int64) []any {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]any, 0, len(values))
+	for _, value := range values {
+		out = append(out, value)
+	}
+	return out
+}
+
+func (s *SchedulerSnapshotService) shouldLogOutboxLagWarning(now time.Time) bool {
+	s.outboxMu.Lock()
+	defer s.outboxMu.Unlock()
+	if now.Sub(s.lastLagWarnAt) < outboxLagWarnCooldown {
+		return false
+	}
+	s.lastLagWarnAt = now
+	return true
+}
+
+func (s *SchedulerSnapshotService) shouldTriggerOutboxRebuild(now time.Time) bool {
+	s.outboxMu.Lock()
+	defer s.outboxMu.Unlock()
+	if now.Sub(s.lastRebuildAt) < outboxRebuildCooldown {
+		return false
+	}
+	s.lastRebuildAt = now
+	return true
 }
 
 func toInt64(value any) (int64, bool) {
