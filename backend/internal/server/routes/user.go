@@ -119,6 +119,10 @@ func RegisterUserRoutes(
 			announcements.POST("/:id/read", h.Announcement.MarkRead)
 		}
 
+		// 抽奖活动（JWT 用户身份，参与无需支付）。
+		authenticated.GET("/lottery", h.Lottery.Get)
+		authenticated.POST("/lottery/join", h.Lottery.Join)
+
 		// 卡密兑换
 		redeem := authenticated.Group("/redeem")
 		{

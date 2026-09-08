@@ -241,6 +241,14 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/lottery', name: 'Lottery', component: () => import('@/views/user/LotteryView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: false, title: 'Prize draw', titleKey: 'lottery.title', descriptionKey: 'lottery.description' }
+  },
+  {
+    path: '/admin/lottery', name: 'AdminLottery', component: () => import('@/views/admin/LotteryView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Prize draw management', titleKey: 'lottery.adminTitle', descriptionKey: 'lottery.adminDescription' }
+  },
+  {
     path: '/redeem',
     name: 'Redeem',
     component: () => import('@/views/user/RedeemView.vue'),
@@ -938,6 +946,8 @@ router.beforeEach(async (to, _from, next) => {
   // 简易模式下限制访问某些页面
   if (authStore.isSimpleMode) {
     const restrictedPaths = [
+      '/lottery',
+      '/admin/lottery',
       '/admin/subscriptions',
       '/admin/redeem',
       '/subscriptions',
