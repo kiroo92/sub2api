@@ -24,6 +24,8 @@ const (
 	FieldDeletedAt = "deleted_at"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
+	// FieldDisabledMessage holds the string denoting the disabled_message field in the database.
+	FieldDisabledMessage = "disabled_message"
 	// FieldDescription holds the string denoting the description field in the database.
 	FieldDescription = "description"
 	// FieldRateMultiplier holds the string denoting the rate_multiplier field in the database.
@@ -227,6 +229,7 @@ var Columns = []string{
 	FieldUpdatedAt,
 	FieldDeletedAt,
 	FieldName,
+	FieldDisabledMessage,
 	FieldDescription,
 	FieldRateMultiplier,
 	FieldPeakRateEnabled,
@@ -326,6 +329,8 @@ var (
 	UpdateDefaultUpdatedAt func() time.Time
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
 	NameValidator func(string) error
+	// DefaultDisabledMessage holds the default value on creation for the "disabled_message" field.
+	DefaultDisabledMessage string
 	// DefaultRateMultiplier holds the default value on creation for the "rate_multiplier" field.
 	DefaultRateMultiplier float64
 	// DefaultPeakRateEnabled holds the default value on creation for the "peak_rate_enabled" field.
@@ -462,6 +467,11 @@ func ByDeletedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByName orders the results by the name field.
 func ByName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldName, opts...).ToFunc()
+}
+
+// ByDisabledMessage orders the results by the disabled_message field.
+func ByDisabledMessage(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDisabledMessage, opts...).ToFunc()
 }
 
 // ByDescription orders the results by the description field.

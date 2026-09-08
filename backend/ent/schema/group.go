@@ -40,6 +40,9 @@ func (Group) Fields() []ent.Field {
 		field.String("name").
 			MaxLen(100).
 			NotEmpty(),
+		field.String("disabled_message").
+			Default("").
+			SchemaType(map[string]string{dialect.Postgres: "text"}),
 		field.String("description").
 			Optional().
 			Nillable().

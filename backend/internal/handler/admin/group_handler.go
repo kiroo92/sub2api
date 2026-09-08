@@ -182,6 +182,7 @@ func sanitizeUpdateGroupRequestForSimpleMode(req *UpdateGroupRequest) {
 
 // CreateGroupRequest represents create group request
 type CreateGroupRequest struct {
+	DisabledMessage           string                        `json:"disabled_message" binding:"omitempty,max=1000"`
 	Name                      string                        `json:"name" binding:"required"`
 	Description               string                        `json:"description"`
 	Platform                  string                        `json:"platform" binding:"omitempty,oneof=anthropic openai gemini antigravity grok kimi zhipu deepseek composite"`
@@ -256,6 +257,7 @@ type CreateGroupRequest struct {
 
 // UpdateGroupRequest represents update group request
 type UpdateGroupRequest struct {
+	DisabledMessage           *string                        `json:"disabled_message" binding:"omitempty,max=1000"`
 	Name                      string                         `json:"name"`
 	Description               *string                        `json:"description"`
 	Platform                  string                         `json:"platform" binding:"omitempty,oneof=anthropic openai gemini antigravity grok kimi zhipu deepseek composite"`
@@ -664,6 +666,7 @@ func (h *GroupHandler) Create(c *gin.Context) {
 	group, err := h.adminService.CreateGroup(c.Request.Context(), &service.CreateGroupInput{
 		Name:                            req.Name,
 		Description:                     req.Description,
+		DisabledMessage:                 req.DisabledMessage,
 		Platform:                        req.Platform,
 		RateMultiplier:                  req.RateMultiplier,
 		IsExclusive:                     req.IsExclusive,
@@ -809,6 +812,7 @@ func (h *GroupHandler) Update(c *gin.Context) {
 	group, err := h.adminService.UpdateGroup(c.Request.Context(), groupID, &service.UpdateGroupInput{
 		Name:                            req.Name,
 		Description:                     req.Description,
+		DisabledMessage:                 req.DisabledMessage,
 		Platform:                        req.Platform,
 		RateMultiplier:                  req.RateMultiplier,
 		IsExclusive:                     req.IsExclusive,

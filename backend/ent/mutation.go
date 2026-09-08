@@ -22085,6 +22085,7 @@ type GroupMutation struct {
 	updated_at                              *time.Time
 	deleted_at                              *time.Time
 	name                                    *string
+	disabled_message                        *string
 	description                             *string
 	rate_multiplier                         *float64
 	addrate_multiplier                      *float64
@@ -22454,6 +22455,42 @@ func (m *GroupMutation) OldName(ctx context.Context) (v string, err error) {
 // ResetName resets all changes to the "name" field.
 func (m *GroupMutation) ResetName() {
 	m.name = nil
+}
+
+// SetDisabledMessage sets the "disabled_message" field.
+func (m *GroupMutation) SetDisabledMessage(s string) {
+	m.disabled_message = &s
+}
+
+// DisabledMessage returns the value of the "disabled_message" field in the mutation.
+func (m *GroupMutation) DisabledMessage() (r string, exists bool) {
+	v := m.disabled_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDisabledMessage returns the old "disabled_message" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldDisabledMessage(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDisabledMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDisabledMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDisabledMessage: %w", err)
+	}
+	return oldValue.DisabledMessage, nil
+}
+
+// ResetDisabledMessage resets all changes to the "disabled_message" field.
+func (m *GroupMutation) ResetDisabledMessage() {
+	m.disabled_message = nil
 }
 
 // SetDescription sets the "description" field.
@@ -25921,7 +25958,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 66)
+	fields := make([]string, 0, 67)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -25933,6 +25970,9 @@ func (m *GroupMutation) Fields() []string {
 	}
 	if m.name != nil {
 		fields = append(fields, group.FieldName)
+	}
+	if m.disabled_message != nil {
+		fields = append(fields, group.FieldDisabledMessage)
 	}
 	if m.description != nil {
 		fields = append(fields, group.FieldDescription)
@@ -26136,6 +26176,8 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.DeletedAt()
 	case group.FieldName:
 		return m.Name()
+	case group.FieldDisabledMessage:
+		return m.DisabledMessage()
 	case group.FieldDescription:
 		return m.Description()
 	case group.FieldRateMultiplier:
@@ -26277,6 +26319,8 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldDeletedAt(ctx)
 	case group.FieldName:
 		return m.OldName(ctx)
+	case group.FieldDisabledMessage:
+		return m.OldDisabledMessage(ctx)
 	case group.FieldDescription:
 		return m.OldDescription(ctx)
 	case group.FieldRateMultiplier:
@@ -26437,6 +26481,13 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetName(v)
+		return nil
+	case group.FieldDisabledMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDisabledMessage(v)
 		return nil
 	case group.FieldDescription:
 		v, ok := value.(string)
@@ -27394,6 +27445,9 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldName:
 		m.ResetName()
+		return nil
+	case group.FieldDisabledMessage:
+		m.ResetDisabledMessage()
 		return nil
 	case group.FieldDescription:
 		m.ResetDescription()

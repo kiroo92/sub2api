@@ -443,7 +443,11 @@ func validateAPIKeyGroupAvailable(apiKey *service.APIKey) (string, string, bool)
 		return "GROUP_DELETED", "API Key 所属分组已删除", false
 	}
 	if !group.IsActive() {
-		return "GROUP_DISABLED", "API Key 所属分组已停用", false
+		message := strings.TrimSpace(group.DisabledMessage)
+		if message == "" {
+			message = "API Key 所属分组已停用"
+		}
+		return "GROUP_DISABLED", message, false
 	}
 	return "", "", true
 }

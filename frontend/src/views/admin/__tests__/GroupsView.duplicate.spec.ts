@@ -390,4 +390,35 @@ describe('GroupsView duplicate action', () => {
     }
   })
 
+  it('loads, edits, and clears the disabled group message', async () => {
+    listGroups.mockResolvedValue({
+      items: [{ ...sourceGroup, status: 'inactive', disabled_message: '请切换至 XXX' }],
+      total: 1, page: 1, page_size: 20, pages: 1
+    })
+    updateGroup.mockResolvedValue(sourceGroup)
+    const wrapper = mountView()
+    try {
+      await flushPromises()
+      const edit = () => wrapper.findAll('button').find(button => button.text() === 'common.edit')!
+      await edit().trigger('click')
+      await flushPromises()
+      const field = wrapper.get<HTMLTextAreaElement>('#edit-group-disabled-message')
+      expect(field.element.value).toBe('请切换至 XXX')
+      await field.setValue('该分组已停用，请使用 YYY')
+      await wrapper.get('#edit-group-form').trigger('submit')
+      await flushPromises()
+      expect(updateGroup).toHaveBeenLastCalledWith(42, expect.objectContaining({
+        disabled_message: '该分组已停用，请使用 YYY'
+      }))
+      await edit().trigger('click')
+      await flushPromises()
+      await wrapper.get('#edit-group-disabled-message').setValue('')
+      await wrapper.get('#edit-group-form').trigger('submit')
+      await flushPromises()
+      expect(updateGroup).toHaveBeenLastCalledWith(42, expect.objectContaining({ disabled_message: '' }))
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
 })

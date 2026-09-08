@@ -75,6 +75,11 @@ func Name(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldName, v))
 }
 
+// DisabledMessage applies equality check predicate on the "disabled_message" field. It's identical to DisabledMessageEQ.
+func DisabledMessage(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldDisabledMessage, v))
+}
+
 // Description applies equality check predicate on the "description" field. It's identical to DescriptionEQ.
 func Description(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldDescription, v))
@@ -538,6 +543,71 @@ func NameEqualFold(v string) predicate.Group {
 // NameContainsFold applies the ContainsFold predicate on the "name" field.
 func NameContainsFold(v string) predicate.Group {
 	return predicate.Group(sql.FieldContainsFold(FieldName, v))
+}
+
+// DisabledMessageEQ applies the EQ predicate on the "disabled_message" field.
+func DisabledMessageEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldDisabledMessage, v))
+}
+
+// DisabledMessageNEQ applies the NEQ predicate on the "disabled_message" field.
+func DisabledMessageNEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldDisabledMessage, v))
+}
+
+// DisabledMessageIn applies the In predicate on the "disabled_message" field.
+func DisabledMessageIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldDisabledMessage, vs...))
+}
+
+// DisabledMessageNotIn applies the NotIn predicate on the "disabled_message" field.
+func DisabledMessageNotIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldDisabledMessage, vs...))
+}
+
+// DisabledMessageGT applies the GT predicate on the "disabled_message" field.
+func DisabledMessageGT(v string) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldDisabledMessage, v))
+}
+
+// DisabledMessageGTE applies the GTE predicate on the "disabled_message" field.
+func DisabledMessageGTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldDisabledMessage, v))
+}
+
+// DisabledMessageLT applies the LT predicate on the "disabled_message" field.
+func DisabledMessageLT(v string) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldDisabledMessage, v))
+}
+
+// DisabledMessageLTE applies the LTE predicate on the "disabled_message" field.
+func DisabledMessageLTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldDisabledMessage, v))
+}
+
+// DisabledMessageContains applies the Contains predicate on the "disabled_message" field.
+func DisabledMessageContains(v string) predicate.Group {
+	return predicate.Group(sql.FieldContains(FieldDisabledMessage, v))
+}
+
+// DisabledMessageHasPrefix applies the HasPrefix predicate on the "disabled_message" field.
+func DisabledMessageHasPrefix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasPrefix(FieldDisabledMessage, v))
+}
+
+// DisabledMessageHasSuffix applies the HasSuffix predicate on the "disabled_message" field.
+func DisabledMessageHasSuffix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasSuffix(FieldDisabledMessage, v))
+}
+
+// DisabledMessageEqualFold applies the EqualFold predicate on the "disabled_message" field.
+func DisabledMessageEqualFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldEqualFold(FieldDisabledMessage, v))
+}
+
+// DisabledMessageContainsFold applies the ContainsFold predicate on the "disabled_message" field.
+func DisabledMessageContainsFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldContainsFold(FieldDisabledMessage, v))
 }
 
 // DescriptionEQ applies the EQ predicate on the "description" field.

@@ -825,6 +825,9 @@ export default {
       accountsTotal: '总量:',
       accountsUnit: '个账号',
       form: {
+        disabledMessage: '停用提示',
+        disabledMessagePlaceholder: '该分组已停用，请切换至 XXX 分组使用',
+        disabledMessageHint: '分组停用时向 API 客户端返回此提示，最多 1000 字。留空使用默认提示。',
         name: '名称',
         description: '描述',
         platform: '平台',

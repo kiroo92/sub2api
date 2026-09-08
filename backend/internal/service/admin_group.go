@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -373,6 +374,9 @@ func normalizeUpdateGroupInputForSimpleMode(input *UpdateGroupInput) {
 }
 
 func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupInput) (*Group, error) {
+	if utf8.RuneCountInString(input.DisabledMessage) > 1000 {
+		return nil, infraerrors.BadRequest("INVALID_DISABLED_MESSAGE", "disabled_message must be at most 1000 characters")
+	}
 	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple && NormalizeGroupPlatform(input.Platform) == PlatformComposite {
 		return nil, infraerrors.BadRequest("SIMPLE_MODE_GROUP_NOT_BINDABLE", "composite groups are not supported in simple mode")
 	}
@@ -553,6 +557,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	group := &Group{
 		Name:                            input.Name,
 		Description:                     input.Description,
+		DisabledMessage:                 strings.TrimSpace(input.DisabledMessage),
 		Platform:                        platform,
 		RateMultiplier:                  input.RateMultiplier,
 		IsExclusive:                     input.IsExclusive,
@@ -741,6 +746,9 @@ func (s *adminServiceImpl) validateFallbackGroupOnInvalidRequest(ctx context.Con
 }
 
 func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *UpdateGroupInput) (*Group, error) {
+	if input.DisabledMessage != nil && utf8.RuneCountInString(*input.DisabledMessage) > 1000 {
+		return nil, infraerrors.BadRequest("INVALID_DISABLED_MESSAGE", "disabled_message must be at most 1000 characters")
+	}
 	group, err := s.groupRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -760,6 +768,9 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 
 	if input.Name != "" {
 		group.Name = input.Name
+	}
+	if input.DisabledMessage != nil {
+		group.DisabledMessage = strings.TrimSpace(*input.DisabledMessage)
 	}
 	if input.Description != nil {
 		group.Description = *input.Description

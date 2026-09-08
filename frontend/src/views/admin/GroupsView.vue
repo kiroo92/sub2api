@@ -505,6 +505,19 @@
             :placeholder="t('admin.groups.optionalDescription')"
           ></textarea>
         </div>
+        <div v-if="!authStore.isSimpleMode">
+          <label for="create-group-disabled-message" class="input-label">{{ t("admin.groups.form.disabledMessage") }}</label>
+          <textarea
+            id="create-group-disabled-message"
+            v-model="createForm.disabled_message"
+            rows="3"
+            maxlength="1000"
+            class="input"
+            :placeholder="t('admin.groups.form.disabledMessagePlaceholder')"
+            aria-describedby="create-group-disabled-message-hint"
+          ></textarea>
+          <p id="create-group-disabled-message-hint" class="input-hint">{{ t("admin.groups.form.disabledMessageHint") }}</p>
+        </div>
         <div>
           <label class="input-label">{{
             t("admin.groups.form.platform")
@@ -2141,6 +2154,19 @@
             rows="3"
             class="input"
           ></textarea>
+        </div>
+        <div v-if="!authStore.isSimpleMode">
+          <label for="edit-group-disabled-message" class="input-label">{{ t("admin.groups.form.disabledMessage") }}</label>
+          <textarea
+            id="edit-group-disabled-message"
+            v-model="editForm.disabled_message"
+            rows="3"
+            maxlength="1000"
+            class="input"
+            :placeholder="t('admin.groups.form.disabledMessagePlaceholder')"
+            aria-describedby="edit-group-disabled-message-hint"
+          ></textarea>
+          <p id="edit-group-disabled-message-hint" class="input-hint">{{ t("admin.groups.form.disabledMessageHint") }}</p>
         </div>
         <div>
           <label class="input-label">{{
@@ -4923,6 +4949,7 @@ const submitEditAllowlistCustomEntry = () => {
 const createForm = reactive({
   name: "",
   description: "",
+  disabled_message: "",
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
   is_exclusive: false,
@@ -5287,6 +5314,7 @@ const convertApiFormatToRoutingRules = async (
 const editForm = reactive({
   name: "",
   description: "",
+  disabled_message: "",
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
   is_exclusive: false,
@@ -5750,6 +5778,7 @@ const closeCreateModal = () => {
   clearAllAccountSearchState();
   createForm.name = "";
   createForm.description = "";
+  createForm.disabled_message = "";
   createForm.platform = "anthropic";
   createForm.rate_multiplier = 1.0;
   createForm.is_exclusive = false;
@@ -6019,6 +6048,7 @@ const handleEdit = async (group: AdminGroup) => {
   editingGroup.value = group;
   editForm.name = group.name;
   editForm.description = group.description || "";
+  editForm.disabled_message = group.disabled_message || "";
   editForm.platform = group.platform;
   editForm.rate_multiplier = group.rate_multiplier;
   editForm.is_exclusive = group.is_exclusive;

@@ -78,6 +78,20 @@ func (_c *GroupCreate) SetName(v string) *GroupCreate {
 	return _c
 }
 
+// SetDisabledMessage sets the "disabled_message" field.
+func (_c *GroupCreate) SetDisabledMessage(v string) *GroupCreate {
+	_c.mutation.SetDisabledMessage(v)
+	return _c
+}
+
+// SetNillableDisabledMessage sets the "disabled_message" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableDisabledMessage(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetDisabledMessage(*v)
+	}
+	return _c
+}
+
 // SetDescription sets the "description" field.
 func (_c *GroupCreate) SetDescription(v string) *GroupCreate {
 	_c.mutation.SetDescription(v)
@@ -1047,6 +1061,10 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
+	if _, ok := _c.mutation.DisabledMessage(); !ok {
+		v := group.DefaultDisabledMessage
+		_c.mutation.SetDisabledMessage(v)
+	}
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		v := group.DefaultRateMultiplier
 		_c.mutation.SetRateMultiplier(v)
@@ -1229,6 +1247,9 @@ func (_c *GroupCreate) check() error {
 		if err := group.NameValidator(v); err != nil {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Group.name": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.DisabledMessage(); !ok {
+		return &ValidationError{Name: "disabled_message", err: errors.New(`ent: missing required field "Group.disabled_message"`)}
 	}
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		return &ValidationError{Name: "rate_multiplier", err: errors.New(`ent: missing required field "Group.rate_multiplier"`)}
@@ -1460,6 +1481,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(group.FieldName, field.TypeString, value)
 		_node.Name = value
+	}
+	if value, ok := _c.mutation.DisabledMessage(); ok {
+		_spec.SetField(group.FieldDisabledMessage, field.TypeString, value)
+		_node.DisabledMessage = value
 	}
 	if value, ok := _c.mutation.Description(); ok {
 		_spec.SetField(group.FieldDescription, field.TypeString, value)
@@ -1904,6 +1929,18 @@ func (u *GroupUpsert) SetName(v string) *GroupUpsert {
 // UpdateName sets the "name" field to the value that was provided on create.
 func (u *GroupUpsert) UpdateName() *GroupUpsert {
 	u.SetExcluded(group.FieldName)
+	return u
+}
+
+// SetDisabledMessage sets the "disabled_message" field.
+func (u *GroupUpsert) SetDisabledMessage(v string) *GroupUpsert {
+	u.Set(group.FieldDisabledMessage, v)
+	return u
+}
+
+// UpdateDisabledMessage sets the "disabled_message" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateDisabledMessage() *GroupUpsert {
+	u.SetExcluded(group.FieldDisabledMessage)
 	return u
 }
 
@@ -3015,6 +3052,20 @@ func (u *GroupUpsertOne) SetName(v string) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateName() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateName()
+	})
+}
+
+// SetDisabledMessage sets the "disabled_message" field.
+func (u *GroupUpsertOne) SetDisabledMessage(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDisabledMessage(v)
+	})
+}
+
+// UpdateDisabledMessage sets the "disabled_message" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateDisabledMessage() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDisabledMessage()
 	})
 }
 
@@ -4461,6 +4512,20 @@ func (u *GroupUpsertBulk) SetName(v string) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateName() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateName()
+	})
+}
+
+// SetDisabledMessage sets the "disabled_message" field.
+func (u *GroupUpsertBulk) SetDisabledMessage(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetDisabledMessage(v)
+	})
+}
+
+// UpdateDisabledMessage sets the "disabled_message" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateDisabledMessage() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateDisabledMessage()
 	})
 }
 

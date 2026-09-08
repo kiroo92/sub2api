@@ -57,6 +57,7 @@ type APIKeyAuthUserSnapshot struct {
 
 // APIKeyAuthGroupSnapshot 分组快照
 type APIKeyAuthGroupSnapshot struct {
+	DisabledMessage                 string                        `json:"disabled_message"`
 	ID                              int64                         `json:"id"`
 	Name                            string                        `json:"name"`
 	Platform                        string                        `json:"platform"`

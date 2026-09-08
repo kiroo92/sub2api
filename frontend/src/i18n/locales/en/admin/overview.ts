@@ -843,6 +843,9 @@ export default {
         disabled: 'Disabled'
       },
       form: {
+        disabledMessage: 'Disabled group message',
+        disabledMessagePlaceholder: 'This group is disabled. Please switch to group XXX.',
+        disabledMessageHint: 'Returned to API clients when this group is disabled. Up to 1000 characters. Leave blank to use the default message.',
         name: 'Name',
         description: 'Description',
         platform: 'Platform',
