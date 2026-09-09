@@ -54,6 +54,10 @@ func lotteryTestDB(t *testing.T) *sql.DB {
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, string(migration))
 	require.NoError(t, err, "migration is replayable")
+	extra, err := migrations.FS.ReadFile("239_lottery_turnstile.sql")
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, string(extra))
+	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, `INSERT INTO users (id,email) SELECT i, 'person'||i||'@example.com' FROM generate_series(1,65) i;
  INSERT INTO api_keys (user_id,key) SELECT id,'lottery-test-'||id FROM users;`)
 	require.NoError(t, err)
@@ -185,4 +189,29 @@ func TestLotteryPostgresPayoutFailureRollsBack(t *testing.T) {
 	require.True(t, result.Drawn)
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT SUM(balance) FROM users`).Scan(&balance))
 	require.Equal(t, 10.0, balance)
+}
+
+func TestLotteryPostgresTurnstileKeys(t *testing.T) {
+	db := lotteryTestDB(t)
+	repo := NewLotteryRepository(db)
+	ctx := context.Background()
+	c := service.LotteryConfig{PrizeAmount: 5, WinnerCount: 6, ParticipantTarget: 60, MinRecharge: 50, TurnstileSiteKey: "site-one", TurnstileSecretKey: "secret-one"}
+	require.NoError(t, repo.Configure(ctx, c))
+	c.TurnstileSecretKey = ""
+	c.PrizeAmount = 6
+	require.NoError(t, repo.Configure(ctx, c))
+	snapshot, err := repo.Snapshot(ctx, 0)
+	require.NoError(t, err)
+	require.Equal(t, "secret-one", snapshot.Config.TurnstileSecretKey)
+	c.TurnstileSiteKey = "site-two"
+	c.TurnstileSecretKey = "secret-two"
+	require.NoError(t, repo.Configure(ctx, c))
+	snapshot, err = repo.Snapshot(ctx, 0)
+	require.NoError(t, err)
+	require.Equal(t, "secret-two", snapshot.Config.TurnstileSecretKey)
+	require.Equal(t, "site-two", snapshot.Config.TurnstileSiteKey)
+	public, err := service.NewLotteryService(repo, nil, nil).Snapshot(ctx, 1)
+	require.NoError(t, err)
+	require.Empty(t, public.Config.TurnstileSecretKey)
+	require.True(t, public.Config.TurnstileSecretConfigured)
 }

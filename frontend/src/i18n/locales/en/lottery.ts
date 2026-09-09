@@ -1,7 +1,12 @@
 export default {
   lottery: {
-    "captchaUnavailable": "Configure Tencent or Aliyun CAPTCHA in system settings before joining.",
-    "captchaFailed": "Verification failed or expired. Please complete the challenge again.",
+    "turnstileTitle": "Lottery Turnstile",
+    "turnstileHint": "Create a separate Managed widget in Cloudflare Turnstile and add your site hostname. These keys protect lottery entries only, independently of login and registration.",
+    "secretHint": "Leave blank to keep the saved key",
+    "secretConfigured": "Secret Key configured",
+
+    "captchaUnavailable": "Configure dedicated Turnstile in lottery management before joining.",
+    "captchaFailed": "Verification failed or expired. Please verify again.",
     "title": "Prize draw",
     "description": "Join the current round. The draw runs automatically when it fills, and prizes are credited to account balances.",
     "prizeAmount": "Prize per winner",

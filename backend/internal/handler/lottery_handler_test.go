@@ -31,13 +31,13 @@ func TestLotteryHandlerUsesAuthenticatedUser(t *testing.T) {
 	h := NewLotteryHandler(service.NewLotteryService(repo, nil, nil), &config.Config{}, nil)
 	captcha := &lotteryCaptchaStub{}
 	h.captcha = captcha
-	c, w := lotteryHandlerContext(`{"round_id":131,"user_id":999,"tencent_captcha_ticket":"ticket","tencent_captcha_randstr":"rand"}`)
+	c, w := lotteryHandlerContext(`{"round_id":131,"user_id":999,"turnstile_token":"token"}`)
 	c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 42})
 	h.Join(c)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, int64(42), repo.userID)
 	require.Equal(t, int64(131), repo.roundID)
-	require.Equal(t, service.CaptchaProof{TencentTicket: "ticket", TencentRandstr: "rand"}, captcha.proof)
+	require.Equal(t, service.CaptchaProof{TurnstileToken: "token"}, captcha.proof)
 }
 func TestLotteryHandlerRejectsInvalidEntry(t *testing.T) {
 	for _, body := range []string{`{}`, `{"round_id":0}`, `{"round_id":-1}`, `{"round_id":"131"}`} {

@@ -33,6 +33,8 @@ $env:LOTTERY_TEST_DATABASE_URL='postgres://postgres@127.0.0.1:55438/postgres?ssl
 
 数据库测试覆盖并发满员开奖、重复请求、旧期请求、暂停与恢复、次期规则、充值门槛、精确奖金入账、充值累计值不变、发奖故障的完整回滚和迁移重放。余额缓存发奖后失效，API Key 鉴权缓存另有事务内持久化失效通知。
 
-参与抽奖强制执行腾讯天御或阿里云动作式 CAPTCHA。先在系统设置启用并完整配置其中一个服务商，并在服务商控制台选择滑动验证场景。点击参与后弹出验证码，取消则不提交，提交后重置一次性票据。后端在执行参与事务之前验证票据，缺失、失效、配置缺失或服务异常均阻止参与。仅开启 Turnstile 不满足抽奖滑动验证配置。
+抽奖使用独立 Cloudflare Turnstile，与系统登录、注册 CAPTCHA 完全分开。在 Cloudflare Turnstile 创建专用于抽奖的 Managed widget，添加本站域名，然后在「抽奖活动管理」填写 Site Key 和 Secret Key。无需开启系统验证码。
 
-参与请求除 `round_id` 外，腾讯使用 `tencent_captcha_ticket`、`tencent_captcha_randstr`；阿里云沿用已有请求协议，将 `captchaVerifyParam` 放入 `turnstile_token`。验证码配置从公开配置接口读取，密钥始终保留在服务端。
+Secret Key 不返回到任何接口响应；编辑时留空保留已有密钥。验证配置立即生效，无需等待新一期。升级自动执行 `239_lottery_turnstile.sql`。配置完成前暂停参与入口。
+
+用户在参与按钮旁完成自动或点击验证，之后提交 `{ "round_id": 1, "turnstile_token": "…" }`。后端只读取抽奖配置中的密钥，通过 Cloudflare Siteverify 校验；缺失、过期、重复使用的票据及服务异常均阻止参与。每次提交后重置验证码。Cloudflare 域名限制需要在对应 widget 设置中配置。

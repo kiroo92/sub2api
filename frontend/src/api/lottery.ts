@@ -1,6 +1,9 @@
 import { apiClient } from './client'
 
 export interface LotteryConfig {
+  turnstile_site_key?: string
+  turnstile_secret_configured?: boolean
+  turnstile_secret_key?: string
   enabled: boolean
   prize_amount: number
   winner_count: number
@@ -35,7 +38,7 @@ export interface LotterySnapshot {
   my_wins: LotteryWin[]
   recent_rounds: LotteryRound[]
 }
-export interface LotteryCaptchaProof { turnstile_token?: string; tencent_captcha_ticket?: string; tencent_captcha_randstr?: string }
+export interface LotteryCaptchaProof { turnstile_token: string }
 export const lotteryAPI = {
   async get(): Promise<LotterySnapshot> { return (await apiClient.get('/lottery')).data },
   async join(roundID: number, proof: LotteryCaptchaProof): Promise<{ round_id: number; already_joined: boolean; drawn: boolean }> {

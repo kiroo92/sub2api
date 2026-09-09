@@ -17,12 +17,12 @@ func NewLotteryRepository(db *sql.DB) service.LotteryRepository { return &lotter
 
 type lotteryScanner interface{ Scan(...any) error }
 
-const lotteryConfigColumns = `enabled, prize_amount, winner_count, participant_target, min_recharge`
+const lotteryConfigColumns = `enabled, prize_amount, winner_count, participant_target, min_recharge, turnstile_site_key, turnstile_secret_key`
 const lotteryRoundColumns = `id, prize_amount, winner_count, participant_target, min_recharge, participant_count, winners_drawn, status, created_at, drawn_at`
 
 func scanLotteryConfig(row lotteryScanner) (service.LotteryConfig, error) {
 	var c service.LotteryConfig
-	err := row.Scan(&c.Enabled, &c.PrizeAmount, &c.WinnerCount, &c.ParticipantTarget, &c.MinRecharge)
+	err := row.Scan(&c.Enabled, &c.PrizeAmount, &c.WinnerCount, &c.ParticipantTarget, &c.MinRecharge, &c.TurnstileSiteKey, &c.TurnstileSecretKey)
 	return c, err
 }
 func scanLotteryRound(row lotteryScanner) (*service.LotteryRound, error) {
@@ -53,7 +53,7 @@ func (r *lotteryRepository) Configure(ctx context.Context, c service.LotteryConf
 	if _, err = scanLotteryConfig(tx.QueryRowContext(ctx, `SELECT `+lotteryConfigColumns+` FROM lottery_config WHERE id=1 FOR UPDATE`)); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE lottery_config SET enabled=$1,prize_amount=$2,winner_count=$3,participant_target=$4,min_recharge=$5,updated_at=NOW() WHERE id=1`, c.Enabled, lotteryMoney(c.PrizeAmount), c.WinnerCount, c.ParticipantTarget, lotteryMoney(c.MinRecharge)); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE lottery_config SET enabled=$1,prize_amount=$2,winner_count=$3,participant_target=$4,min_recharge=$5,turnstile_site_key=$6,turnstile_secret_key=COALESCE(NULLIF($7,''),turnstile_secret_key),updated_at=NOW() WHERE id=1`, c.Enabled, lotteryMoney(c.PrizeAmount), c.WinnerCount, c.ParticipantTarget, lotteryMoney(c.MinRecharge), c.TurnstileSiteKey, c.TurnstileSecretKey); err != nil {
 		return err
 	}
 	if c.Enabled {

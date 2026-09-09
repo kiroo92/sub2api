@@ -32,14 +32,10 @@
                   <p class="mt-1 text-xs leading-relaxed text-gray-500">{{ t('lottery.eligibilityHint', { amount: rules.min_recharge.toFixed(2) }) }}</p>
                   <p v-if="!snapshot.eligible && snapshot.config.enabled && !snapshot.joined" class="mt-1 text-xs text-gray-500">{{ t('lottery.yourRecharge', { amount: snapshot.total_recharged.toFixed(2) }) }}</p>
                 </div>
-                <button data-testid="lottery-join" class="btn btn-primary min-w-28 shrink-0" :disabled="!canJoin || !captchaReady || joining || loading" @click="join"><Icon name="gift" size="sm" />{{ joining ? t('lottery.joining') : snapshot.joined ? t('lottery.joined') : t('lottery.join') }}</button>
+                <button data-testid="lottery-join" class="btn btn-primary min-w-28 shrink-0" :disabled="!canJoin || !captchaReady || !captchaToken || joining || loading" @click="join"><Icon name="gift" size="sm" />{{ joining ? t('lottery.joining') : snapshot.joined ? t('lottery.joined') : t('lottery.join') }}</button>
               </div>
-              <div class="lottery-captcha">
-      <CaptchaChallenge v-if="captchaReady" ref="captchaRef" :turnstile-enabled="false" turnstile-site-key=""
-        :tencent-enabled="captchaSettings?.tencent_captcha_enabled === true" :tencent-app-id="captchaSettings?.tencent_captcha_app_id || ''" :tencent-region="captchaSettings?.tencent_captcha_region"
-        :aliyun-enabled="captchaSettings?.aliyun_captcha_enabled === true" :aliyun-scene-id="captchaSettings?.aliyun_captcha_scene_id" :aliyun-prefix="captchaSettings?.aliyun_captcha_prefix" :aliyun-region="captchaSettings?.aliyun_captcha_region"
-        @error="error = t('lottery.captchaFailed')" />
-              </div>
+              <TurnstileWidget v-if="captchaReady && canJoin" ref="captchaRef" :key="snapshot.config.turnstile_site_key" :site-key="snapshot.config.turnstile_site_key || ''"
+                @verify="captchaToken = $event" @expire="captchaToken = ''" @error="captchaToken = ''; error = t('lottery.captchaFailed')" />
               <p v-if="!captchaReady" class="text-sm text-amber-600 dark:text-amber-400">{{ t('lottery.captchaUnavailable') }}</p>
               <p v-if="feedback" role="status" class="text-sm text-emerald-600 dark:text-emerald-400">{{ feedback }}</p>
               <p class="text-xs text-gray-400">{{ t('lottery.freeEntry') }}</p>
@@ -65,11 +61,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import CaptchaChallenge from '@/components/CaptchaChallenge.vue'
-import { getPublicSettings } from '@/api/auth'
-import type { PublicSettings } from '@/types'
+import TurnstileWidget from '@/components/TurnstileWidget.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import LotteryRoundsTable from '@/components/lottery/LotteryRoundsTable.vue'
@@ -77,14 +71,11 @@ import { lotteryAPI, type LotterySnapshot } from '@/api/lottery'
 import { useAuthStore } from '@/stores/auth'
 const { t, locale } = useI18n()
 const auth = useAuthStore()
-const captchaRef = ref<InstanceType<typeof CaptchaChallenge> | null>(null)
-const captchaSettings = ref<PublicSettings | null>(null)
-const captchaReady = computed(() => {
-  const c = captchaSettings.value
-  if (!c || c.turnstile_enabled || (c.tencent_captcha_enabled && c.aliyun_captcha_enabled)) return false
-  return !!((c.tencent_captcha_enabled && c.tencent_captcha_app_id) || (c.aliyun_captcha_enabled && c.aliyun_captcha_scene_id && c.aliyun_captcha_prefix))
-})
+const captchaRef = ref<InstanceType<typeof TurnstileWidget> | null>(null)
+const captchaToken = ref('')
+const captchaReady = computed(() => !!snapshot.value?.config.turnstile_site_key && !!snapshot.value?.config.turnstile_secret_configured)
 const snapshot = ref<LotterySnapshot | null>(null)
+watch(() => snapshot.value?.config.turnstile_site_key, () => { captchaToken.value = '' })
 const loading = ref(false)
 const joining = ref(false)
 const error = ref('')
@@ -100,7 +91,6 @@ async function load(silent = false) {
   if (loading.value) return
   loading.value = true
   try {
-    if (!silent) captchaSettings.value = await getPublicSettings()
     const data = await lotteryAPI.get()
     if (disposed) return
     const latestWin = snapshot.value?.my_wins[0]?.round_id
@@ -111,30 +101,20 @@ async function load(silent = false) {
   finally { loading.value = false }
 }
 async function join() {
-  if (!canJoin.value || !captchaReady.value || joining.value || !snapshot.value?.current) return
+  if (!canJoin.value || !captchaReady.value || !captchaToken.value || joining.value || !snapshot.value?.current) return
   const roundID = snapshot.value.current.id
   joining.value = true; error.value = ''; feedback.value = ''
   try {
-    captchaRef.value?.reset()
-    const challenge = await captchaRef.value?.verifyAction()
-    if (!challenge || disposed) return
-    const proof = captchaSettings.value?.tencent_captcha_enabled
-      ? { tencent_captcha_ticket: challenge.token, tencent_captcha_randstr: challenge.randstr }
-      : { turnstile_token: challenge.token }
+    const proof = { turnstile_token: captchaToken.value }
     const result = await lotteryAPI.join(roundID, proof)
     feedback.value = result.drawn ? t('lottery.drawComplete') : t('lottery.joinSuccess')
     await load()
   } catch (err: unknown) {
     await load()
     const reason = (err as { reason?: string })?.reason
-    error.value = reason?.includes('CAPTCHA') ? t('lottery.captchaFailed') : reason === 'LOTTERY_ROUND_CHANGED' ? t('lottery.roundChanged') : reason === 'LOTTERY_NOT_ELIGIBLE' ? t('lottery.notEligible') : reason === 'LOTTERY_PAUSED' ? t('lottery.paused') : t('lottery.joinFailed')
-  } finally { captchaRef.value?.reset(); joining.value = false }
+    error.value = (reason?.includes('CAPTCHA') || reason?.includes('TURNSTILE')) ? t('lottery.captchaFailed') : reason === 'LOTTERY_ROUND_CHANGED' ? t('lottery.roundChanged') : reason === 'LOTTERY_NOT_ELIGIBLE' ? t('lottery.notEligible') : reason === 'LOTTERY_PAUSED' ? t('lottery.paused') : t('lottery.joinFailed')
+  } finally { captchaToken.value = ''; captchaRef.value?.reset(); joining.value = false }
 }
 onMounted(() => { void load(); timer = setInterval(() => { if (!document.hidden && !joining.value) void load(true) }, 15000) })
 onUnmounted(() => { disposed = true; if (timer) clearInterval(timer) })
 </script>
-
-<style scoped>
-/* The participation button opens the provider popup through verifyAction(). */
-.lottery-captcha :deep(.aliyun-captcha-button) { display: none; }
-</style>

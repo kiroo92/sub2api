@@ -1,7 +1,12 @@
 export default {
   lottery: {
-    "captchaUnavailable": "请先在系统设置中配置腾讯或阿里云滑动验证，再参与抽奖。",
-    "captchaFailed": "验证失败或已过期，请重新完成滑动验证。",
+    "turnstileTitle": "抽奖专用 Turnstile",
+    "turnstileHint": "在 Cloudflare Turnstile 新建独立站点（Managed 模式），添加本站域名后填入密钥。此配置只保护抽奖，不影响登录或注册。",
+    "secretHint": "留空保留已保存的密钥",
+    "secretConfigured": "Secret Key 已配置",
+
+    "captchaUnavailable": "请在抽奖管理中配置专用 Turnstile 后参与。",
+    "captchaFailed": "验证失败或已过期，请重新验证。",
     "title": "抽奖活动",
     "description": "参与当前期抽奖，达到人数后自动开奖，中奖奖励直接发放到账户余额。",
     "prizeAmount": "单份奖金",

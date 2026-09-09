@@ -8,6 +8,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
+	"strings"
 )
 
 type lotteryCaptchaVerifier interface {
@@ -20,7 +21,7 @@ type LotteryHandler struct {
 	cfg     *config.Config
 }
 
-func NewLotteryHandler(s *service.LotteryService, cfg *config.Config, auth *service.AuthService) *LotteryHandler {
+func NewLotteryHandler(s *service.LotteryService, cfg *config.Config, auth *service.LotteryCaptchaService) *LotteryHandler {
 	return &LotteryHandler{service: s, cfg: cfg, captcha: auth}
 }
 func (h *LotteryHandler) available(c *gin.Context) bool {
@@ -58,8 +59,6 @@ func (h *LotteryHandler) Join(c *gin.Context) {
 	var input struct {
 		RoundID        int64  `json:"round_id" binding:"required,gt=0"`
 		TurnstileToken string `json:"turnstile_token" binding:"max=16384"`
-		TencentTicket  string `json:"tencent_captcha_ticket" binding:"max=4096"`
-		TencentRandstr string `json:"tencent_captcha_randstr" binding:"max=1024"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.BadRequest(c, "请选择有效的抽奖期数")
@@ -69,7 +68,7 @@ func (h *LotteryHandler) Join(c *gin.Context) {
 		response.ErrorFrom(c, service.ErrServiceUnavailable)
 		return
 	}
-	if err := h.captcha.VerifyLotteryCaptcha(c.Request.Context(), captchaProof(input.TurnstileToken, input.TencentTicket, input.TencentRandstr), ip.GetClientIP(c)); err != nil {
+	if err := h.captcha.VerifyLotteryCaptcha(c.Request.Context(), service.CaptchaProof{TurnstileToken: input.TurnstileToken}, ip.GetClientIP(c)); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
@@ -97,14 +96,19 @@ func (h *LotteryHandler) Configure(c *gin.Context) {
 	if !h.available(c) {
 		return
 	}
-	var input service.LotteryConfig
+	var input struct {
+		service.LotteryConfig
+		SecretKey string `json:"turnstile_secret_key" binding:"max=256"`
+	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.BadRequest(c, "抽奖配置格式错误")
 		return
 	}
-	if err := h.service.Configure(c.Request.Context(), input); err != nil {
+	input.LotteryConfig.TurnstileSecretKey = strings.TrimSpace(input.SecretKey)
+	input.LotteryConfig.TurnstileSiteKey = strings.TrimSpace(input.TurnstileSiteKey)
+	if err := h.service.Configure(c.Request.Context(), input.LotteryConfig); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, input)
+	response.Success(c, input.LotteryConfig)
 }

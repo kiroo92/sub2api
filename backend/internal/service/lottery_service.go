@@ -19,6 +19,10 @@ var (
 )
 
 type LotteryConfig struct {
+	TurnstileSiteKey          string `json:"turnstile_site_key"`
+	TurnstileSecretKey        string `json:"-"`
+	TurnstileSecretConfigured bool   `json:"turnstile_secret_configured"`
+
 	Enabled           bool    `json:"enabled"`
 	PrizeAmount       float64 `json:"prize_amount"`
 	WinnerCount       int     `json:"winner_count"`
@@ -27,6 +31,10 @@ type LotteryConfig struct {
 }
 
 func (c LotteryConfig) Validate() error {
+	if len(c.TurnstileSiteKey) > 256 || len(c.TurnstileSecretKey) > 256 {
+		return infraerrors.BadRequest("INVALID_LOTTERY_CONFIG", "Turnstile key is too long")
+	}
+
 	validMoney := func(v float64, max float64) bool {
 		return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 && v <= max && math.Round(v*100)/100 == v
 	}
@@ -99,6 +107,8 @@ func (s *LotteryService) Snapshot(ctx context.Context, userID int64) (*LotterySn
 	if err != nil {
 		return nil, err
 	}
+	snapshot.Config.TurnstileSecretConfigured = snapshot.Config.TurnstileSecretKey != ""
+	snapshot.Config.TurnstileSecretKey = ""
 	for i := range snapshot.RecentWinners {
 		snapshot.RecentWinners[i].UserLabel = maskLotteryEmail(snapshot.RecentWinners[i].Email)
 		snapshot.RecentWinners[i].Email = ""

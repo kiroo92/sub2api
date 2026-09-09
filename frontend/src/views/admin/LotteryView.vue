@@ -8,6 +8,15 @@
           <form class="card space-y-6 p-6 lg:col-span-3" @submit.prevent="save">
             <div><h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">{{ t('lottery.adminTitle') }}</h1><p class="mt-2 text-sm leading-relaxed text-gray-500">{{ t('lottery.adminDescription') }}</p></div>
             <label class="flex cursor-pointer items-center justify-between gap-4 rounded-xl bg-gray-50 p-4 dark:bg-dark-800"><span><span class="block text-sm font-medium text-gray-900 dark:text-gray-100">{{ t('lottery.enabled') }}</span><span class="mt-1 block text-xs text-gray-500">{{ t('lottery.pauseHint') }}</span></span><input v-model="form.enabled" type="checkbox" class="h-5 w-5 rounded border-gray-300 text-primary-600 focus:ring-primary-500" :disabled="saving" /></label>
+            <fieldset class="space-y-3">
+              <legend class="input-label">{{ t('lottery.turnstileTitle') }}</legend>
+              <p class="text-sm text-gray-500">{{ t('lottery.turnstileHint') }}</p>
+              <label for="lottery-site-key" class="input-label">Site Key</label>
+              <input id="lottery-site-key" v-model="form.turnstile_site_key" maxlength="256" class="input" :disabled="saving" autocomplete="off" />
+              <label for="lottery-secret-key" class="input-label">Secret Key</label>
+              <input id="lottery-secret-key" v-model="secretKey" type="password" maxlength="256" class="input" :disabled="saving" autocomplete="new-password" :placeholder="t('lottery.secretHint')" />
+              <p v-if="snapshot.config.turnstile_secret_configured" class="text-xs text-emerald-600">{{ t('lottery.secretConfigured') }}</p>
+            </fieldset>
             <div class="grid gap-5 sm:grid-cols-2">
               <div><label for="prize-amount" class="input-label">{{ t('lottery.prizeAmount') }} ($)</label><input id="prize-amount" v-model.number="form.prize_amount" type="number" min="0.01" max="10000" step="0.01" required class="input" :disabled="saving" /></div>
               <div><label for="winner-count" class="input-label">{{ t('lottery.prizes') }}</label><input id="winner-count" v-model.number="form.winner_count" type="number" min="1" :max="Math.min(100, form.participant_target)" step="1" required class="input" :disabled="saving" /></div>
@@ -38,6 +47,7 @@ import { lotteryAPI, type LotteryConfig, type LotterySnapshot } from '@/api/lott
 const { t } = useI18n()
 const snapshot = ref<LotterySnapshot | null>(null)
 const form = reactive<LotteryConfig>({ enabled: false, prize_amount: 5, winner_count: 6, participant_target: 60, min_recharge: 50 })
+const secretKey = ref('')
 const loading = ref(false); const saving = ref(false); const saved = ref(false); const error = ref('')
 const budget = computed(() => (Number(form.prize_amount) * Number(form.winner_count) || 0).toFixed(2))
 async function load() {
@@ -50,7 +60,7 @@ async function save() {
   if (saving.value) return
   saving.value = true; saved.value = false; error.value = ''
   try {
-    await lotteryAPI.configure({ ...form }); saved.value = true
+    await lotteryAPI.configure({ ...form, turnstile_secret_key: secretKey.value }); secretKey.value = ''; saved.value = true
     await load()
   } catch (err: unknown) {
     error.value = (err as { reason?: string })?.reason === 'INVALID_LOTTERY_CONFIG' ? t('lottery.invalidConfig') : t('lottery.saveFailed')
