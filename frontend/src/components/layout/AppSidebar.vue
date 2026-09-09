@@ -80,6 +80,8 @@
             <router-link
               v-else
               :to="item.path"
+              :target="item.openInNewTab ? '_blank' : undefined"
+              :rel="item.openInNewTab ? 'noopener noreferrer' : undefined"
               class="sidebar-link mb-1"
               :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
               :title="sidebarCollapsed ? item.label : undefined"
@@ -113,6 +115,8 @@
             v-for="item in personalNavItems"
             :key="item.path"
             :to="item.path"
+            :target="item.openInNewTab ? '_blank' : undefined"
+            :rel="item.openInNewTab ? 'noopener noreferrer' : undefined"
             class="sidebar-link mb-1"
             :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
             :title="sidebarCollapsed ? item.label : undefined"
@@ -133,6 +137,8 @@
             v-for="item in userNavItems"
             :key="item.path"
             :to="item.path"
+            :target="item.openInNewTab ? '_blank' : undefined"
+            :rel="item.openInNewTab ? 'noopener noreferrer' : undefined"
             class="sidebar-link mb-1"
             :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
             :title="sidebarCollapsed ? item.label : undefined"
@@ -204,6 +210,7 @@ interface NavItem {
   label: string
   icon: unknown
   iconSvg?: string
+  openInNewTab?: boolean
   hideInSimpleMode?: boolean
   children?: NavItem[]
   /**
@@ -726,6 +733,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
       label: item.label,
       icon: null,
       iconSvg: item.icon_svg,
+      openInNewTab: item.open_mode === 'new_tab',
     })),
   )
   return items
@@ -834,14 +842,14 @@ const adminNavItems = computed((): NavItem[] => {
     filtered.push({ path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon })
     filtered.push({ path: '/admin/settings', label: t('nav.settings'), icon: CogIcon })
     for (const cm of customMenuItemsForAdmin.value) {
-      filtered.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+      filtered.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg, openInNewTab: cm.open_mode === 'new_tab' })
     }
     return filtered
   }
 
   visible.push({ path: '/admin/settings', label: t('nav.settings'), icon: CogIcon })
   for (const cm of customMenuItemsForAdmin.value) {
-    visible.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+    visible.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg, openInNewTab: cm.open_mode === 'new_tab' })
   }
   return visible
 })

@@ -668,7 +668,10 @@ export default {
       },
       customMenu: {
         title: 'Custom Menu Pages',
-        description: 'Add custom iframe pages to the sidebar navigation. Each page can be visible to regular users or administrators.',
+        description: 'Add custom pages to the sidebar, embedded or opened in a new tab, with visibility for users or administrators.',
+        openMode: 'Open mode',
+        openEmbed: 'Embedded page',
+        openNewTab: 'New tab',
         itemLabel: 'Menu Item #{n}',
         name: 'Menu Name',
         namePlaceholder: 'e.g. Help Center',

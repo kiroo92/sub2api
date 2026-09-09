@@ -56,6 +56,14 @@ describe('embedded-url', () => {
     expect(url.searchParams.has('lang')).toBe(false)
   })
 
+  it('preserves website authentication for a standalone custom menu page', () => {
+    const url = new URL(buildEmbeddedUrl('https://image.example/image/', 42, 'fixture-token', 'dark', 'zh-CN', 'standalone'))
+    expect(url.searchParams.get('ui_mode')).toBe('standalone')
+    expect(url.searchParams.get('token')).toBe('fixture-token')
+    expect(url.searchParams.get('user_id')).toBe('42')
+    expect(url.searchParams.get('src_host')).toBe('https://app.example.com')
+  })
+
   it('returns original string for invalid url input', () => {
     expect(buildEmbeddedUrl('not a url', 1, 'token')).toBe('not a url')
   })

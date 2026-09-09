@@ -6748,6 +6748,20 @@
 
                   <!-- URL (full width) -->
                   <div class="sm:col-span-2">
+                    <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                      {{ t("admin.settings.customMenu.openMode") }}
+                    </label>
+                    <select
+                      :value="item.open_mode || 'embed'"
+                      class="input text-sm"
+                      @change="item.open_mode = ($event.target as HTMLSelectElement).value as 'embed' | 'new_tab'"
+                    >
+                      <option value="embed">{{ t("admin.settings.customMenu.openEmbed") }}</option>
+                      <option value="new_tab">{{ t("admin.settings.customMenu.openNewTab") }}</option>
+                    </select>
+                  </div>
+
+                  <div class="sm:col-span-2">
                     <label
                       class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400"
                     >
@@ -9601,6 +9615,7 @@ const form = reactive<SettingsForm>({
     label: string;
     icon_svg: string;
     url: string;
+    open_mode?: "embed" | "new_tab";
     visibility: "user" | "admin";
     sort_order: number;
   }>,
@@ -10574,6 +10589,7 @@ function addMenuItem() {
     label: "",
     icon_svg: "",
     url: "",
+    open_mode: "embed",
     visibility: "user",
     sort_order: form.custom_menu_items.length,
   });

@@ -19,6 +19,7 @@ export function buildEmbeddedUrl(
   authToken?: string | null,
   theme: 'light' | 'dark' = 'light',
   lang?: string,
+  uiMode: 'embedded' | 'standalone' = EMBEDDED_UI_MODE_VALUE,
 ): string {
   if (!baseUrl) return baseUrl
   try {
@@ -33,7 +34,7 @@ export function buildEmbeddedUrl(
     if (lang) {
       url.searchParams.set(EMBEDDED_LANG_QUERY_KEY, lang)
     }
-    url.searchParams.set(EMBEDDED_UI_MODE_QUERY_KEY, EMBEDDED_UI_MODE_VALUE)
+    url.searchParams.set(EMBEDDED_UI_MODE_QUERY_KEY, uiMode)
     // Source tracking: let the embedded page know where it's being loaded from
     if (typeof window !== 'undefined') {
       url.searchParams.set(EMBEDDED_SRC_HOST_QUERY_KEY, window.location.origin)

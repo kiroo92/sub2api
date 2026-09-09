@@ -93,6 +93,12 @@
           </div>
         </div>
 
+        <div v-else-if="menuItem.open_mode === 'new_tab'" class="flex h-full items-center justify-center p-10">
+          <a :href="embeddedUrl" rel="noreferrer" class="btn btn-primary">
+            {{ t('customPage.openInNewTab') }}
+          </a>
+        </div>
+
         <!-- Iframe embed mode -->
         <div v-else class="custom-embed-shell">
           <a
@@ -181,6 +187,7 @@ const embeddedUrl = computed(() => {
     authStore.token,
     pageTheme.value,
     locale.value,
+    menuItem.value.open_mode === 'new_tab' ? 'standalone' : 'embedded',
   )
 })
 
@@ -189,6 +196,13 @@ const isValidUrl = computed(() => {
   const url = embeddedUrl.value
   return url.startsWith('http://') || url.startsWith('https://')
 })
+
+// 新标签页仍先通过 /custom/:id 的认证和菜单可见性检查。
+watch(embeddedUrl, (url) => {
+  if (authStore.isAuthenticated && menuItem.value?.open_mode === 'new_tab' && isValidUrl.value) {
+    window.location.replace(url)
+  }
+}, { immediate: true })
 
 function generateHeadingId(text: string, index: number): string {
   const base = text
