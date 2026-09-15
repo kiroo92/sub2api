@@ -6,6 +6,14 @@
     @close="emit('close')"
   >
     <div class="space-y-4">
+      <label v-if="packageMode" class="block space-y-2 text-sm">
+        <span>{{ t('packages.keyHint') }}</span>
+        <select v-model="packageProtocol" class="input" :aria-label="t('packages.protocol')">
+          <option value="openai">OpenAI / Codex</option>
+          <option value="anthropic">Anthropic / Claude</option>
+          <option value="gemini">Gemini</option>
+        </select>
+      </label>
       <!-- No Group Assigned Warning -->
       <div v-if="!platform" class="flex items-start gap-3 p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
         <svg class="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
@@ -275,6 +283,7 @@ interface Props {
   apiKey: string
   baseUrl: string
   platform: GroupPlatform | null
+  packageMode?: boolean
   allowMessagesDispatch?: boolean
 }
 
@@ -297,6 +306,8 @@ interface FileConfig {
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
+const packageProtocol = ref<GroupPlatform>('openai')
+const platform = computed(() => props.packageMode ? packageProtocol.value : props.platform)
 
 const { t } = useI18n()
 const { copyToClipboard: clipboardCopy } = useClipboard()
@@ -316,7 +327,7 @@ let codexModelManifestRequestID = 0
 const showCodexModelCatalog = computed(() =>
   props.show &&
   (activeClientTab.value === 'codex' ||
-    (props.platform === 'openai' && activeClientTab.value === 'codex-ws'))
+    (platform.value === 'openai' && activeClientTab.value === 'codex-ws'))
 )
 
 const codexModelCatalogPath = computed(() => {
@@ -327,12 +338,12 @@ const codexModelCatalogPath = computed(() => {
 
 const codexManifestContext = computed(() => {
   if (!showCodexModelCatalog.value) return ''
-  return `${props.platform}|${props.baseUrl}|${props.apiKey}`
+  return `${platform.value}|${props.baseUrl}|${props.apiKey}`
 })
 
 // Reset tabs when platform changes
 const defaultClientTab = computed(() => {
-  switch (props.platform) {
+  switch (platform.value) {
     case 'openai':
       return 'codex'
     case 'grok':
@@ -346,7 +357,7 @@ const defaultClientTab = computed(() => {
   }
 })
 
-watch(() => props.platform, () => {
+watch(() => platform.value, () => {
   activeTab.value = 'unix'
   activeClientTab.value = defaultClientTab.value
   codexAuthMode.value = 'legacy'
@@ -435,8 +446,8 @@ const SparkleIcon = {
 }
 
 const clientTabs = computed((): TabConfig[] => {
-  if (!props.platform) return []
-  switch (props.platform) {
+  if (!platform.value) return []
+  switch (platform.value) {
     case 'openai': {
       const tabs: TabConfig[] = [
         { id: 'codex', label: t('keys.useKeyModal.cliTabs.codexCli'), icon: TerminalIcon },
@@ -500,7 +511,7 @@ const openaiTabs: TabConfig[] = [
 const showShellTabs = computed(() => activeClientTab.value !== 'opencode')
 
 const showCodexAuthMode = computed(() =>
-  props.platform === 'openai' &&
+  platform.value === 'openai' &&
   (activeClientTab.value === 'codex' || activeClientTab.value === 'codex-ws')
 )
 
@@ -514,13 +525,13 @@ const currentTabs = computed(() => {
 
 const platformDescription = computed(() => {
   if (activeClientTab.value === 'codex' &&
-    props.platform !== 'openai' &&
-    props.platform !== 'grok' &&
-    props.platform !== 'deepseek' &&
-    props.platform !== 'composite') {
+    platform.value !== 'openai' &&
+    platform.value !== 'grok' &&
+    platform.value !== 'deepseek' &&
+    platform.value !== 'composite') {
     return t('keys.useKeyModal.routedCodex.description')
   }
-  switch (props.platform) {
+  switch (platform.value) {
     case 'openai':
       if (activeClientTab.value === 'claude') {
         return t('keys.useKeyModal.description')
@@ -553,13 +564,13 @@ const platformDescription = computed(() => {
 
 const platformNote = computed(() => {
   if (activeClientTab.value === 'codex' &&
-    props.platform !== 'openai' &&
-    props.platform !== 'grok' &&
-    props.platform !== 'deepseek' &&
-    props.platform !== 'composite') {
+    platform.value !== 'openai' &&
+    platform.value !== 'grok' &&
+    platform.value !== 'deepseek' &&
+    platform.value !== 'composite') {
     return t('keys.useKeyModal.routedCodex.note')
   }
-  switch (props.platform) {
+  switch (platform.value) {
     case 'openai':
       if (activeClientTab.value === 'claude') {
         return t('keys.useKeyModal.note')
@@ -703,7 +714,7 @@ const currentFiles = computed((): FileConfig[] => {
   })()
 
   if (activeClientTab.value === 'opencode') {
-    switch (props.platform) {
+    switch (platform.value) {
       case 'anthropic':
         return [generateOpenCodeConfig('anthropic', apiBase, apiKey)]
       case 'openai':
@@ -722,7 +733,7 @@ const currentFiles = computed((): FileConfig[] => {
     }
   }
 
-  switch (props.platform) {
+  switch (platform.value) {
     case 'openai':
       if (activeClientTab.value === 'claude') {
         return generateAnthropicFiles(baseUrl, apiKey)
@@ -763,8 +774,8 @@ const currentFiles = computed((): FileConfig[] => {
       }
       return generateAnthropicFiles(baseRoot, apiKey)
     default:
-      if (activeClientTab.value === 'codex' && props.platform) {
-        return generateRoutedCodexFiles(apiBase, apiKey, props.platform)
+      if (activeClientTab.value === 'codex' && platform.value) {
+        return generateRoutedCodexFiles(apiBase, apiKey, platform.value)
       }
       return generateAnthropicFiles(baseUrl, apiKey)
   }

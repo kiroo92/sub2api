@@ -168,9 +168,15 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 	boundLookupAccountID := int64(0)
 	if endpoint.IsVideoLookupRequest() {
 		sessionHash = service.GrokMediaVideoRequestSessionHash(requestID, subject.UserID, apiKey.ID)
-		boundLookupAccountID, err = h.gatewayService.ResolveGrokMediaVideoRequestAccount(
-			c.Request.Context(), apiKey.GroupID, requestID, subject.UserID, apiKey.ID,
-		)
+		if apiKey.UsesPackages() && apiKey.PackageJob != nil {
+			boundLookupAccountID = apiKey.PackageJob.AccountID
+			// Restore the cache binding from durable creation attribution.
+			err = h.gatewayService.BindGrokMediaVideoRequestAccount(c.Request.Context(), apiKey.GroupID, requestID, subject.UserID, apiKey.ID, boundLookupAccountID)
+		} else {
+			boundLookupAccountID, err = h.gatewayService.ResolveGrokMediaVideoRequestAccount(
+				c.Request.Context(), apiKey.GroupID, requestID, subject.UserID, apiKey.ID,
+			)
+		}
 		if err != nil || boundLookupAccountID <= 0 {
 			reqLog.Info("grok_media.video_lookup_owner_binding_missing", zap.Error(err))
 			h.errorResponse(c, http.StatusNotFound, "not_found_error", "Video request not found")
@@ -317,6 +323,17 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()
+		var packageJob *service.PackageJob
+		if apiKey.UsesPackages() && isGrokVideoCreateEndpoint(endpoint) {
+			packageJob, err = h.apiKeyService.PreparePackageJob(requestCtx, apiKey, "grok_video", account.ID)
+			if err != nil {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				h.errorResponse(c, 503, "api_error", "Could not preserve package task attribution")
+				return
+			}
+		}
 		writerSizeBeforeForward := c.Writer.Size()
 		result, err := func() (*service.OpenAIForwardResult, error) {
 			defer func() {
@@ -434,6 +451,12 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 				OriginalModel:        clientRequestedModel(c, requestModel),
 				// Wall-clock start for usage duration_ms: create accepted → first done discovery.
 				CreatedAt: videoCreateStartedAt,
+			}
+			if packageJob != nil {
+				packageJob.VideoPending = &pending
+				if e := h.apiKeyService.CompletePackageJob(context.WithoutCancel(requestCtx), apiKey, packageJob, result.ResponseID); e != nil {
+					reqLog.Error("package.video_attribution_completion_failed", zap.String("local_job_id", packageJob.ID), zap.String("resource_id", result.ResponseID), zap.Error(e))
+				}
 			}
 			if err := h.gatewayService.StoreGrokVideoPendingBilling(requestCtx, result.ResponseID, subject.UserID, apiKey.ID, pending); err != nil {
 				reqLog.Warn("grok_media.store_video_pending_billing_failed_retrying",
@@ -556,6 +579,12 @@ func prepareGrokVideoCompletionBilling(
 	// Load create-time snapshot before claim so we can fail-closed without burning the claim
 	// when Redis lost pending and status cannot price the job.
 	pending, loadErr := h.gatewayService.LoadGrokVideoPendingBilling(ctx, taskRequestID, subject.UserID, apiKey.ID)
+	if apiKey.UsesPackages() {
+		if apiKey.PackageJob == nil || apiKey.PackageJob.VideoPending == nil {
+			return nil
+		}
+		pending, loadErr = apiKey.PackageJob.VideoPending, nil
+	}
 	if loadErr != nil {
 		reqLog.Warn("grok_media.video_pending_billing_load_failed", zap.String("request_id", taskRequestID), zap.Error(loadErr))
 	}
@@ -575,7 +604,10 @@ func prepareGrokVideoCompletionBilling(
 			zap.String("note", "resolution falls back to default 480p; investigate pending store failures"),
 		)
 	}
-	claimed, err := h.gatewayService.ClaimGrokVideoBilling(ctx, taskRequestID, subject.UserID, apiKey.ID)
+	claimed, err := true, error(nil)
+	if !apiKey.UsesPackages() {
+		claimed, err = h.gatewayService.ClaimGrokVideoBilling(ctx, taskRequestID, subject.UserID, apiKey.ID)
+	}
 	if err != nil {
 		reqLog.Warn("grok_media.video_billing_claim_failed", zap.String("request_id", taskRequestID), zap.Error(err))
 		return nil

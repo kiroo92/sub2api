@@ -5,7 +5,8 @@
     </label>
     <div
       data-testid="payment-method-grid"
-      class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+      class="grid grid-cols-2 gap-3"
+      :class="{ 'sm:grid-cols-3 lg:grid-cols-4': !compact }"
     >
       <button
         v-for="method in sortedMethods"
@@ -62,6 +63,7 @@ export interface PaymentMethodOption {
 const props = defineProps<{
   methods: PaymentMethodOption[]
   selected: string
+  compact?: boolean
 }>()
 
 const emit = defineEmits<{

@@ -103,6 +103,15 @@ func mergeCodexModelsManifestBodies(bodies [][]byte) ([]byte, error) {
 	return merged, nil
 }
 
+// MergePackageCodexModelsManifests preserves first-package metadata and computes
+// the final envelope from group-filtered bodies, not from a single upstream ETag.
+func MergePackageCodexModelsManifests(bodies [][]byte) ([]byte, error) {
+	if len(bodies) == 0 {
+		return []byte(`{"models":[]}`), nil
+	}
+	return mergeCodexModelsManifestBodies(bodies)
+}
+
 // FetchPinnedCodexModelsManifest fetches the Codex models manifest using only
 // the accounts pinned on the group's codex_models_manifest_config, ignoring
 // scheduler priorities, load factors and rate-limit/overload windows. All

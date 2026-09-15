@@ -141,8 +141,9 @@
                 class="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-dark-700"
                 :title="t('keys.clickToChangeGroup')"
               >
+                <span v-if="row.routing_mode === 'all_packages'" class="badge badge-primary">{{ t('packages.unifiedKey') }}</span>
                 <GroupBadge
-                  v-if="row.group"
+                  v-else-if="row.group"
                   :name="row.group.name"
                   :platform="row.group.platform"
                   :subscription-type="row.group.subscription_type"
@@ -381,7 +382,7 @@
               </button>
               <!-- Import to CC Switch Button -->
               <button
-                v-if="!publicSettings?.hide_ccs_import_button"
+                v-if="!publicSettings?.hide_ccs_import_button && row.routing_mode !== 'all_packages'"
                 @click="importToCcswitch(row)"
                 class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
               >
@@ -475,8 +476,9 @@
             data-tour="key-form-group"
           >
             <template #selected="{ option }">
+              <span v-if="option?.value === 'all_packages'" class="badge badge-primary">{{ t('packages.unifiedKey') }}</span>
               <GroupBadge
-                v-if="option"
+                v-else-if="option"
                 :name="(option as unknown as GroupOption).label"
                 :platform="(option as unknown as GroupOption).platform"
                 :subscription-type="(option as unknown as GroupOption).subscriptionType"
@@ -490,7 +492,8 @@
               <span v-else class="text-gray-400">{{ t('keys.selectGroup') }}</span>
             </template>
             <template #option="{ option, selected }">
-              <GroupOptionItem
+              <div v-if="option.value === 'all_packages'"><p class="font-semibold">{{ t('packages.unifiedKey') }}</p><p class="mt-1 text-xs text-gray-500">{{ t('packages.keyHint') }}</p></div>
+              <GroupOptionItem v-else
                 :name="(option as unknown as GroupOption).label"
                 :platform="(option as unknown as GroupOption).platform"
                 :subscription-type="(option as unknown as GroupOption).subscriptionType"
@@ -994,6 +997,7 @@
       :api-key="selectedKey?.key || ''"
       :base-url="publicSettings?.api_base_url || ''"
       :platform="selectedKey?.group?.platform || null"
+      :package-mode="selectedKey?.routing_mode === 'all_packages'"
       :allow-messages-dispatch="selectedKey?.group?.allow_messages_dispatch || false"
       @close="closeUseKeyModal"
     />
@@ -1082,14 +1086,14 @@
             :class="[
               'flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors',
               'border-b border-gray-100 last:border-0 dark:border-dark-700',
-              selectedKeyForGroup?.group_id === option.value ||
-              (!selectedKeyForGroup?.group_id && option.value === null)
+              (selectedKeyForGroup?.routing_mode === 'all_packages' ? 'all_packages' : selectedKeyForGroup?.group_id) === option.value
                 ? 'bg-primary-50 dark:bg-primary-900/20'
                 : 'hover:bg-gray-100 dark:hover:bg-dark-700'
             ]"
             :title="option.description || undefined"
           >
-            <GroupOptionItem
+            <div v-if="option.value === 'all_packages'" class="text-left"><p class="font-semibold">{{ t('packages.unifiedKey') }}</p><p class="mt-1 text-xs text-gray-500">{{ t('packages.keyHint') }}</p></div>
+            <GroupOptionItem v-else
               :name="option.label"
               :platform="option.platform"
               :subscription-type="option.subscriptionType"
@@ -1101,8 +1105,7 @@
               :peak-rate-multiplier="option.peakRateMultiplier"
               :description="option.description"
               :selected="
-                selectedKeyForGroup?.group_id === option.value ||
-                (!selectedKeyForGroup?.group_id && option.value === null)
+                (selectedKeyForGroup?.routing_mode === 'all_packages' ? 'all_packages' : selectedKeyForGroup?.group_id) === option.value
               "
             />
           </button>
@@ -1138,7 +1141,8 @@ import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 	import Icon from '@/components/icons/Icon.vue'
 	import UseKeyModal from '@/components/keys/UseKeyModal.vue'
 	import EndpointPopover from '@/components/keys/EndpointPopover.vue'
-	import GroupBadge from '@/components/common/GroupBadge.vue'
+	import { keyRoutingUpdate } from '@/api/keys'
+import GroupBadge from '@/components/common/GroupBadge.vue'
 	import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
 	import type { ApiKey, Group, PublicSettings, SubscriptionType, GroupPlatform, UpdateApiKeyRequest } from '@/types'
 import type { Column } from '@/components/common/types'
@@ -1158,7 +1162,7 @@ const formatDateTimeLocal = (isoDate: string): string => {
 }
 
 interface GroupOption {
-  value: number
+  value: number | 'all_packages'
   label: string
   description: string | null
   rate: number
@@ -1329,7 +1333,7 @@ const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance 
 
 const formData = ref({
   name: '',
-  group_id: null as number | null,
+  group_id: null as number | 'all_packages' | null,
   status: 'active' as 'active' | 'inactive',
   use_custom_key: false,
   custom_key: '',
@@ -1408,8 +1412,9 @@ const onStatusFilterChange = (value: string | number | boolean | null) => {
 }
 
 // Convert groups to Select options format with rate multiplier and subscription type
-const groupOptions = computed(() =>
-  groups.value.map((group) => ({
+const groupOptions = computed(() => [
+  { value: 'all_packages' as const, label: t('packages.unifiedKey'), description: t('packages.keyHint'), rate: 1, userRate: null, peakRateEnabled: false, peakStart: '', peakEnd: '', peakRateMultiplier: 1, subscriptionType: 'subscription' as const, platform: 'openai' as const },
+  ...groups.value.map((group) => ({
     value: group.id,
     label: group.name,
     description: group.description,
@@ -1422,7 +1427,7 @@ const groupOptions = computed(() =>
     subscriptionType: group.subscription_type,
     platform: group.platform
   }))
-)
+])
 
 // Group dropdown search
 const groupSearchQuery = ref('')
@@ -1563,7 +1568,7 @@ const editKey = (key: ApiKey) => {
   const hasExpiration = !!key.expires_at
   formData.value = {
     name: key.name,
-    group_id: key.group_id,
+    group_id: key.routing_mode === 'all_packages' ? 'all_packages' : key.group_id,
     status: key.status === 'quota_exhausted' || key.status === 'expired' ? 'inactive' : key.status,
     use_custom_key: false,
     custom_key: '',
@@ -1630,13 +1635,13 @@ const openGroupSelector = (key: ApiKey) => {
   }
 }
 
-const changeGroup = async (key: ApiKey, newGroupId: number | null) => {
+const changeGroup = async (key: ApiKey, newGroupId: number | 'all_packages' | null) => {
   groupSelectorKeyId.value = null
   dropdownPosition.value = null
-  if (key.group_id === newGroupId) return
+  if ((key.routing_mode === 'all_packages' ? 'all_packages' : key.group_id) === newGroupId) return
 
   try {
-    await keysAPI.update(key.id, { group_id: newGroupId })
+    await keysAPI.update(key.id, keyRoutingUpdate(newGroupId, key.routing_mode))
     appStore.showSuccess(t('keys.groupChangedSuccess'))
     loadApiKeys()
   } catch (error) {
@@ -1720,7 +1725,7 @@ const handleSubmit = async () => {
     if (showEditModal.value && selectedKey.value) {
       const updates: UpdateApiKeyRequest = {
         name: formData.value.name,
-        group_id: formData.value.group_id,
+        ...keyRoutingUpdate(formData.value.group_id, selectedKey.value.routing_mode),
         ip_whitelist: ipWhitelist,
         ip_blacklist: ipBlacklist,
         quota: quota,
@@ -1738,13 +1743,14 @@ const handleSubmit = async () => {
       const customKey = formData.value.use_custom_key ? formData.value.custom_key : undefined
       await keysAPI.create(
         formData.value.name,
-        formData.value.group_id,
+        formData.value.group_id === 'all_packages' ? null : formData.value.group_id,
         customKey,
         ipWhitelist,
         ipBlacklist,
         quota,
         expiresInDays,
-        rateLimitData
+        rateLimitData,
+        formData.value.group_id === 'all_packages' ? 'all_packages' : undefined
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded

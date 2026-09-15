@@ -221,6 +221,9 @@ func (s *PaymentService) executeFulfillment(ctx context.Context, oid int64) erro
 	if o.OrderType == payment.OrderTypeSubscription {
 		return s.ExecuteSubscriptionFulfillment(ctx, oid)
 	}
+	if o.OrderType == OrderTypePackage {
+		return s.executePackageFulfillment(ctx, o)
+	}
 	return s.ExecuteBalanceFulfillment(ctx, oid)
 }
 

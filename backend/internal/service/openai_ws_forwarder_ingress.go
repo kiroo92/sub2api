@@ -263,6 +263,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			)
 		}
 		requestedReasoningEffort := CanonicalRequestedReasoningEffort(normalized, strings.TrimSpace(values[1].String()))
+		if turn > 1 && hooks != nil && hooks.RawRequest != nil {
+			if err := hooks.RawRequest(turn, trimmed, packageWSModel(trimmed, ingressSessionOriginalModel)); err != nil {
+				return openAIWSClientPayload{}, err
+			}
+		}
 		if next, policyErr := applyOpenAIWSReasoningEffortPolicy(normalized, hooks); policyErr != nil {
 			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, policyErr.Error(), policyErr)
 		} else {
@@ -1248,6 +1253,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				if replayInput := replayCollector.Items(); len(replayInput) > 0 {
 					result.wsReplayInput = replayInput
 					result.wsReplayInputExists = true
+				}
+				if hooks != nil && hooks.RawRequest != nil {
+					result.wsAccountFailoverReplayInput = replayCollector.AllItems()
 				}
 				if imageCount > 0 {
 					result.ImageCount = imageCount

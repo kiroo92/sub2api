@@ -970,6 +970,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			return restoreCodexToolNamesFromContext(c, payload)
 		},
 	}
+	var packageReplayMu sync.Mutex
+	packageReplay := &openAIWSToolCallReplayCollector{}
 	policyClientConn := &openAIWSPolicyEnforcingFrameConn{
 		inner: clientFrameConn,
 		// 注意线程安全：filter 仅在 runClientToUpstream 这一条
@@ -997,6 +999,11 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				}()
 			}
 			responsesLite := isResponseCreate && isOpenAIResponsesLiteWebSocketPayload(payload)
+			if isResponseCreate && hooks != nil && hooks.RawRequest != nil {
+				if err := hooks.RawRequest(max(2, int(completedTurns.Load())+1), payload, packageWSModel(payload, capturedSessionModel)); err != nil {
+					return payload, nil, err
+				}
+			}
 			if isResponseCreate {
 				if normalized, compatibilityChanged, normalizeErr := normalizeOpenAIResponsesWebSocketCompatibilityBody(payload, account, responsesLite); normalizeErr != nil {
 					return payload, nil, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", normalizeErr)
@@ -1242,6 +1249,12 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					turnResult.Usage.CacheReadInputTokens,
 				)
 				if hooks != nil && hooks.AfterTurn != nil {
+					if hooks.RawRequest != nil {
+						packageReplayMu.Lock()
+						turnResult.wsAccountFailoverReplayInput = packageReplay.AllItems()
+						packageReplay = &openAIWSToolCallReplayCollector{}
+						packageReplayMu.Unlock()
+					}
 					hooks.AfterTurn(turnNo, turnResult, nil)
 				}
 			},
@@ -1260,6 +1273,10 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				}
 			},
 			BeforeRelayCancel: func(exit openaiwsv2.RelayExit) {
+				var handoff *PackageWSHandoff
+				if errors.As(exit.Err, &handoff) {
+					return
+				}
 				if context.Cause(ctx) != nil {
 					return
 				}
@@ -1275,6 +1292,12 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				_ = clientConn.CloseNow()
 			},
 			BeforeWriteClient: func(msgType coderws.MessageType, payload []byte, wroteDownstream bool) error {
+				if hooks != nil && hooks.RawRequest != nil {
+					eventType, _, _ := parseOpenAIWSEventEnvelope(payload)
+					packageReplayMu.Lock()
+					packageReplay.AddEvent(eventType, payload)
+					packageReplayMu.Unlock()
+				}
 				if msgType != coderws.MessageText {
 					return nil
 				}
@@ -1405,6 +1428,10 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	)
 
 	relayErr := relayExit.Err
+	var packageHandoff *PackageWSHandoff
+	if errors.As(relayErr, &packageHandoff) {
+		return packageHandoff
+	}
 	var firstOutputTimeoutErr *openAIWSPassthroughFirstOutputTimeoutError
 	if errors.As(relayErr, &firstOutputTimeoutErr) {
 		deadline := firstOutputTimeoutErr.deadline

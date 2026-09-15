@@ -44,6 +44,7 @@ func (APIKey) Fields() []ent.Field {
 		field.Int64("group_id").
 			Optional().
 			Nillable(),
+		field.String("routing_mode").MaxLen(20).Default("fixed_group"),
 		field.String("status").
 			MaxLen(20).
 			Default(domain.StatusActive),

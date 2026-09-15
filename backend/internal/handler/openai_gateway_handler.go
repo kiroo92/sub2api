@@ -2349,6 +2349,35 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "model is required in first response.create payload")
 		return
 	}
+	packageBaseCtx := ctx
+	packageTurnContext := func(key *service.APIKey) context.Context {
+		turnCtx := context.WithValue(packageBaseCtx, ctxkey.Group, key.Group)
+		if selection := key.PackageSelection; selection != nil && selection.CompositeRoute != nil {
+			turnCtx = service.WithCompositeRouteDecision(turnCtx, *selection.CompositeRoute)
+		}
+		return turnCtx
+	}
+	packageRoutingModel := func(key *service.APIKey, model string) string {
+		if selection := key.PackageSelection; selection != nil && selection.CompositeRoute != nil && selection.CompositeRoute.PublicModel == model {
+			return selection.CompositeRoute.UpstreamModel
+		}
+		return model
+	}
+	packageHistory := &service.PackageWSHistory{}
+	packageRequestID := ""
+	if apiKey.UsesPackages() {
+		selected, e := h.apiKeyService.SelectPackage(ctx, apiKey, service.PackageRequest{Path: c.Request.URL.Path, Models: requestmodel.FromBodyCandidates("", "application/json", firstMessage), WebSocket: true})
+		if e != nil {
+			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, e.Error())
+			return
+		}
+		apiKey = selected
+		c.Set(string(middleware2.ContextKeyAPIKey), apiKey)
+		ctx = packageTurnContext(apiKey)
+		c.Request = c.Request.WithContext(ctx)
+		packageHistory.Begin(firstMessage)
+		packageRequestID = "package-ws:" + uuid.NewString()
+	}
 	// 分组级模型白名单：首帧校验客户端模型，不通过则关闭连接并标记运维原因。
 	// 必须在 ensureCompositeTargetPlatform（合成路由改写）之前执行。
 	// 与 HTTP 准入一致：帧内重复 model 键/大小写变体可能被上游按末值绑定，
@@ -2423,8 +2452,8 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	}
 
 	// 解析渠道级模型映射
-	channelMappingWS, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, reqModel)
-	wsForwardModel := openAIChannelForwardModel(channelMappingWS, reqModel)
+	channelMappingWS, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, packageRoutingModel(apiKey, reqModel))
+	wsForwardModel := openAIChannelForwardModel(channelMappingWS, packageRoutingModel(apiKey, reqModel))
 
 	var currentUserRelease func()
 	var currentAccountRelease func()
@@ -2796,7 +2825,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					model = reqModel
 				}
 				setOpsRequestContext(c, model, true)
-				mapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, model)
+				mapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, packageRoutingModel(apiKey, model))
 				mappedModelUnchanged := false
 				if previous := turnChannelMapping.Load(); previous != nil && previous.turn < turn {
 					mappedModelUnchanged = strings.TrimSpace(previous.mapping.MappedModel) == strings.TrimSpace(mapping.MappedModel)
@@ -2855,6 +2884,12 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				return nil
 			},
 			AfterTurn: func(turn int, result *service.OpenAIForwardResult, turnErr error) {
+				if apiKey.UsesPackages() && result != nil {
+					packageHistory.Complete(result)
+					copyResult := *result
+					result = &copyResult
+					result.RequestID = packageRequestID
+				}
 				turnStart := getTurnStart(turn)
 				cyberBlockBody := takeCyberTurnBody(turn)
 				// 每次 attempt 都清 cyber mark；failover 链结束前保留 recorded guard，
@@ -2960,12 +2995,61 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				})
 			},
 		}
+		if apiKey.UsesPackages() {
+			hooks.RawRequest = func(turn int, payload []byte, model string) error {
+				// A connection outlives the auth snapshot. Reload the physical Key
+				// before each new turn so completed charges and revocation apply.
+				currentKey, err := h.apiKeyService.GetByID(packageBaseCtx, apiKey.ID)
+				if err != nil {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "Unable to reload package key", err)
+				}
+				if currentKey == nil || !currentKey.UsesPackages() || currentKey.UserID != apiKey.UserID || currentKey.User == nil || !currentKey.User.IsActive() || (!currentKey.IsActive() && currentKey.Status != service.StatusAPIKeyQuotaExhausted && currentKey.Status != service.StatusAPIKeyExpired) {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "Package key is no longer active", nil)
+				}
+				if err := h.apiKeyService.CheckAPIKeyQuotaAndExpiry(currentKey); err != nil {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
+				}
+				candidates := append([]string{model}, requestmodel.FromBodyCandidates("", "application/json", payload)...)
+				selected, err := h.apiKeyService.SelectPackage(packageBaseCtx, currentKey, service.PackageRequest{Path: c.Request.URL.Path, Models: candidates, WebSocket: true})
+				if err != nil {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
+				}
+				nextCtx := packageTurnContext(selected)
+				mapped, _ := h.gatewayService.ResolveChannelMappingAndRestrict(nextCtx, selected.GroupID, packageRoutingModel(selected, model))
+				if selected.Group.ID != apiKey.Group.ID || openAICompatibleRequestPlatform(nextCtx, selected) != account.Platform || !account.IsModelSupported(mapped.MappedModel) {
+					c.Request = c.Request.WithContext(nextCtx)
+					if decision := h.checkSecurityAuditStage(c, reqLog, selected, subject, service.ContentModerationProtocolOpenAIResponses, model, payload, "subsequent_turn"); decision != nil && !decision.AllowNextStage {
+						return service.NewOpenAIWSClientCloseError(securityAuditWSCloseStatus(decision), securityAuditWSCloseReason(decision), nil)
+					}
+					handoffErr := packageHistory.Handoff(payload, model, selected)
+					var handoff *service.PackageWSHandoff
+					if errors.As(handoffErr, &handoff) {
+						return handoff
+					}
+					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, handoffErr.Error(), handoffErr)
+				}
+				if err = h.billingCacheService.CheckBillingEligibility(nextCtx, selected.User, selected, selected.Group, nil, ""); err != nil {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
+				}
+				apiKey = selected
+				c.Set(string(middleware2.ContextKeyAPIKey), apiKey)
+				ctx, _ = h.gatewayService.WithOpenAIRequestPricingContext(nextCtx, apiKey.GroupID)
+				c.Request = c.Request.WithContext(ctx)
+				packageHistory.Begin(payload)
+				packageRequestID = "package-ws:" + uuid.NewString()
+				return nil
+			}
+		}
 
 		wsFirstMessage := wsAttemptMessage
 		// 切组/会话失配防护：previous_response_id 未在当前分组命中粘连账号（StickyPreviousHit=false），
 		// 说明该会话链不属于本次调度到的账号，原样转发会触发上游会话链鉴权失败（“鉴权失败，请检查 API Key”）。
 		// 故剥离首包里的 previous_response_id，改用首包内 input 重建上下文；带 function_call_output 的
 		// 工具续链无法重建，保持原样。仅作用于首轮首包，后续 turn 的续链由 WS 转发层既有逻辑处理。
+		if apiKey.UsesPackages() && previousResponseID != "" && !scheduleDecision.StickyPreviousHit {
+			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "package_context_required: resend full history without previous_response_id")
+			return
+		}
 		if previousResponseID != "" && !scheduleDecision.StickyPreviousHit && previousResponseCanMove {
 			wsFirstMessage = service.RemovePreviousResponseIDFromBody(wsFirstMessage)
 			reqLog.Debug("openai.websocket_previous_response_id_stripped_cross_group",
@@ -2989,6 +3073,42 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			}
 			if service.IsOpenAIWSSessionPreemptedError(err) {
 				return
+			}
+			var packageHandoff *service.PackageWSHandoff
+			if errors.As(err, &packageHandoff) {
+				releaseTurnSlots()
+				apiKey = packageHandoff.Key
+				c.Set(string(middleware2.ContextKeyAPIKey), apiKey)
+				ctx = packageTurnContext(apiKey)
+				c.Request = c.Request.WithContext(ctx)
+				reqModel = packageHandoff.Model
+				ensureCompositeTargetPlatform(c, apiKey, reqModel)
+				ctx = c.Request.Context()
+				if e := h.billingCacheService.CheckBillingEligibility(ctx, apiKey.User, apiKey, apiKey.Group, nil, ""); e != nil {
+					closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, e.Error())
+					return
+				}
+				requestPlatform = openAICompatibleRequestPlatform(ctx, apiKey)
+				requiredTransport = service.OpenAIUpstreamTransportResponsesWebsocketV2Ingress
+				if requestPlatform == service.PlatformGrok {
+					requiredTransport = service.OpenAIUpstreamTransportHTTPSSE
+				}
+				channelMappingWS, _ = h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, packageRoutingModel(apiKey, reqModel))
+				wsForwardModel = openAIChannelForwardModel(channelMappingWS, packageRoutingModel(apiKey, reqModel))
+				wsAttemptMessage = packageHandoff.Payload
+				imageIntent = service.IsExplicitImageGenerationIntent("/v1/responses", reqModel, wsAttemptMessage)
+				requiredCapability = openAIResponsesRequiredCapability(imageIntent, requestPlatform)
+				previousResponseID = ""
+				previousResponseCanMove = true
+				failedAccountIDs = make(map[int64]struct{})
+				sameAccountRetryCount = make(map[int64]int)
+				sessionHash = h.gatewayService.GenerateSessionHashWithFallback(c, wsAttemptMessage, openAIWSIngressFallbackSessionSeed(subject.UserID, apiKey.ID, apiKey.GroupID))
+				packageRequestID = "package-ws:" + uuid.NewString()
+				ctx, _ = h.gatewayService.WithOpenAIRequestPricingContext(ctx, apiKey.GroupID)
+				if !ensureUserSlotHeld() {
+					return
+				}
+				break
 			}
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
@@ -3205,7 +3325,7 @@ func (h *OpenAIGatewayHandler) submitUsageRecordTask(parent context.Context, tas
 		return
 	}
 	task = wrapUsageRecordTaskContext(parent, task)
-	if h.usageRecordWorkerPool != nil {
+	if h.usageRecordWorkerPool != nil && !service.IsPackageRequest(parent) {
 		if mode := h.usageRecordWorkerPool.Submit(task); mode != service.UsageRecordSubmitModeDroppedStopped {
 			return
 		}
@@ -3244,7 +3364,7 @@ func (h *OpenAIGatewayHandler) submitMandatoryUsageRecordTask(parent context.Con
 		return
 	}
 	task = wrapUsageRecordTaskContext(parent, task)
-	if h.usageRecordWorkerPool != nil {
+	if h.usageRecordWorkerPool != nil && !service.IsPackageRequest(parent) {
 		if mode := h.usageRecordWorkerPool.Submit(task); !mode.Dropped() {
 			return
 		}

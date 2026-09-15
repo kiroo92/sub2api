@@ -5,6 +5,7 @@ import { PAYMENT_RECOVERY_STORAGE_KEY } from '@/components/payment/paymentFlow'
 import { formatPaymentAmount } from '@/components/payment/currency'
 import AmountInput from '@/components/payment/AmountInput.vue'
 import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
+import PackageShop from '@/components/packages/PackageShop.vue'
 import en from '@/i18n/locales/en'
 import zh from '@/i18n/locales/zh'
 import type { CheckoutInfoResponse, MethodLimit, SubscriptionPlan } from '@/types/payment'
@@ -210,11 +211,16 @@ async function mountSubscriptionConfirm(options: Parameters<typeof checkoutInfoW
   routeState.query = {
     tab: 'subscription',
     group: '3',
+    wechat_resume: '1',
+    openid: 'existing-payment-openid',
+    order_type: 'subscription',
+    plan_id: '7',
+    amount: String(options.plan?.price ?? 128),
   }
   routerReplace.mockReset().mockResolvedValue(undefined)
   routerPush.mockReset().mockResolvedValue(undefined)
   routerResolve.mockClear()
-  createOrder.mockReset()
+  createOrder.mockReset().mockRejectedValue(new Error('Recoverable provider error'))
   refreshUser.mockReset()
   fetchActiveSubscriptions.mockReset().mockResolvedValue(undefined)
   showError.mockReset()
@@ -228,6 +234,8 @@ async function mountSubscriptionConfirm(options: Parameters<typeof checkoutInfoW
   const wrapper = shallowMount(PaymentView, {
     global: {
       stubs: {
+          PaymentCheckout: false,
+          RouterLink: true,
         AppLayout: {
           template: '<div><slot /></div>',
         },
@@ -268,6 +276,8 @@ async function mountSubscriptionPlanList(planCount: number) {
   const wrapper = shallowMount(PaymentView, {
     global: {
       stubs: {
+          PaymentCheckout: false,
+          RouterLink: true,
         AppLayout: {
           template: '<div><slot /></div>',
         },
@@ -281,18 +291,13 @@ async function mountSubscriptionPlanList(planCount: number) {
   return wrapper
 }
 
-describe('PaymentView subscription plan grid', () => {
-  it.each([3, 4, 6])('keeps %i plans on the existing mobile/tablet/desktop grid', async (planCount) => {
+describe('PaymentView legacy purchase entry closure', () => {
+  it.each([3, 4, 6])('hides %i legacy sale plans and shows the independent package shop', async (planCount) => {
     const wrapper = await mountSubscriptionPlanList(planCount)
     const cards = wrapper.findAllComponents(SubscriptionPlanCard)
 
-    expect(cards).toHaveLength(planCount)
-    expect([...(cards[0].element.parentElement?.classList ?? [])]).toEqual(expect.arrayContaining([
-      'grid',
-      'grid-cols-1',
-      'sm:grid-cols-2',
-      'lg:grid-cols-3',
-    ]))
+    expect(cards).toHaveLength(0)
+    expect(wrapper.findComponent(PackageShop).exists()).toBe(true)
   })
 })
 
@@ -300,7 +305,7 @@ describe('PaymentView recharge rate preview', () => {
   it('uses the selected payment method currency in both locale templates', async () => {
     translate.mockClear()
     routeState.path = '/purchase'
-    routeState.query = {}
+    routeState.query = { tab: 'recharge' }
     getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({
       balance_recharge_multiplier: 0.5,
       methods: {
@@ -314,6 +319,8 @@ describe('PaymentView recharge rate preview', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
+          PaymentCheckout: false,
+          RouterLink: true,
           AppLayout: { template: '<div><slot /></div>' },
           Teleport: true,
           Transition: false,
@@ -333,7 +340,7 @@ describe('PaymentView recharge rate preview', () => {
   })
 })
 
-describe('PaymentView subscription confirmation amounts', () => {
+describe('PaymentView preserves legacy payment recovery amounts', () => {
   it('shows converted CNY pay amount using the subscription rate, not the balance multiplier', async () => {
     const wrapper = await mountSubscriptionConfirm({
       checkout: {
@@ -481,6 +488,8 @@ describe('PaymentView payment recovery', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
+          PaymentCheckout: false,
+          RouterLink: true,
           AppLayout: {
             template: '<div><slot /></div>',
           },
@@ -538,6 +547,9 @@ describe('PaymentView WeChat JSAPI flow', () => {
     shallowMount(PaymentView, {
       global: {
         stubs: {
+          PaymentCheckout: false,
+          RouterLink: true,
+          AppLayout: { template: '<div><slot /></div>' },
           Teleport: true,
           Transition: false,
         },
@@ -567,6 +579,9 @@ describe('PaymentView WeChat JSAPI flow', () => {
     shallowMount(PaymentView, {
       global: {
         stubs: {
+          PaymentCheckout: false,
+          RouterLink: true,
+          AppLayout: { template: '<div><slot /></div>' },
           Teleport: true,
           Transition: false,
         },
@@ -588,6 +603,9 @@ describe('PaymentView WeChat JSAPI flow', () => {
     const wrapper = shallowMount(PaymentView, {
       global: {
         stubs: {
+          PaymentCheckout: false,
+          RouterLink: true,
+          AppLayout: { template: '<div><slot /></div>' },
           Teleport: true,
           Transition: false,
         },
@@ -632,6 +650,9 @@ describe('PaymentView WeChat JSAPI flow', () => {
     shallowMount(PaymentView, {
       global: {
         stubs: {
+          PaymentCheckout: false,
+          RouterLink: true,
+          AppLayout: { template: '<div><slot /></div>' },
           Teleport: true,
           Transition: false,
         },
@@ -670,6 +691,9 @@ describe('PaymentView WeChat JSAPI flow', () => {
     shallowMount(PaymentView, {
       global: {
         stubs: {
+          PaymentCheckout: false,
+          RouterLink: true,
+          AppLayout: { template: '<div><slot /></div>' },
           Teleport: true,
           Transition: false,
         },
@@ -718,6 +742,9 @@ describe('PaymentView WeChat JSAPI flow', () => {
     shallowMount(PaymentView, {
       global: {
         stubs: {
+          PaymentCheckout: false,
+          RouterLink: true,
+          AppLayout: { template: '<div><slot /></div>' },
           Teleport: true,
           Transition: false,
         },

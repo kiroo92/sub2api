@@ -220,6 +220,7 @@ func (s *OpenAIGatewayService) CreateLiveCall(
 			UserID:                identity.UserID,
 			GroupID:               liveGroupID(identity.GroupID),
 			SubscriptionID:        liveGroupID(identity.SubscriptionID),
+			PackageSelection:      identity.PackageSelection,
 			LeaseID:               leaseID,
 			Model:                 model,
 			CreatedAt:             now,
@@ -823,6 +824,9 @@ func (s *OpenAIGatewayService) finalizeLiveCall(record *LiveCallRecord) {
 	billingType := int8(BillingTypeBalance)
 	if record.SubscriptionID > 0 {
 		billingType = BillingTypeSubscription
+	}
+	if record.PackageSelection != nil {
+		billingType = BillingTypePackage
 	}
 	// TODO(billing): Live 会话目前不计费：TotalCost/ActualCost 恒为 0，完全绕过
 	// recordUsageCore/applyUsageBilling，余额模式下极低余额也能反复开启最长

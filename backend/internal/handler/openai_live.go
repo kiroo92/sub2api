@@ -113,10 +113,25 @@ func (h *OpenAIGatewayHandler) Live(c *gin.Context) {
 	defer userRelease()
 
 	identity := liveCallIdentity(c, apiKey, subject.UserID, subscription)
+	var packageJob *service.PackageJob
+	if apiKey.UsesPackages() {
+		packageJob, err = h.apiKeyService.PreparePackageJob(c.Request.Context(), apiKey, "live", 0)
+		if err != nil {
+			h.errorResponse(c, 503, "api_error", "Could not preserve package call attribution")
+			return
+		}
+	}
 	created, err := h.gatewayService.CreateLiveCall(c.Request.Context(), request, identity, subject.Concurrency)
 	if err != nil {
 		h.writeLiveCreateError(c, err)
 		return
+	}
+	if packageJob != nil {
+		packageJob.AccountID = created.Account.ID
+		if err = h.apiKeyService.CompletePackageJob(c.Request.Context(), apiKey, packageJob, created.CallID); err != nil {
+			h.errorResponse(c, 503, "api_error", "Call identity persistence failed; contact support with the call ID")
+			return
+		}
 	}
 	c.Header("Location", liveSidebandLocation(c.FullPath(), created.CallID))
 	c.Data(http.StatusOK, "application/sdp", created.SDP)
@@ -167,13 +182,14 @@ func liveCallIdentity(
 		subscriptionID = &value
 	}
 	return service.LiveCallIdentity{
-		APIKeyID:        apiKey.ID,
-		UserID:          userID,
-		GroupID:         apiKey.GroupID,
-		SubscriptionID:  subscriptionID,
-		UserAgent:       c.GetHeader("User-Agent"),
-		IPAddress:       ip.GetClientIP(c),
-		InboundEndpoint: GetInboundEndpoint(c),
+		APIKeyID:         apiKey.ID,
+		UserID:           userID,
+		GroupID:          apiKey.GroupID,
+		SubscriptionID:   subscriptionID,
+		PackageSelection: apiKey.PackageSelection,
+		UserAgent:        c.GetHeader("User-Agent"),
+		IPAddress:        ip.GetClientIP(c),
+		InboundEndpoint:  GetInboundEndpoint(c),
 	}
 }
 

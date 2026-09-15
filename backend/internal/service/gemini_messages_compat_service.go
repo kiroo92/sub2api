@@ -15,6 +15,7 @@ import (
 	"math"
 	mathrand "math/rand"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -2806,6 +2807,20 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 //
 // This is used to support Gemini SDKs that call models listing endpoints before generation.
 func (s *GeminiMessagesCompatService) ForwardAIStudioGET(ctx context.Context, account *Account, path string) (*UpstreamHTTPResult, error) {
+	return s.forwardAIStudioGET(ctx, account, path, "")
+}
+
+// ForwardAIStudioModelsPage keeps an upstream pagination token in the query,
+// outside the existing path-segment validation boundary.
+func (s *GeminiMessagesCompatService) ForwardAIStudioModelsPage(ctx context.Context, account *Account, pageToken string) (*UpstreamHTTPResult, error) {
+	query := ""
+	if pageToken != "" {
+		query = "pageToken=" + url.QueryEscape(pageToken)
+	}
+	return s.forwardAIStudioGET(ctx, account, "/v1beta/models", query)
+}
+
+func (s *GeminiMessagesCompatService) forwardAIStudioGET(ctx context.Context, account *Account, path, query string) (*UpstreamHTTPResult, error) {
 	if account == nil {
 		return nil, errors.New("account is nil")
 	}
@@ -2823,6 +2838,9 @@ func (s *GeminiMessagesCompatService) ForwardAIStudioGET(ctx context.Context, ac
 		return nil, err
 	}
 	fullURL := strings.TrimRight(normalizedBaseURL, "/") + path
+	if query != "" {
+		fullURL += "?" + query
+	}
 
 	var proxyURL string
 	if account.ProxyID != nil && account.Proxy != nil {

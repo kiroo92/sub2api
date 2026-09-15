@@ -1,6 +1,11 @@
 export default {
   dashboard: {
     title: 'Dashboard',
+    accountOverview: 'Account overview',
+    remainingQuota: 'Remaining this period',
+    statsLoadFailed: 'Could not load usage overview.',
+    accountLoadFailed: 'Could not refresh account details.',
+    quotasLoadFailed: 'Could not load platform quotas.',
     welcomeMessage: "Welcome back! Here's an overview of your account.",
     balance: 'Balance',
     apiKeys: 'API Keys',
@@ -748,6 +753,8 @@ export default {
     codeRedeemSuccess: 'Code redeemed successfully!',
     failedToRedeem: 'Failed to redeem code. Please check the code and try again.',
     subscriptionRefreshFailed: 'Redeemed successfully, but failed to refresh subscription status.',
+    accountRefreshFailed: 'Code redeemed successfully. Account details have not refreshed yet.',
+    historyLoadFailed: 'Could not load redemption history.',
     pleaseEnterCode: 'Please enter a redeem code'
   },
 

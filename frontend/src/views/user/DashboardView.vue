@@ -1,40 +1,83 @@
 <template>
   <AppLayout>
-    <div class="space-y-6">
-      <div v-if="loading" class="flex items-center justify-center py-12"><LoadingSpinner /></div>
-      <template v-else-if="stats">
-        <UserDashboardStats :stats="stats" :balance="user?.balance || 0" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
-        <UserDashboardCharts v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" :models="modelStats" @dateRangeChange="loadCharts" @granularityChange="loadCharts" @refresh="refreshAll" />
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div class="lg:col-span-2"><UserDashboardRecentUsage :data="recentUsage" :loading="loadingUsage" /></div>
-          <div class="lg:col-span-1"><UserDashboardQuickActions /></div>
-        </div>
+    <div class="space-y-5">
+      <UserDashboardStats :stats="stats" :balance="user?.balance ?? null" :concurrency="user?.concurrency" :is-simple="authStore.isSimpleMode" :can-recharge="canRecharge" :platform-quotas="platformQuotas" :refreshing="refreshing" @refresh="refreshAll" />
+      <p v-if="statsFailed || accountFailed || quotasFailed" role="alert" class="text-sm text-red-600 dark:text-red-400">
+        {{ [statsFailed && t('dashboard.statsLoadFailed'), accountFailed && t('dashboard.accountLoadFailed'), quotasFailed && t('dashboard.quotasLoadFailed')].filter(Boolean).join(' ') }}
+        <button type="button" :disabled="refreshing" class="underline" @click="refreshAll">{{ t('common.refresh') }}</button>
+      </p>
+      <template v-if="!authStore.isSimpleMode">
+        <UserSubscriptions ref="subscriptions" />
+        <RedeemSection @refresh="refreshEntitlements" />
       </template>
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'; import { useAuthStore } from '@/stores/auth'; import { usageAPI, type UserDashboardStats as UserStatsType } from '@/api/usage'
-import AppLayout from '@/components/layout/AppLayout.vue'; import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
-import UserDashboardStats from '@/components/user/dashboard/UserDashboardStats.vue'; import UserDashboardCharts from '@/components/user/dashboard/UserDashboardCharts.vue'
-import UserDashboardRecentUsage from '@/components/user/dashboard/UserDashboardRecentUsage.vue'; import UserDashboardQuickActions from '@/components/user/dashboard/UserDashboardQuickActions.vue'
-import type { UsageLog, TrendDataPoint, ModelStat, PlatformQuotaItem } from '@/types'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useAuthStore } from '@/stores/auth'
+import { usageAPI, type UserDashboardStats as UserStatsType } from '@/api/usage'
 import { getMyPlatformQuotas } from '@/api/user'
-import { formatDateLocalInput } from '@/utils/format'
+import { paymentAPI } from '@/api/payment'
+import type { PlatformQuotaItem } from '@/types'
+import AppLayout from '@/components/layout/AppLayout.vue'
+import UserDashboardStats from '@/components/user/dashboard/UserDashboardStats.vue'
+import UserSubscriptions from '@/components/subscriptions/UserSubscriptions.vue'
+import RedeemSection from '@/components/user/RedeemSection.vue'
+import { FeatureFlags, isFeatureFlagEnabled } from '@/utils/featureFlags'
 
-const authStore = useAuthStore(); const user = computed(() => authStore.user)
-const stats = ref<UserStatsType | null>(null); const loading = ref(false); const loadingUsage = ref(false); const loadingCharts = ref(false)
-const trendData = ref<TrendDataPoint[]>([]); const modelStats = ref<ModelStat[]>([]); const recentUsage = ref<UsageLog[]>([])
-const platformQuotas = ref<PlatformQuotaItem[] | null>(null)
+const { t } = useI18n()
+const authStore = useAuthStore()
+const user = computed(() => authStore.user)
+const stats = ref<UserStatsType | null>(null)
+const platformQuotas = ref<PlatformQuotaItem[]>([])
+const subscriptions = ref<InstanceType<typeof UserSubscriptions>>()
+const refreshing = ref(false)
+const statsFailed = ref(false)
+const accountFailed = ref(false)
+const quotasFailed = ref(false)
+const rechargeEnabled = ref(false)
+const paymentEnabled = computed(() => !authStore.isSimpleMode && isFeatureFlagEnabled(FeatureFlags.payment))
+const canRecharge = computed(() => paymentEnabled.value && rechargeEnabled.value)
+let refreshPending = false
 
-const startDate = ref(formatDateLocalInput(new Date(Date.now() - 6 * 86400000))); const endDate = ref(formatDateLocalInput(new Date())); const granularity = ref('day')
+async function loadSummary(refreshAccount = true) {
+  if (refreshing.value) { refreshPending = true; return }
+  refreshing.value = true
+  const [usage, account, quotas] = await Promise.allSettled([
+    usageAPI.getDashboardStats(),
+    refreshAccount ? authStore.refreshUser() : Promise.resolve(),
+    authStore.isSimpleMode ? Promise.resolve(null) : getMyPlatformQuotas()
+  ])
+  statsFailed.value = usage.status === 'rejected'
+  if (usage.status === 'fulfilled') stats.value = usage.value
+  if (refreshAccount) accountFailed.value = account.status === 'rejected'
+  quotasFailed.value = quotas.status === 'rejected'
+  if (quotas.status === 'fulfilled') platformQuotas.value = quotas.value?.platform_quotas ?? []
+  refreshing.value = false
+  if (refreshPending) { refreshPending = false; void loadSummary() }
+}
 
-const loadStats = async () => { loading.value = true; try { await authStore.refreshUser(); stats.value = await usageAPI.getDashboardStats() } catch (error) { console.error('Failed to load dashboard stats:', error) } finally { loading.value = false } }
-const loadCharts = async () => { loadingCharts.value = true; try { const res = await Promise.all([usageAPI.getDashboardTrend({ start_date: startDate.value, end_date: endDate.value, granularity: granularity.value as any }), usageAPI.getDashboardModels({ start_date: startDate.value, end_date: endDate.value })]); trendData.value = res[0].trend || []; modelStats.value = res[1].models || [] } catch (error) { console.error('Failed to load charts:', error) } finally { loadingCharts.value = false } }
-const loadRecent = async () => { loadingUsage.value = true; try { const res = await usageAPI.getByDateRange(startDate.value, endDate.value); recentUsage.value = res.items.slice(0, 5) } catch (error) { console.error('Failed to load recent usage:', error) } finally { loadingUsage.value = false } }
-const loadPlatformQuotas = async () => { try { const data = await getMyPlatformQuotas(); platformQuotas.value = data.platform_quotas ?? [] } catch (error) { console.warn('Failed to load platform quotas:', error); platformQuotas.value = [] } }
-const refreshAll = () => { loadStats(); loadCharts(); loadRecent(); loadPlatformQuotas() }
-
-onMounted(() => { refreshAll() })
+function refreshEntitlements(accountRefreshed: boolean) {
+  accountFailed.value = !accountRefreshed
+  subscriptions.value?.refresh()
+  void loadSummary(false)
+}
+function refreshAll() {
+  subscriptions.value?.refresh()
+  void loadSummary()
+}
+watch(paymentEnabled, async (enabled, _previous, onCleanup) => {
+  let stale = false
+  onCleanup(() => { stale = true })
+  rechargeEnabled.value = false
+  if (!enabled) return
+  try {
+    const { data } = await paymentAPI.getConfig()
+    if (!stale) rechargeEnabled.value = data.enabled && !data.balance_disabled
+  } catch { /* The common checkout remains available through the shop. */ }
+}, { immediate: true })
+onMounted(() => { void loadSummary() })
 </script>

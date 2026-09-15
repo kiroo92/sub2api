@@ -26,6 +26,9 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBi
 	if r == nil || r.db == nil {
 		return nil, errors.New("usage billing repository db is nil")
 	}
+	if cmd.PackageID != 0 || cmd.PackagePeriodID != 0 {
+		return r.applyPackageUsageBilling(ctx, cmd)
+	}
 
 	cmd.Normalize()
 	if cmd.RequestID == "" {

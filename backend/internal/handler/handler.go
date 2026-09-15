@@ -47,6 +47,7 @@ type AdminHandlers struct {
 
 // Handlers contains all HTTP handlers
 type Handlers struct {
+	Package          *PackageHandler
 	Lottery          *LotteryHandler
 	Auth             *AuthHandler
 	User             *UserHandler

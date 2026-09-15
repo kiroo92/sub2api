@@ -35,6 +35,18 @@ function readBlobAsText(blob: Blob): Promise<string> {
 }
 
 describe('UseKeyModal', () => {
+  it('offers client protocol guides for a package Key with no fixed group', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ models: [] }) }))
+    const wrapper = mount(UseKeyModal, {
+      props: { show: true, apiKey: 'test-package-key', baseUrl: 'https://example.test', platform: null, packageMode: true },
+      global: { stubs: { BaseDialog: { template: '<div><slot /></div>' }, Icon: true } },
+    })
+    expect(wrapper.text()).not.toContain('keys.useKeyModal.noGroupTitle')
+    expect(wrapper.text()).toContain('packages.keyHint')
+    await wrapper.get('select[aria-label="packages.protocol"]').setValue('anthropic')
+    expect(wrapper.findAll('pre code').map(item => item.text()).join('\n')).toContain('ANTHROPIC_AUTH_TOKEN')
+    wrapper.unmount()
+  })
   afterEach(() => {
     vi.unstubAllGlobals()
     saveAsMock.mockClear()

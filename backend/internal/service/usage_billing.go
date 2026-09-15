@@ -25,6 +25,9 @@ type UsageBillingCommand struct {
 	UserID              int64
 	AccountID           int64
 	SubscriptionID      *int64
+	PackageID           int64
+	PackagePeriodID     int64
+	PackageCost         float64
 	AccountType         string
 	Model               string
 	ServiceTier         string
@@ -83,6 +86,7 @@ const UsageBillingMonetaryScale = 8
 func (c *UsageBillingCommand) quantizeMonetaryFields() {
 	c.BalanceCost = QuantizeUsageBillingAmount(c.BalanceCost)
 	c.SubscriptionCost = QuantizeUsageBillingAmount(c.SubscriptionCost)
+	c.PackageCost = QuantizeUsageBillingAmount(c.PackageCost)
 	c.APIKeyQuotaCost = QuantizeUsageBillingAmount(c.APIKeyQuotaCost)
 	c.APIKeyRateLimitCost = QuantizeUsageBillingAmount(c.APIKeyRateLimitCost)
 	c.AccountQuotaCost = QuantizeUsageBillingAmount(c.AccountQuotaCost)
@@ -131,6 +135,9 @@ func buildUsageBillingFingerprint(c *UsageBillingCommand) string {
 	)
 	if payloadHash := strings.TrimSpace(c.RequestPayloadHash); payloadHash != "" {
 		raw += "|" + payloadHash
+	}
+	if c.PackageID != 0 || c.PackagePeriodID != 0 {
+		raw += fmt.Sprintf("|package:%d:%d:%0.10f", c.PackageID, c.PackagePeriodID, c.PackageCost)
 	}
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])

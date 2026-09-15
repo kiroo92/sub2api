@@ -16,6 +16,7 @@ const {
   copyToClipboard,
   isCurrentStep,
   nextStep,
+  createKey,
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
   getPublicSettings: vi.fn(),
@@ -27,6 +28,7 @@ const {
   copyToClipboard: vi.fn(),
   isCurrentStep: vi.fn(),
   nextStep: vi.fn(),
+  createKey: vi.fn(),
 }))
 
 const messages: Record<string, string> = {
@@ -58,7 +60,7 @@ const messages: Record<string, string> = {
 vi.mock('@/api', () => ({
   keysAPI: {
     list: listKeys,
-    create: vi.fn(),
+    create: createKey,
     update: vi.fn(),
     delete: vi.fn(),
     toggleStatus: vi.fn(),
@@ -215,7 +217,7 @@ const IconStub = {
   template: '<span data-test="icon">{{ name }}</span>',
 }
 
-const mountView = async () => {
+const mountView = async (showDialogs = false) => {
   const wrapper = mount(KeysView, {
     global: {
       stubs: {
@@ -223,7 +225,7 @@ const mountView = async () => {
         TablePageLayout: TablePageLayoutStub,
         DataTable: DataTableStub,
         Pagination: PaginationStub,
-        BaseDialog: true,
+        BaseDialog: showDialogs ? { props: ['show'], template: '<div v-if="show"><slot /><slot name="footer" /></div>' } : true,
         ConfirmDialog: true,
         EmptyState: true,
         Select: SelectStub,
@@ -303,6 +305,20 @@ describe('user KeysView column settings', () => {
     expect(visibleColumnKeys(wrapper)).not.toContain('last_used_at')
     expect(visibleColumnKeys(wrapper)).not.toContain('last_used_ip')
     expect(visibleColumnKeys(wrapper)).not.toContain('id')
+  })
+
+  it('creates a unified package key without assigning a synthetic legacy group', async () => {
+    createKey.mockReset().mockResolvedValue({})
+    const wrapper = await mountView(true)
+    await getButtonByText(wrapper, 'Create API Key').trigger('click')
+    await wrapper.get('[data-tour="key-form-name"]').setValue('Unified')
+    const select = wrapper.getComponent('[data-tour="key-form-group"]')
+    expect(select.props('options')).toEqual(expect.arrayContaining([expect.objectContaining({ value: 'all_packages', label: 'packages.unifiedKey' })]))
+    select.vm.$emit('update:modelValue', 'all_packages')
+    await wrapper.get('#key-form').trigger('submit')
+    await flushPromises()
+    expect(createKey).toHaveBeenCalledWith('Unified', null, undefined, [], [], 0, undefined, { rate_limit_5h: 0, rate_limit_1d: 0, rate_limit_7d: 0 }, 'all_packages')
+    wrapper.unmount()
   })
 
   it('shows a hidden column when toggled and persists the preference', async () => {

@@ -36,6 +36,10 @@ linters:
           list-mode: original
           files:
             - "**/internal/handler/**"
+            # These integration fixtures verify real monetary transactions
+            # across WS and async recovery; production imports stay banned.
+            - "!**/internal/handler/package_ws_integration_test.go"
+            - "!**/internal/handler/package_jobs_test.go"
           deny:
             - pkg: github.com/Wei-Shaw/sub2api/internal/repository
               desc: "handler must not import repository"

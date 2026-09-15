@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { RouteLocationNormalized, RouterOptions } from 'vue-router'
 
 type NavigationGuard = (
   to: Record<string, any>,
@@ -8,6 +9,7 @@ type NavigationGuard = (
 
 const routerHarness = vi.hoisted(() => ({
   guard: null as NavigationGuard | null,
+  options: null as RouterOptions | null,
 }))
 
 const authStore = vi.hoisted(() => ({
@@ -32,13 +34,16 @@ const appStore = vi.hoisted(() => ({
 
 vi.mock('vue-router', () => ({
   createWebHistory: vi.fn(() => ({})),
-  createRouter: vi.fn(() => ({
+  createRouter: vi.fn((options: RouterOptions) => {
+    routerHarness.options = options
+    return {
     beforeEach: vi.fn((guard: NavigationGuard) => {
       routerHarness.guard = guard
     }),
     afterEach: vi.fn(),
     onError: vi.fn(),
-  })),
+    }
+  }),
 }))
 
 vi.mock('@/stores/auth', () => ({
@@ -117,6 +122,24 @@ describe('feature route guard', () => {
     appStore.publicSettingsLoaded = false
     appStore.cachedPublicSettings = null
     appStore.fetchPublicSettings.mockReset()
+  })
+
+  it('preserves user deep links and admin/profile boundaries', () => {
+    for (const path of ['/dashboard', '/subscriptions', '/redeem', '/profile']) {
+      const route = routerHarness.options?.routes.find(route => route.path === path)
+      expect(route?.meta).toMatchObject({ requiresAuth: true, requiresAdmin: false })
+      expect(route?.component).toBeTypeOf('function')
+    }
+    expect(routerHarness.options?.routes.find(route => route.path === '/admin/dashboard')?.meta).toMatchObject({ requiresAuth: true, requiresAdmin: true })
+  })
+
+  it('scrolls consolidated section links while preserving browser history positions', async () => {
+    const scroll = routerHarness.options?.scrollBehavior
+    const route = { path: '/dashboard', hash: '#subscriptions' } as RouteLocationNormalized
+    expect(await scroll?.(route, route, null)).toEqual({ el: '#subscriptions', top: 80 })
+    expect(await scroll?.({ ...route, hash: '#redeem' }, route, null)).toEqual({ el: '#redeem', top: 80 })
+    expect(await scroll?.(route, route, { left: 0, top: 123 })).toEqual({ left: 0, top: 123 })
+    expect(await scroll?.({ ...route, hash: '#unknown' }, route, null)).toEqual({ top: 0 })
   })
 
   it('waits for the first public-settings request before deciding payment access', async () => {

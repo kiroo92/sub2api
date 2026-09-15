@@ -316,7 +316,7 @@ const routes: RouteRecordRaw[] = [
       requiresAuth: true,
       requiresAdmin: false,
       title: 'Purchase Subscription',
-      titleKey: 'nav.buySubscription',
+      titleKey: 'packages.shop',
       descriptionKey: 'purchase.description',
       requiresPayment: true
     }
@@ -332,6 +332,12 @@ const routes: RouteRecordRaw[] = [
       titleKey: 'nav.myOrders',
       requiresPayment: true
     }
+  },
+  {
+    path: '/package-groups/:id?',
+    name: 'PackageGroups',
+    component: () => import('@/views/user/PackageGroupsView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: false, requiresPayment: true, title: 'Group buys', titleKey: 'packages.hall' }
   },
   {
     path: '/payment/qrcode',
@@ -724,6 +730,12 @@ const routes: RouteRecordRaw[] = [
 
   // ==================== 404 Not Found ====================
   {
+    path: '/admin/packages',
+    name: 'AdminPackages',
+    component: () => import('@/views/admin/PackagePlansView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, requiresPayment: true, title: 'New packages', titleKey: 'packages.admin' }
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/views/NotFoundView.vue'),
@@ -739,10 +751,13 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
-  scrollBehavior(_to, _from, savedPosition) {
+  scrollBehavior(to, _from, savedPosition) {
     // Scroll to saved position when using browser back/forward
     if (savedPosition) {
       return savedPosition
+    }
+    if (to.path === '/dashboard' && ['#subscriptions', '#redeem'].includes(to.hash)) {
+      return { el: to.hash, top: 80 }
     }
     // Scroll to top for new routes
     return { top: 0 }

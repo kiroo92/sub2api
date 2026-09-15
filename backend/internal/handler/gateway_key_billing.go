@@ -13,6 +13,12 @@ import (
 
 const keyBillingInfoSchemaVersion = 1
 
+type packageGroupBillingInfo struct {
+	GroupID   int64  `json:"group_id"`
+	GroupName string `json:"group_name"`
+	keyBillingInfoResponse
+}
+
 type keyBillingInfoResponse struct {
 	Object                  string    `json:"object"`
 	SchemaVersion           int       `json:"schema_version"`
@@ -34,6 +40,27 @@ type keyBillingInfoResponse struct {
 // GET /v1/sub2api/billing
 func (h *GatewayHandler) KeyBillingInfo(c *gin.Context) {
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if apiKey.UsesPackages() {
+		groups, err := h.apiKeyService.PackageGroups(c.Request.Context(), apiKey)
+		if err != nil {
+			h.errorResponse(c, 503, "api_error", "Package billing information is unavailable")
+			return
+		}
+		entries := make([]packageGroupBillingInfo, 0, len(groups))
+		for _, group := range groups {
+			copyKey := *apiKey
+			copyKey.Group, copyKey.GroupID = group, &group.ID
+			rate, ok := h.resolveKeyBillingRate(c, &copyKey)
+			if !ok {
+				h.errorResponse(c, 503, "api_error", "Package billing information is unavailable")
+				return
+			}
+			entries = append(entries, packageGroupBillingInfo{GroupID: group.ID, GroupName: group.Name, keyBillingInfoResponse: buildKeyBillingInfo(&copyKey, rate, timezone.Now())})
+		}
+		c.Header("Cache-Control", "no-store")
+		c.JSON(200, gin.H{"object": "package_billing_info", "routing_mode": service.APIKeyRoutingAllPackages, "groups": entries})
+		return
+	}
 	if !ok {
 		h.errorResponse(c, http.StatusUnauthorized, "authentication_error", "Invalid API key")
 		return

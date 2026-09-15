@@ -229,7 +229,7 @@ const orderTypeFilterOptions = computed(() => [
 ])
 
 function canRefundRow(order: PaymentOrder): boolean {
-  return canRefund(order.status)
+  return order.order_type !== 'package' && canRefund(order.status)
 }
 
 function formatDateTime(dateStr: string): string {

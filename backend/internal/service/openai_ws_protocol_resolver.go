@@ -35,6 +35,21 @@ func NewOpenAIWSProtocolResolver(cfg *config.Config) OpenAIWSProtocolResolver {
 	return &defaultOpenAIWSProtocolResolver{cfg: cfg}
 }
 
+func packageWSAccountTransportCompatible(account *Account, cfg *config.Config) bool {
+	if account.Platform == PlatformGrok {
+		return true
+	} // existing Grok HTTP bridge
+	if cfg == nil || !cfg.Gateway.OpenAIWS.ModeRouterV2Enabled {
+		return NewOpenAIWSProtocolResolver(cfg).Resolve(account).Transport == OpenAIUpstreamTransportResponsesWebsocketV2
+	}
+	switch account.ResolveOpenAIResponsesWebSocketV2Mode(cfg.Gateway.OpenAIWS.IngressModeDefault) {
+	case OpenAIWSIngressModeCtxPool, OpenAIWSIngressModePassthrough, OpenAIWSIngressModeHTTPBridge, OpenAIWSIngressModeShared, OpenAIWSIngressModeDedicated:
+		return true
+	default:
+		return false
+	}
+}
+
 func (r *defaultOpenAIWSProtocolResolver) Resolve(account *Account) OpenAIWSProtocolDecision {
 	if account == nil {
 		return openAIWSHTTPDecision("account_missing")

@@ -1122,6 +1122,10 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 // Falls back to default models if no whitelist is configured
 func (h *GatewayHandler) Models(c *gin.Context) {
 	apiKey, _ := middleware2.GetAPIKeyFromContext(c)
+	if apiKey.UsesPackages() {
+		h.packageModels(c, apiKey, false)
+		return
+	}
 
 	var groupID *int64
 	var platform string
@@ -1203,6 +1207,10 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 // OpenAIGatewayHandler.CodexModels so their live upstream metadata is preserved.
 func (h *GatewayHandler) CodexModels(c *gin.Context) {
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if apiKey.UsesPackages() {
+		h.packageModels(c, apiKey, true)
+		return
+	}
 	if !ok || apiKey == nil || apiKey.Group == nil {
 		h.errorResponse(c, http.StatusUnauthorized, "invalid_request_error", "API key group is required")
 		return
@@ -1398,6 +1406,10 @@ func grokModelSupportsConfigurableReasoning(modelID string) bool {
 }
 
 func writeOpenAIModelsList(c *gin.Context, modelIDs []string) {
+	c.JSON(http.StatusOK, gin.H{"object": "list", "data": openAIModelsForIDs(modelIDs)})
+}
+
+func openAIModelsForIDs(modelIDs []string) []openai.Model {
 	defaultsByID := make(map[string]openai.Model, len(openai.DefaultModels))
 	for _, model := range openai.DefaultModels {
 		defaultsByID[model.ID] = model
@@ -1418,10 +1430,7 @@ func writeOpenAIModelsList(c *gin.Context, modelIDs []string) {
 			DisplayName: modelID,
 		})
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"object": "list",
-		"data":   models,
-	})
+	return models
 }
 
 // modelListingSource 汇总模型列表过滤的候选来源：账号映射键（availableModels）
@@ -1512,6 +1521,10 @@ func mergeModelIDs(primary, secondary []string) []string {
 // GET /antigravity/models
 // 分组级模型白名单开启时按白名单过滤。
 func (h *GatewayHandler) AntigravityModels(c *gin.Context) {
+	if apiKey, _ := middleware2.GetAPIKeyFromContext(c); apiKey.UsesPackages() {
+		h.packageModels(c, apiKey, false)
+		return
+	}
 	models := antigravity.DefaultModels()
 	if apiKey, ok := middleware2.GetAPIKeyFromContext(c); ok && apiKey != nil && apiKey.Group != nil && apiKey.Group.ModelAllowlistEnabled() {
 		filtered := make([]antigravity.ClaudeModel, 0, len(models))
@@ -1547,6 +1560,15 @@ func cloneAPIKeyWithGroup(apiKey *service.APIKey, group *service.Group) *service
 //   - unrestricted:  No key-level limits. Returns subscription or wallet balance info.
 func (h *GatewayHandler) Usage(c *gin.Context) {
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if apiKey.UsesPackages() {
+		packages, err := h.apiKeyService.ListKeyPackages(c.Request.Context(), apiKey)
+		if err != nil {
+			h.errorResponse(c, 503, "api_error", "Package usage is unavailable")
+			return
+		}
+		c.JSON(200, gin.H{"type": "packages", "routing_mode": service.APIKeyRoutingAllPackages, "packages": packages, "usage": h.buildUsageData(c.Request.Context(), apiKey.ID)})
+		return
+	}
 	if !ok {
 		h.errorResponse(c, http.StatusUnauthorized, "authentication_error", "Invalid API key")
 		return
@@ -2516,7 +2538,7 @@ func (h *GatewayHandler) submitUsageRecordTask(parent context.Context, task serv
 		return
 	}
 	task = wrapUsageRecordTaskContext(parent, task)
-	if h.usageRecordWorkerPool != nil {
+	if h.usageRecordWorkerPool != nil && !service.IsPackageRequest(parent) {
 		if mode := h.usageRecordWorkerPool.Submit(task); mode != service.UsageRecordSubmitModeDroppedStopped {
 			return
 		}
@@ -2546,7 +2568,7 @@ func (h *GatewayHandler) submitMandatoryUsageRecordTask(parent context.Context, 
 		return
 	}
 	task = wrapUsageRecordTaskContext(parent, task)
-	if h.usageRecordWorkerPool != nil {
+	if h.usageRecordWorkerPool != nil && !service.IsPackageRequest(parent) {
 		if mode := h.usageRecordWorkerPool.Submit(task); !mode.Dropped() {
 			return
 		}

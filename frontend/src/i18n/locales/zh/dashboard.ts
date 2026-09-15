@@ -1,6 +1,11 @@
 export default {
   dashboard: {
     title: '仪表盘',
+    accountOverview: '账户概览',
+    remainingQuota: '本期剩余',
+    statsLoadFailed: '用量概况加载失败。',
+    accountLoadFailed: '账户信息刷新失败。',
+    quotasLoadFailed: '平台配额加载失败。',
     welcomeMessage: '欢迎回来！这是您账户的概览。',
     balance: '余额',
     apiKeys: 'API 密钥',
@@ -752,6 +757,8 @@ export default {
     codeRedeemSuccess: '兑换成功！',
     failedToRedeem: '兑换失败，请检查兑换码后重试。',
     subscriptionRefreshFailed: '兑换成功，但订阅状态刷新失败。',
+    accountRefreshFailed: '兑换已成功，账户信息暂未刷新。',
+    historyLoadFailed: '兑换记录加载失败。',
     pleaseEnterCode: '请输入兑换码'
   },
 

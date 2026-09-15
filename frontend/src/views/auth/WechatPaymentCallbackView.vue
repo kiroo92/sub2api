@@ -115,6 +115,8 @@ onMounted(async () => {
   const amount = readParam('amount')
   const orderType = readParam('order_type')
   const planId = readParam('plan_id')
+  const packagePlanId = readParam('package_plan_id')
+  const groupBuyId = readParam('group_buy_id')
   const redirectURL = new URL(
     normalizeRedirectPath(readParam('redirect')),
     window.location.origin,
@@ -140,6 +142,8 @@ onMounted(async () => {
     appendQueryParam(query, 'amount', amount)
     appendQueryParam(query, 'order_type', orderType)
     appendQueryParam(query, 'plan_id', planId)
+    appendQueryParam(query, 'package_plan_id', packagePlanId)
+    appendQueryParam(query, 'group_buy_id', groupBuyId)
   }
 
   await router.replace({

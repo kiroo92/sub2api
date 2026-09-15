@@ -21,12 +21,12 @@ export type OrderStatus =
 
 export type PaymentType = 'alipay' | 'wxpay' | 'alipay_direct' | 'wxpay_direct' | 'stripe' | 'easypay' | 'airwallex'
 
-export type OrderType = 'balance' | 'subscription'
+export type OrderType = 'balance' | 'subscription' | 'package'
 
 // ==================== Configuration ====================
 
 export interface PaymentConfig {
-  payment_enabled: boolean
+  enabled: boolean
   min_amount: number
   max_amount: number
   daily_limit: number
@@ -171,6 +171,8 @@ export interface CreateOrderRequest {
   payment_type: string
   order_type: string
   plan_id?: number
+  package_plan_id?: number
+  group_buy_id?: number
   return_url?: string
   payment_source?: string
   openid?: string

@@ -35,6 +35,10 @@ var geminiCLITmpDirRegex = regexp.MustCompile(`/\.gemini/tmp/([A-Fa-f0-9]{64})`)
 // GET /v1beta/models
 func (h *GatewayHandler) GeminiV1BetaListModels(c *gin.Context) {
 	apiKey, ok := middleware.GetAPIKeyFromContext(c)
+	if apiKey.UsesPackages() {
+		h.packageGeminiModels(c, apiKey, false)
+		return
+	}
 	if !ok || apiKey == nil {
 		googleError(c, http.StatusUnauthorized, "Invalid API key")
 		return
@@ -161,6 +165,10 @@ func filterUpstreamGeminiModelsBody(body []byte, allowlist service.GroupModelAll
 // GET /v1beta/models/{model}
 func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
 	apiKey, ok := middleware.GetAPIKeyFromContext(c)
+	if apiKey.UsesPackages() {
+		h.packageGeminiModels(c, apiKey, true)
+		return
+	}
 	if !ok || apiKey == nil {
 		googleError(c, http.StatusUnauthorized, "Invalid API key")
 		return

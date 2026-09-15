@@ -36,6 +36,16 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if !cfg.Enabled {
 		return nil, infraerrors.Forbidden("PAYMENT_DISABLED", "payment system is disabled")
 	}
+	if req.OrderType == OrderTypePackage {
+		if s.packageSvc == nil {
+			return nil, infraerrors.ServiceUnavailable("PACKAGES_UNAVAILABLE", "package service unavailable")
+		}
+		req.packagePlan, err = s.packageSvc.checkoutPlan(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		req.Amount = req.packagePlan.Price
+	}
 	plan, err := s.validateOrderInput(ctx, req, cfg)
 	if err != nil {
 		return nil, err
@@ -69,6 +79,9 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 			return nil, err
 		}
 	}
+	if req.packagePlan != nil && req.packagePlan.Currency != methodCurrency {
+		return nil, infraerrors.BadRequest("PACKAGE_CURRENCY_MISMATCH", "choose a payment method matching the package currency")
+	}
 	payAmountStr, payAmount, err := calculateCreateOrderPayAmountForOrderType(limitAmount, feeRate, methodCurrency, req.OrderType, cfg.SubscriptionUSDToCNYRate)
 	if err != nil {
 		return nil, err
@@ -85,6 +98,9 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 		selectedCurrency = paymentProviderConfigCurrency(sel.ProviderKey, sel.Config)
 	}
 	if selectedCurrency != methodCurrency {
+		if req.packagePlan != nil {
+			return nil, infraerrors.BadRequest("PACKAGE_CURRENCY_MISMATCH", "payment provider currency changed; refresh checkout")
+		}
 		payAmountStr, payAmount, err = calculateCreateOrderPayAmountForOrderType(limitAmount, feeRate, selectedCurrency, req.OrderType, cfg.SubscriptionUSDToCNYRate)
 		if err != nil {
 			return nil, err
@@ -106,6 +122,11 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	}
 	resp, err := s.invokeProvider(ctx, order, req, cfg, limitAmount, payAmountStr, payAmount, plan, sel)
 	if err != nil {
+		if req.OrderType == OrderTypePackage {
+			// A provider can notify successfully before its create call times out.
+			_, _ = s.entClient.PaymentOrder.Update().Where(paymentorder.IDEQ(order.ID), paymentorder.StatusEQ(OrderStatusPending)).SetStatus(OrderStatusFailed).Save(ctx)
+			return nil, err
+		}
 		_, _ = s.entClient.PaymentOrder.UpdateOneID(order.ID).
 			SetStatus(OrderStatusFailed).
 			Save(ctx)
@@ -115,6 +136,12 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 }
 
 func (s *PaymentService) validateOrderInput(ctx context.Context, req CreateOrderRequest, cfg *PaymentConfig) (*dbent.SubscriptionPlan, error) {
+	if req.OrderType == OrderTypePackage {
+		if req.packagePlan == nil {
+			return nil, infraerrors.BadRequest("INVALID_PACKAGE_PLAN", "package plan is required")
+		}
+		return nil, nil
+	}
 	if req.OrderType == payment.OrderTypeBalance && cfg.BalanceDisabled {
 		return nil, infraerrors.Forbidden("BALANCE_PAYMENT_DISABLED", "balance recharge has been disabled")
 	}
@@ -155,6 +182,11 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if req.OrderType == OrderTypePackage {
+		if err := s.packageSvc.lockCheckout(ctx, tx.Client(), req); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.checkPendingLimit(ctx, tx, req.UserID, cfg.MaxPendingOrders); err != nil {
 		return nil, err
 	}
@@ -217,6 +249,11 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	order, err = tx.PaymentOrder.UpdateOneID(order.ID).SetRechargeCode(code).Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("set recharge code: %w", err)
+	}
+	if req.OrderType == OrderTypePackage {
+		if err := s.packageSvc.attachOrder(ctx, tx.Client(), req, order.ID); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit order transaction: %w", err)
@@ -414,6 +451,9 @@ func (s *PaymentService) invokeProvider(ctx context.Context, order *dbent.Paymen
 			WithMetadata(map[string]string{"provider": sel.ProviderKey, "instance_id": sel.InstanceID})
 	}
 	subject := s.buildPaymentSubject(plan, limitAmount, cfg, sel)
+	if req.packagePlan != nil {
+		subject = applyPaymentProductNameAffix(req.packagePlan.Name, cfg)
+	}
 	outTradeNo := order.OutTradeNo
 	canonicalReturnURL, err := CanonicalizeReturnURL(req.ReturnURL, req.SrcHost, req.SrcURL)
 	if err != nil {
@@ -769,6 +809,12 @@ func buildWeChatPaymentOAuthStartURL(req CreateOrderRequest, scope string) (stri
 	}
 	if req.PlanID > 0 {
 		q.Set("plan_id", strconv.FormatInt(req.PlanID, 10))
+	}
+	if req.PackagePlanID > 0 {
+		q.Set("package_plan_id", strconv.FormatInt(req.PackagePlanID, 10))
+	}
+	if req.GroupBuyID > 0 {
+		q.Set("group_buy_id", strconv.FormatInt(req.GroupBuyID, 10))
 	}
 	if scope = strings.TrimSpace(scope); scope != "" {
 		q.Set("scope", scope)

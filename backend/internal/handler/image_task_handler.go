@@ -107,6 +107,23 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		imageTaskError(c, err)
 		return
 	}
+	if apiKey.UsesPackages() {
+		if h.openAI == nil || h.openAI.apiKeyService == nil {
+			err = service.ErrPackageSelectionRequired
+		} else {
+			var job *service.PackageJob
+			job, err = h.openAI.apiKeyService.PreparePackageJob(c.Request.Context(), apiKey, "image", 0)
+			if err == nil {
+				err = h.openAI.apiKeyService.CompletePackageJob(c.Request.Context(), apiKey, job, task.ID)
+			}
+		}
+		if err != nil {
+			cancel()
+			h.failTask(task.ID, http.StatusServiceUnavailable, imageTaskErrorPayload("api_error", "Could not preserve package task attribution"))
+			imageTaskJSONError(c, http.StatusServiceUnavailable, "api_error", "Could not preserve package task attribution")
+			return
+		}
+	}
 
 	pollURL := imageTaskPollURL(c.Request.URL.Path, task.ID)
 	c.Header("Cache-Control", "no-store")

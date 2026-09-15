@@ -129,6 +129,10 @@ func (h *BatchImageHandler) List(c *gin.Context) {
 }
 
 func (h *BatchImageHandler) Models(c *gin.Context) {
+	if apiKey, _ := middleware.GetAPIKeyFromContext(c); apiKey.UsesPackages() {
+		c.JSON(http.StatusOK, gin.H{"object": "list", "data": []any{}})
+		return
+	}
 	owner, ok := batchImageOwnerFromContext(c)
 	if !ok {
 		batchImageError(c, infraerrors.New(http.StatusUnauthorized, "API_KEY_REQUIRED", "API key is required"))
