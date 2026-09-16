@@ -111,6 +111,9 @@ export default {
 
   // User Subscriptions Page
   userSubscriptions: {
+    moveUp: '上移',
+    moveDown: '下移',
+    failedToReorder: '保存订阅顺序失败',
     title: '我的订阅',
     description: '查看您的订阅计划和用量',
     noActiveSubscriptions: '暂无有效订阅',

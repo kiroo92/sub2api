@@ -40,6 +40,29 @@ func (h *GatewayHandler) GeminiV1BetaListModels(c *gin.Context) {
 		return
 	}
 	// 检查平台：优先使用强制平台（/antigravity 路由），否则要求 gemini 分组
+	if apiKey.UsesAllSubscriptions() {
+		groups := make([]*service.Group, 0)
+		for _, group := range apiKey.SubscriptionGroups {
+			if group.Platform == service.PlatformGemini || group.Platform == service.PlatformAntigravity || group.Platform == service.PlatformComposite {
+				groups = append(groups, group)
+			}
+		}
+		models := make([]gin.H, 0)
+		for _, id := range h.subscriptionModelIDs(c.Request.Context(), groups) {
+			model := gin.H{"name": "models/" + strings.TrimPrefix(id, "models/"), "displayName": id, "supportedGenerationMethods": []string{"generateContent", "countTokens"}}
+			if c.Param("model") != "" && strings.TrimPrefix(id, "models/") == c.Param("model") {
+				c.JSON(http.StatusOK, model)
+				return
+			}
+			models = append(models, model)
+		}
+		if c.Param("model") != "" {
+			googleError(c, http.StatusNotFound, "Model not available in subscriptions")
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"models": models})
+		return
+	}
 	forcePlatform, hasForcePlatform := middleware.GetForcePlatformFromContext(c)
 	if !hasForcePlatform && effectiveAPIKeyPlatform(c, apiKey) != service.PlatformGemini {
 		googleError(c, http.StatusBadRequest, "API key group platform is not gemini")
@@ -161,6 +184,10 @@ func filterUpstreamGeminiModelsBody(body []byte, allowlist service.GroupModelAll
 // GET /v1beta/models/{model}
 func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
 	apiKey, ok := middleware.GetAPIKeyFromContext(c)
+	if apiKey.UsesAllSubscriptions() {
+		h.GeminiV1BetaListModels(c)
+		return
+	}
 	if !ok || apiKey == nil {
 		googleError(c, http.StatusUnauthorized, "Invalid API key")
 		return

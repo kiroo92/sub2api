@@ -173,7 +173,21 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 
 func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, tx *sql.Tx, cmd *service.UsageBillingCommand, result *service.UsageBillingApplyResult) error {
 	if cmd.SubscriptionCost > 0 && cmd.SubscriptionID != nil {
-		if err := incrementUsageBillingSubscription(ctx, tx, *cmd.SubscriptionID, cmd.SubscriptionCost); err != nil {
+		var err error
+		if cmd.AdmittedSubscription {
+			var result sql.Result
+			result, err = tx.ExecContext(ctx, `UPDATE user_subscriptions SET daily_usage_usd = daily_usage_usd + $1, weekly_usage_usd = weekly_usage_usd + $1, monthly_usage_usd = monthly_usage_usd + $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`, cmd.SubscriptionCost, *cmd.SubscriptionID, cmd.UserID)
+			if err == nil {
+				var count int64
+				count, err = result.RowsAffected()
+				if err == nil && count == 0 {
+					err = service.ErrSubscriptionNotFound
+				}
+			}
+		} else {
+			err = incrementUsageBillingSubscription(ctx, tx, *cmd.SubscriptionID, cmd.SubscriptionCost)
+		}
+		if err != nil {
 			return err
 		}
 	}

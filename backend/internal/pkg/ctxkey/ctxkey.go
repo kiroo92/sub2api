@@ -5,6 +5,8 @@ package ctxkey
 type Key string
 
 const (
+	// AllSubscriptions requires request-local attribution and synchronous usage persistence.
+	AllSubscriptions Key = "ctx_all_subscriptions"
 	// ForcePlatform 强制平台（用于 /antigravity 路由），由 middleware.ForcePlatform 设置
 	ForcePlatform Key = "ctx_force_platform"
 

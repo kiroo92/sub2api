@@ -39,6 +39,10 @@ export async function getActiveSubscriptions(): Promise<UserSubscription[]> {
   return response.data
 }
 
+export async function reorderSubscriptions(subscriptionIds: number[]): Promise<void> {
+  await apiClient.put('/subscriptions/order', { subscription_ids: subscriptionIds })
+}
+
 /**
  * Get progress for all user's active subscriptions
  */
@@ -70,6 +74,7 @@ export async function getSubscriptionProgress(
 export default {
   getMySubscriptions,
   getActiveSubscriptions,
+  reorderSubscriptions,
   getSubscriptionsProgress,
   getSubscriptionSummary,
   getSubscriptionProgress

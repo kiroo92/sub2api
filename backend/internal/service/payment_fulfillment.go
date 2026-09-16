@@ -16,6 +16,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
@@ -490,7 +491,7 @@ func (s *PaymentService) sendSubscriptionPurchaseSuccessNotification(ctx context
 			}
 		}
 		if s.subscriptionSvc != nil {
-			if sub, err := s.subscriptionSvc.GetActiveSubscription(ctx, o.UserID, *o.SubscriptionGroupID); err == nil && sub != nil {
+			if sub, err := s.findPaymentSubscription(ctx, o); err == nil && sub != nil {
 				variables["expiry_time"] = sub.ExpiresAt.Format("2006-01-02 15:04")
 			}
 		}
@@ -566,6 +567,13 @@ func (s *PaymentService) ensurePaymentSubscriptionAssigned(ctx context.Context, 
 
 	txCtx := dbent.NewTxContext(ctx, tx)
 	txClient := tx.Client()
+	ownerQuery := txClient.User.Query().Where(user.IDEQ(o.UserID))
+	if paymentAuditDialect(txClient) == dialect.Postgres {
+		ownerQuery.ForUpdate()
+	}
+	if _, err := ownerQuery.Only(txCtx); err != nil {
+		return fmt.Errorf("lock subscription owner: %w", err)
+	}
 	alreadyAssigned, err := hasPaymentSubscriptionAssignmentAudit(txCtx, txClient, o.ID)
 	if err != nil {
 		return fmt.Errorf("check subscription assignment audit: %w", err)
@@ -574,25 +582,30 @@ func (s *PaymentService) ensurePaymentSubscriptionAssigned(ctx context.Context, 
 	recoveredFromNote := false
 	if !alreadyAssigned {
 		orderNote := paymentSubscriptionOrderNote(o.ID)
-		existing, lookupErr := s.subscriptionSvc.userSubRepo.GetByUserIDAndGroupID(txCtx, o.UserID, groupID)
+		existing, lookupErr := s.findPaymentSubscription(txCtx, o)
+		var subscriptionID int64
 		switch {
-		case lookupErr == nil && existing != nil && hasPaymentSubscriptionOrderNote(existing.Notes, orderNote):
+		case lookupErr == nil && existing != nil:
 			recoveredFromNote = true
+			subscriptionID = existing.ID
 		case lookupErr != nil && !errors.Is(lookupErr, ErrSubscriptionNotFound):
 			return fmt.Errorf("check existing subscription assignment: %w", lookupErr)
 		default:
-			if _, _, err := s.subscriptionSvc.assignOrExtendSubscription(txCtx, &AssignSubscriptionInput{
+			created, err := s.subscriptionSvc.CreatePurchasedSubscription(txCtx, &AssignSubscriptionInput{
 				UserID:       o.UserID,
 				GroupID:      groupID,
 				ValidityDays: days,
 				AssignedBy:   0,
 				Notes:        orderNote,
-			}, true); err != nil {
+			})
+			if err != nil {
 				return fmt.Errorf("assign subscription: %w", err)
 			}
+			subscriptionID = created.ID
 		}
 
 		detail, _ := json.Marshal(map[string]any{
+			"subscriptionID":    subscriptionID,
 			"groupID":           groupID,
 			"validityDays":      days,
 			"recoveredFromNote": recoveredFromNote,
@@ -625,6 +638,55 @@ func (s *PaymentService) ensurePaymentSubscriptionAssigned(ctx context.Context, 
 		return fmt.Errorf("invalidate subscription cache after fulfillment: %w", err)
 	}
 	return nil
+}
+
+// Old orders may only have a note; new orders also persist the exact subscription
+// in the assignment audit, so refunds never target another purchase in the group.
+func (s *PaymentService) findPaymentSubscription(ctx context.Context, order *dbent.PaymentOrder) (*UserSubscription, error) {
+	if order.SubscriptionGroupID == nil {
+		return nil, ErrSubscriptionNotFound
+	}
+	client := s.entClient
+	if tx := dbent.TxFromContext(ctx); tx != nil {
+		client = tx.Client()
+	}
+	if client != nil {
+		audit, err := client.PaymentAuditLog.Query().Where(
+			paymentauditlog.OrderIDEQ(strconv.FormatInt(order.ID, 10)),
+			paymentauditlog.ActionEQ("SUBSCRIPTION_ASSIGNED"),
+		).First(ctx)
+		if err != nil && !dbent.IsNotFound(err) {
+			return nil, err
+		}
+		if audit != nil {
+			var detail struct {
+				SubscriptionID int64 `json:"subscriptionID"`
+			}
+			if err := json.Unmarshal([]byte(audit.Detail), &detail); err != nil {
+				return nil, fmt.Errorf("read subscription assignment: %w", err)
+			}
+			if detail.SubscriptionID > 0 {
+				sub, err := s.subscriptionSvc.userSubRepo.GetByIDIncludeDeleted(ctx, detail.SubscriptionID)
+				if err != nil {
+					return nil, err
+				}
+				if sub.UserID != order.UserID || sub.GroupID != *order.SubscriptionGroupID {
+					return nil, ErrSubscriptionNotFound
+				}
+				return sub, nil
+			}
+		}
+	}
+	subs, err := s.subscriptionSvc.userSubRepo.ListByUserID(ctx, order.UserID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range subs {
+		if subs[i].GroupID == *order.SubscriptionGroupID && hasPaymentSubscriptionOrderNote(subs[i].Notes, paymentSubscriptionOrderNote(order.ID)) {
+			return &subs[i], nil
+		}
+	}
+	return nil, ErrSubscriptionNotFound
 }
 
 func hasPaymentSubscriptionAssignmentAudit(ctx context.Context, client *dbent.Client, orderID int64) (bool, error) {

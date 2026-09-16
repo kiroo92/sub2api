@@ -312,6 +312,7 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 	// on "> 0" still correctly skip free subscriptions (RateMultiplier == 0).
 	if p.IsSubscriptionBill && p.Subscription != nil && p.Cost.TotalCost > 0 {
 		cmd.SubscriptionID = &p.Subscription.ID
+		cmd.AdmittedSubscription = p.APIKey.UsesAllSubscriptions()
 		cmd.SubscriptionCost = p.Cost.ActualCost
 	} else if p.Cost.ActualCost > 0 {
 		cmd.BalanceCost = p.Cost.ActualCost
@@ -335,8 +336,14 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 	if p == nil || deps == nil {
 		return false, nil
 	}
+	if p.APIKey.UsesAllSubscriptions() && (!p.IsSubscriptionBill || p.Subscription == nil || p.User == nil || p.Subscription.UserID != p.User.ID || p.APIKey.GroupID == nil || p.Subscription.GroupID != *p.APIKey.GroupID) {
+		return false, ErrSubscriptionInvalid
+	}
 
 	cmd := buildUsageBillingCommand(requestID, usageLog, p)
+	if p.APIKey.UsesAllSubscriptions() && (repo == nil || cmd == nil || cmd.RequestID == "") {
+		return false, ErrBillingServiceUnavailable
+	}
 	if cmd == nil || cmd.RequestID == "" || repo == nil {
 		postUsageBilling(ctx, p, deps)
 		return true, nil
@@ -372,7 +379,11 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 
 	if p.IsSubscriptionBill {
 		if p.Cost.ActualCost > 0 && p.User != nil && p.APIKey != nil && p.APIKey.GroupID != nil {
-			deps.billingCacheService.QueueUpdateSubscriptionUsage(p.User.ID, *p.APIKey.GroupID, p.Cost.ActualCost)
+			if p.APIKey.UsesAllSubscriptions() {
+				_ = deps.billingCacheService.InvalidateSubscription(ctx, p.User.ID, *p.APIKey.GroupID)
+			} else {
+				deps.billingCacheService.QueueUpdateSubscriptionUsage(p.User.ID, *p.APIKey.GroupID, p.Cost.ActualCost)
+			}
 		}
 	} else if p.Cost.ActualCost > 0 && p.User != nil {
 		syncBalanceCacheAfterDeduction(ctx, p, deps, result)
@@ -748,9 +759,15 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		groupDefault := apiKey.Group.RateMultiplier
 		multiplier = s.ResolveUserGroupRateMultiplier(ctx, user.ID, *apiKey.GroupID, groupDefault)
 	}
+	if apiKey.UsesAllSubscriptions() && apiKey.SubscriptionRate != nil {
+		multiplier = *apiKey.SubscriptionRate
+	}
 	// token 倍率叠加高峰因子（token 计费含图片 token，图片按次倍率不受影响）。高峰因子按请求时刻现算，
 	// 不并入上面的 getUserGroupRateMultiplier，以免污染 user:group 倍率缓存。
 	pricingAt := input.PricingAt
+	if apiKey.UsesAllSubscriptions() && !apiKey.SubscriptionPricingAt.IsZero() {
+		pricingAt = apiKey.SubscriptionPricingAt
+	}
 	if pricingAt.IsZero() {
 		pricingAt = timezone.Now()
 	}

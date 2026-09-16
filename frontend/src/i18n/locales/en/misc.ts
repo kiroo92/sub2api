@@ -113,6 +113,9 @@ export default {
 
   // User Subscriptions Page
   userSubscriptions: {
+    moveUp: 'Move up',
+    moveDown: 'Move down',
+    failedToReorder: 'Failed to save subscription order',
     title: 'My Subscriptions',
     description: 'View your subscription plans and usage',
     noActiveSubscriptions: 'No Active Subscriptions',

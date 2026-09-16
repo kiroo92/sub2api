@@ -257,6 +257,20 @@ func (s *subscriptionUserSubRepoStub) GetByIDForUpdate(ctx context.Context, id i
 	return s.GetByID(ctx, id)
 }
 
+func (s *subscriptionUserSubRepoStub) GetByIDIncludeDeleted(ctx context.Context, id int64) (*UserSubscription, error) {
+	return s.GetByID(ctx, id)
+}
+
+func (s *subscriptionUserSubRepoStub) ListByUserID(_ context.Context, userID int64) ([]UserSubscription, error) {
+	rows := make([]UserSubscription, 0)
+	for _, sub := range s.byID {
+		if sub.UserID == userID {
+			rows = append(rows, *sub)
+		}
+	}
+	return rows, nil
+}
+
 func (s *subscriptionUserSubRepoStub) Update(_ context.Context, sub *UserSubscription) error {
 	if sub == nil {
 		return ErrSubscriptionNilInput

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	openaiwsv2 "github.com/Wei-Shaw/sub2api/internal/service/openai_ws_v2"
@@ -951,6 +953,18 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	}
 
 	completedTurns := atomic.Int32{}
+	var subscriptionHistoryMu sync.Mutex
+	var subscriptionHistory []json.RawMessage
+	subscriptionHistoryExists := false
+	var subscriptionOutput openAIWSToolCallReplayCollector
+	if ctx.Value(ctxkey.AllSubscriptions) == true {
+		var historyErr error
+		subscriptionHistory, _, historyErr = openAIWSExtractNormalizedInputSequence(originalFirstClientMessage)
+		subscriptionHistoryExists = historyErr == nil
+		if openAIWSPayloadStringFromRaw(originalFirstClientMessage, "previous_response_id") != "" {
+			subscriptionHistoryExists = false
+		}
+	}
 	turnLifecycle := newOpenAIWSPassthroughTurnLifecycle(true)
 	var acceptedTurnStartedAt atomic.Pointer[time.Time]
 	clientFrameConn := &openAIWSClientFrameConn{
@@ -1051,8 +1065,22 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				}
 				if hooks != nil && hooks.BeforeRequest != nil {
 					if err := hooks.BeforeRequest(turnNo, payload, requestModelForThisFrame); err != nil {
+						subscriptionHistoryMu.Lock()
+						err = subscriptionWSReplayError(err, payload, subscriptionHistory, subscriptionHistoryExists, requestModelForThisFrame)
+						subscriptionHistoryMu.Unlock()
 						return payload, nil, err
 					}
+				}
+				if ctx.Value(ctxkey.AllSubscriptions) == true {
+					subscriptionHistoryMu.Lock()
+					continuation := openAIWSPayloadStringFromRaw(payload, "previous_response_id") != "" || openAIWSRawPayloadHasToolCallOutput(payload)
+					knownHistory := subscriptionHistoryExists
+					subscriptionHistory, subscriptionHistoryExists, _ = buildOpenAIWSReplayInputSequence(subscriptionHistory, subscriptionHistoryExists, payload, continuation)
+					if continuation && !knownHistory {
+						subscriptionHistoryExists = false
+					}
+					subscriptionOutput = openAIWSToolCallReplayCollector{}
+					subscriptionHistoryMu.Unlock()
 				}
 				if hooks != nil && hooks.BeforeTurn != nil {
 					if err := hooks.BeforeTurn(turnNo); err != nil {
@@ -1198,6 +1226,11 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				)
 			},
 			OnTurnComplete: func(turn openaiwsv2.RelayTurnResult) {
+				if ctx.Value(ctxkey.AllSubscriptions) == true {
+					subscriptionHistoryMu.Lock()
+					subscriptionHistory = combineOpenAIWSReplayItems(subscriptionHistory, subscriptionOutput.AllItems())
+					subscriptionHistoryMu.Unlock()
+				}
 				turnNo := int(completedTurns.Add(1))
 				if hooks != nil && hooks.TurnStarted != nil && !turn.StartedAt.IsZero() {
 					hooks.TurnStarted(turnNo, turn.StartedAt)
@@ -1279,6 +1312,11 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					return nil
 				}
 				eventType, _, _ := parseOpenAIWSEventEnvelope(payload)
+				if ctx.Value(ctxkey.AllSubscriptions) == true {
+					subscriptionHistoryMu.Lock()
+					subscriptionOutput.AddEvent(eventType, payload)
+					subscriptionHistoryMu.Unlock()
+				}
 				if eventType == "response.created" {
 					failureAccountSideEffectsApplied = false
 				}
@@ -1341,6 +1379,9 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		_ = clientConn.Close(status, reason)
 		_ = clientConn.CloseNow()
 		return NewOpenAIWSClientCloseError(status, reason, cause)
+	}
+	if relayExit != nil && errors.Is(relayExit.Err, ErrSubscriptionWSReselect) {
+		return relayExit.Err
 	}
 
 	resultRequestModel, resultUpstreamModel := usageMeta.turnModels(relayResult.RequestModel)
@@ -1467,6 +1508,11 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 }
 
 func openAIWSPassthroughRelayClientClose(exit openaiwsv2.RelayExit, completedTurns int) (coderws.StatusCode, string, bool) {
+	if errors.Is(exit.Err, ErrSubscriptionWSReselect) {
+		if _, ok := OpenAIWSCurrentTurnRetryPayload(exit.Err); ok {
+			return 0, "", false
+		}
+	}
 	var closeErr *OpenAIWSClientCloseError
 	if errors.As(exit.Err, &closeErr) {
 		return closeErr.StatusCode(), closeErr.Reason(), true

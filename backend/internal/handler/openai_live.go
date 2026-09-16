@@ -209,14 +209,15 @@ func (h *OpenAIGatewayHandler) LiveSideband(c *gin.Context) {
 		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
 		return
 	}
-	if !liveEnabledForAPIKey(apiKey) {
+	if !apiKey.UsesAllSubscriptions() && !liveEnabledForAPIKey(apiKey) {
 		h.errorResponse(c, http.StatusForbidden, "permission_error", "Live is not enabled for this group")
 		return
 	}
 	identity := service.LiveCallIdentity{
-		APIKeyID: apiKey.ID,
-		UserID:   subject.UserID,
-		GroupID:  apiKey.GroupID,
+		AllSubscriptions: apiKey.UsesAllSubscriptions(),
+		APIKeyID:         apiKey.ID,
+		UserID:           subject.UserID,
+		GroupID:          apiKey.GroupID,
 	}
 	record, err := h.gatewayService.GetLiveCallForIdentity(c.Request.Context(), c.Param("call_id"), identity)
 	if err != nil {

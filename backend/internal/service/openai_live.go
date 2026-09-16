@@ -479,7 +479,7 @@ func (s *OpenAIGatewayService) GetLiveCallForIdentity(
 	if record.CallID != callID ||
 		record.APIKeyID != identity.APIKeyID ||
 		record.UserID != identity.UserID ||
-		record.GroupID != liveGroupID(identity.GroupID) {
+		(record.GroupID != liveGroupID(identity.GroupID) && !(identity.AllSubscriptions && record.SubscriptionID > 0)) {
 		return nil, ErrLiveIdentityMismatch
 	}
 	if record.Controller == LiveControllerClosed {

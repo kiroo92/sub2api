@@ -31,6 +31,8 @@ var (
 	ErrAPIKeyInvalidChars   = infraerrors.BadRequest("API_KEY_INVALID_CHARS", "api key can only contain letters, numbers, underscores, and hyphens")
 	ErrAPIKeyRateLimited    = infraerrors.TooManyRequests("API_KEY_RATE_LIMITED", "too many failed attempts, please try again later")
 	ErrAPIKeyAuthOverloaded = infraerrors.ServiceUnavailable("API_KEY_AUTH_OVERLOADED", "api key authentication is temporarily overloaded")
+	ErrAPIKeyGroupConflict  = infraerrors.BadRequest("API_KEY_GROUP_CONFLICT", "all-subscriptions keys cannot have a fixed group")
+	ErrAPIKeyRoutingMode    = infraerrors.BadRequest("API_KEY_ROUTING_MODE_INVALID", "invalid api key routing mode")
 	ErrInvalidIPPattern     = infraerrors.BadRequest("INVALID_IP_PATTERN", "invalid IP or CIDR pattern")
 	// ErrAPIKeyExpired        = infraerrors.Forbidden("API_KEY_EXPIRED", "api key has expired")
 	ErrAPIKeyExpired = infraerrors.Forbidden("API_KEY_EXPIRED", "api key 已过期")
@@ -61,11 +63,12 @@ const (
 // 若编辑 Key 时无条件整行回写，并发累计的配额与限流计数就会被旧快照覆盖。
 // 因此调用方必须显式声明要改的列。
 type APIKeyUpdateFields struct {
-	Name      bool
-	Status    bool
-	Quota     bool
-	GroupID   bool
-	ExpiresAt bool
+	Name        bool
+	Status      bool
+	Quota       bool
+	GroupID     bool
+	RoutingMode bool
+	ExpiresAt   bool
 	// QuotaUsed 仅供"重置配额用量"路径声明；常规计费走 IncrementQuotaUsed。
 	QuotaUsed bool
 	// RateLimits 覆盖 rate_limit_5h / _1d / _7d 三个阈值。
@@ -209,6 +212,7 @@ type APIKeyAuthCacheInvalidator interface {
 
 // CreateAPIKeyRequest 创建API Key请求
 type CreateAPIKeyRequest struct {
+	RoutingMode string   `json:"routing_mode"`
 	Name        string   `json:"name"`
 	GroupID     *int64   `json:"group_id"`
 	CustomKey   *string  `json:"custom_key"`   // 可选的自定义key
@@ -227,6 +231,7 @@ type CreateAPIKeyRequest struct {
 
 // UpdateAPIKeyRequest 更新API Key请求
 type UpdateAPIKeyRequest struct {
+	RoutingMode *string   `json:"routing_mode"`
 	Name        *string   `json:"name"`
 	GroupID     *int64    `json:"group_id"`
 	Status      *string   `json:"status"`
@@ -254,6 +259,9 @@ func validateAPIKeyLimit(v float64) error {
 }
 
 func validateCreateAPIKeyRequest(req CreateAPIKeyRequest) error {
+	if err := validateAPIKeyRoutingMode(req.RoutingMode, req.GroupID); err != nil {
+		return err
+	}
 	for _, v := range []float64{req.Quota, req.RateLimit5h, req.RateLimit1d, req.RateLimit7d} {
 		if err := validateAPIKeyLimit(v); err != nil {
 			return err
@@ -263,6 +271,28 @@ func validateCreateAPIKeyRequest(req CreateAPIKeyRequest) error {
 		return infraerrors.BadRequest("API_KEY_EXPIRY_INVALID", "expires_in_days must be greater than zero")
 	}
 	return nil
+}
+
+func normalizedAPIKeyRoutingMode(mode string) string {
+	if strings.TrimSpace(mode) == "" {
+		return APIKeyRoutingFixedGroup
+	}
+	return strings.TrimSpace(mode)
+}
+
+func validateAPIKeyRoutingMode(mode string, groupID *int64) error {
+	mode = normalizedAPIKeyRoutingMode(mode)
+	switch mode {
+	case APIKeyRoutingFixedGroup:
+		return nil
+	case APIKeyRoutingAllSubscriptions:
+		if groupID != nil {
+			return ErrAPIKeyGroupConflict
+		}
+		return nil
+	default:
+		return ErrAPIKeyRoutingMode
+	}
 }
 
 func validateUpdateAPIKeyRequest(req UpdateAPIKeyRequest) error {
@@ -536,6 +566,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		Key:         key,
 		Name:        html.EscapeString(req.Name),
 		GroupID:     req.GroupID,
+		RoutingMode: normalizedAPIKeyRoutingMode(req.RoutingMode),
 		Status:      StatusActive,
 		IPWhitelist: req.IPWhitelist,
 		IPBlacklist: req.IPBlacklist,
@@ -787,6 +818,34 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	// fields 只登记本次请求真正要改的列。quota_used 与 usage_5h/1d/7d 由计费热路径
 	// 原子递增，除非用户显式点了"重置"，否则这里不用快照把它们写回去。
 	var fields APIKeyUpdateFields
+	mode := apiKey.RoutingMode
+	if req.RoutingMode != nil {
+		mode = *req.RoutingMode
+	}
+	if apiKey.UsesAllSubscriptions() && normalizedAPIKeyRoutingMode(mode) == APIKeyRoutingFixedGroup && req.GroupID == nil {
+		return nil, infraerrors.BadRequest("API_KEY_GROUP_REQUIRED", "select a fixed group when leaving all-subscriptions mode")
+	}
+	groupIDForValidation := apiKey.GroupID
+	if req.GroupID != nil {
+		groupIDForValidation = req.GroupID
+	}
+	if normalizedAPIKeyRoutingMode(mode) == APIKeyRoutingAllSubscriptions && req.GroupID != nil {
+		return nil, ErrAPIKeyGroupConflict
+	}
+	if req.RoutingMode != nil && normalizedAPIKeyRoutingMode(mode) == APIKeyRoutingAllSubscriptions {
+		groupIDForValidation = nil
+	}
+	if err := validateAPIKeyRoutingMode(mode, groupIDForValidation); err != nil {
+		return nil, err
+	}
+	if req.RoutingMode != nil {
+		apiKey.RoutingMode = normalizedAPIKeyRoutingMode(mode)
+		fields.RoutingMode = true
+		if apiKey.UsesAllSubscriptions() {
+			apiKey.GroupID, apiKey.Group = nil, nil
+			fields.GroupID = true
+		}
+	}
 	// 下面若干分支会顺带把 Status 改回 active（配额扩容、清除过期等），
 	// 所以用原始值比对来决定是否写 status，而不是只看 req.Status。
 	originalStatus := apiKey.Status

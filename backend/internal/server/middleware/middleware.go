@@ -148,6 +148,10 @@ func RequireGroupAssignment(settingService *service.SettingService, writeError G
 			return
 		}
 		// 未分组 Key — 检查系统设置
+		if apiKey.UsesAllSubscriptions() && (allSubscriptionsReadOnly(c) || isResponsesWebSocketRoute(c)) {
+			c.Next()
+			return
+		}
 		if settingService.IsUngroupedKeySchedulingAllowed(c.Request.Context()) {
 			c.Next()
 			return

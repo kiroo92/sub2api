@@ -65,11 +65,16 @@ export async function create(
   ipBlacklist?: string[],
   quota?: number,
   expiresInDays?: number,
-  rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number }
+  rateLimitData?: { rate_limit_5h?: number; rate_limit_1d?: number; rate_limit_7d?: number },
+  routingMode?: 'fixed_group' | 'all_subscriptions'
 ): Promise<ApiKey> {
   const payload: CreateApiKeyRequest = { name }
   if (groupId !== undefined) {
     payload.group_id = groupId
+  }
+  if (routingMode === 'all_subscriptions') {
+    payload.routing_mode = routingMode
+    payload.group_id = null
   }
   if (customKey) {
     payload.custom_key = customKey
@@ -98,6 +103,11 @@ export async function create(
 
   const { data } = await apiClient.post<ApiKey>('/keys', payload)
   return data
+}
+
+export function keyRoutingUpdate(selection: number | 'all_subscriptions' | null, previousMode?: string): UpdateApiKeyRequest {
+  if (selection === 'all_subscriptions') return { routing_mode: 'all_subscriptions', group_id: null }
+  return { group_id: selection, ...(previousMode === 'all_subscriptions' ? { routing_mode: 'fixed_group' as const } : {}) }
 }
 
 /**

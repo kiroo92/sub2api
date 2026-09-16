@@ -40,13 +40,14 @@ type LiveCallRequest struct {
 }
 
 type LiveCallIdentity struct {
-	APIKeyID        int64
-	UserID          int64
-	GroupID         *int64
-	SubscriptionID  *int64
-	UserAgent       string
-	IPAddress       string
-	InboundEndpoint string
+	AllSubscriptions bool
+	APIKeyID         int64
+	UserID           int64
+	GroupID          *int64
+	SubscriptionID   *int64
+	UserAgent        string
+	IPAddress        string
+	InboundEndpoint  string
 }
 
 type LiveCallRecord struct {

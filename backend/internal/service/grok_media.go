@@ -366,12 +366,16 @@ func (s *OpenAIGatewayService) SelectGrokMediaVideoRequestAccount(
 // first observes a completed video URL. Status may omit model/duration; we fall
 // back to this snapshot, then defaults.
 type GrokVideoPendingBilling struct {
-	Model                string `json:"model"`
-	BillingModel         string `json:"billing_model,omitempty"`
-	UpstreamModel        string `json:"upstream_model,omitempty"`
-	VideoResolution      string `json:"video_resolution,omitempty"`
-	VideoDurationSeconds int    `json:"video_duration_seconds,omitempty"`
-	OriginalModel        string `json:"original_model,omitempty"`
+	Subscription          *UserSubscription `json:"subscription,omitempty"`
+	Group                 *Group            `json:"group,omitempty"`
+	SubscriptionRate      *float64          `json:"subscription_rate,omitempty"`
+	SubscriptionPricingAt time.Time         `json:"subscription_pricing_at,omitempty"`
+	Model                 string            `json:"model"`
+	BillingModel          string            `json:"billing_model,omitempty"`
+	UpstreamModel         string            `json:"upstream_model,omitempty"`
+	VideoResolution       string            `json:"video_resolution,omitempty"`
+	VideoDurationSeconds  int               `json:"video_duration_seconds,omitempty"`
+	OriginalModel         string            `json:"original_model,omitempty"`
 	// CreatedAt is when the gateway accepted the async create (RFC3339Nano UTC).
 	// duration_ms for deferred billing is measured from this instant until the
 	// first official done+video.url observation (status poll or content download),

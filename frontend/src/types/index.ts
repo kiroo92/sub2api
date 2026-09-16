@@ -729,6 +729,7 @@ export interface CompositeRouteDecision {
 }
 
 export interface ApiKey {
+  routing_mode?: 'fixed_group' | 'all_subscriptions'
   id: number
   user_id: number
   key: string
@@ -763,6 +764,7 @@ export interface ApiKey {
 export interface CreateApiKeyRequest {
   name: string
   group_id?: number | null
+  routing_mode?: 'fixed_group' | 'all_subscriptions'
   custom_key?: string // Optional custom API Key
   ip_whitelist?: string[]
   ip_blacklist?: string[]
@@ -776,6 +778,7 @@ export interface CreateApiKeyRequest {
 export interface UpdateApiKeyRequest {
   name?: string
   group_id?: number | null
+  routing_mode?: 'fixed_group' | 'all_subscriptions'
   status?: 'active' | 'inactive'
   ip_whitelist?: string[]
   ip_blacklist?: string[]
@@ -2055,6 +2058,7 @@ export interface UserSubscription {
   id: number
   user_id: number
   group_id: number
+  sort_order: number
   status: 'active' | 'expired' | 'revoked' | 'suspended'
   starts_at: string
   daily_usage_usd: number

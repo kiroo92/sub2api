@@ -14,6 +14,11 @@ const (
 	StatusAPIKeyExpired        = "expired"
 )
 
+const (
+	APIKeyRoutingFixedGroup       = "fixed_group"
+	APIKeyRoutingAllSubscriptions = "all_subscriptions"
+)
+
 // Rate limit window durations
 const (
 	RateLimitWindow5h = 5 * time.Hour
@@ -33,9 +38,15 @@ type APIKey struct {
 	Key         string
 	Name        string
 	GroupID     *int64
-	Status      string
-	IPWhitelist []string
-	IPBlacklist []string
+	RoutingMode string
+	// SubscriptionGroups is request-local and used only for union model discovery.
+	SubscriptionGroups    []*Group                `json:"-"`
+	SubscriptionRoute     *CompositeRouteDecision `json:"-"`
+	SubscriptionRate      *float64                `json:"-"`
+	SubscriptionPricingAt time.Time               `json:"-"`
+	Status                string
+	IPWhitelist           []string
+	IPBlacklist           []string
 	// 预编译的 IP 规则，用于认证热路径避免重复 ParseIP/ParseCIDR。
 	CompiledIPWhitelist *ip.CompiledIPRules `json:"-"`
 	CompiledIPBlacklist *ip.CompiledIPRules `json:"-"`
@@ -62,6 +73,10 @@ type APIKey struct {
 	Window5hStart *time.Time // Start of current 5h window
 	Window1dStart *time.Time // Start of current 1d window
 	Window7dStart *time.Time // Start of current 7d window
+}
+
+func (k *APIKey) UsesAllSubscriptions() bool {
+	return k != nil && k.RoutingMode == APIKeyRoutingAllSubscriptions
 }
 
 func (k *APIKey) IsActive() bool {

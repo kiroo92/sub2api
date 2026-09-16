@@ -258,7 +258,10 @@ const errorMessage = (error: unknown): string => {
 const submit = async () => {
   if (!canSubmit.value) return
   const updates: UpdateApiKeyRequest = {}
-  if (enabled.group_id) updates.group_id = groupId.value
+  if (enabled.group_id) {
+    updates.group_id = groupId.value
+    updates.routing_mode = 'fixed_group'
+  }
   if (enabled.status) updates.status = status.value
   for (const { key } of limitFields) {
     if (enabled[key]) updates[key] = Number(limits[key])

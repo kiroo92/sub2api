@@ -28,6 +28,7 @@ type UserSubscription struct {
 	AssignedBy *int64
 	AssignedAt time.Time
 	Notes      string
+	SortOrder  int
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

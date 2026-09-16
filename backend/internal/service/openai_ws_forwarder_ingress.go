@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	coderws "github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
@@ -586,7 +587,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		for turn := 1; ; turn++ {
 			if turn > 1 && hooks != nil && hooks.BeforeRequest != nil {
 				if err := hooks.BeforeRequest(turn, currentBridgePayload.payloadRaw, currentBridgePayload.originalModel); err != nil {
-					return err
+					return subscriptionWSReplayError(err, currentBridgePayload.accountIdentitySourceRaw, bridgeAccountFailoverInput, bridgeAccountFailoverInputExists && firstPayload.previousResponseID == "", currentBridgePayload.originalModel)
 				}
 			}
 			if hooks != nil && hooks.BeforeTurn != nil {
@@ -1259,6 +1260,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					result.wsReplayInput = replayInput
 					result.wsReplayInputExists = true
 				}
+				if ctx.Value(ctxkey.AllSubscriptions) == true {
+					result.wsReplayInput = replayCollector.AllItems()
+					result.wsReplayInputExists = true
+				}
 				if imageCount > 0 {
 					result.ImageCount = imageCount
 					result.ImageSize = imageSizeTier
@@ -1461,7 +1466,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	for {
 		if turn > 1 && !skipBeforeTurn && hooks != nil && hooks.BeforeRequest != nil {
 			if err := hooks.BeforeRequest(turn, currentPayload, currentOriginalModel); err != nil {
-				return err
+				return subscriptionWSReplayError(err, currentPayload, lastTurnReplayInput, lastTurnReplayInputExists && openAIWSPayloadStringFromRaw(firstClientMessage, "previous_response_id") == "", currentOriginalModel)
 			}
 		}
 		if !skipBeforeTurn && hooks != nil && hooks.BeforeTurn != nil {

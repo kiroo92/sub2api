@@ -162,8 +162,9 @@
                 class="-mx-2 -my-1 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-dark-700"
                 :title="t('keys.clickToChangeGroup')"
               >
+                <span v-if="row.routing_mode === 'all_subscriptions'" class="badge badge-primary">{{ t('keys.allSubscriptions') }}</span>
                 <GroupBadge
-                  v-if="row.group"
+                  v-else-if="row.group"
                   :name="row.group.name"
                   :platform="row.group.platform"
                   :subscription-type="row.group.subscription_type"
@@ -402,7 +403,7 @@
               </button>
               <!-- Import to CC Switch Button -->
               <button
-                v-if="!publicSettings?.hide_ccs_import_button"
+                v-if="!publicSettings?.hide_ccs_import_button && row.routing_mode !== 'all_subscriptions'"
                 @click="importToCcswitch(row)"
                 class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20 dark:hover:text-blue-400"
               >
@@ -485,7 +486,14 @@
           />
         </div>
 
-        <fieldset v-if="!showEditModal" data-tour="key-form-provider">
+        <fieldset>
+          <legend class="input-label">{{ t('keys.routingMode') }}</legend>
+          <div class="flex gap-4">
+            <label class="flex items-center gap-2"><input type="radio" name="routing-mode" value="fixed_group" :checked="formData.group_id !== 'all_subscriptions'" @change="formData.group_id = null" />{{ t('keys.fixedGroup') }}</label>
+            <label class="flex items-center gap-2"><input type="radio" name="routing-mode" value="all_subscriptions" :checked="formData.group_id === 'all_subscriptions'" @change="formData.group_id = 'all_subscriptions'" />{{ t('keys.allSubscriptions') }}</label>
+          </div>
+        </fieldset>
+        <fieldset v-if="!showEditModal && formData.group_id !== 'all_subscriptions'" data-tour="key-form-provider">
           <legend class="input-label">{{ t('keys.providerLabel') }}</legend>
           <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <label
@@ -533,7 +541,7 @@
           </p>
         </fieldset>
 
-        <div>
+        <div v-if="formData.group_id !== 'all_subscriptions'">
           <label class="input-label" for="key-form-group">{{ t('keys.groupLabel') }}</label>
           <Select
             :key="showEditModal ? 'edit' : createProvider"
@@ -548,8 +556,12 @@
             data-tour="key-form-group"
           >
             <template #selected="{ option }">
+              <div v-if="option?.value === 'all_subscriptions'">
+                <p class="font-semibold">{{ t('keys.allSubscriptions') }}</p>
+                <p class="text-xs text-gray-500">{{ t('keys.allSubscriptionsHint') }}</p>
+              </div>
               <GroupBadge
-                v-if="option"
+                v-else-if="option"
                 :name="(option as unknown as GroupOption).label"
                 :platform="(option as unknown as GroupOption).platform"
                 :subscription-type="(option as unknown as GroupOption).subscriptionType"
@@ -563,7 +575,9 @@
               <span v-else class="text-gray-400">{{ t('keys.selectGroup') }}</span>
             </template>
             <template #option="{ option, selected }">
+              <span v-if="option.value === 'all_subscriptions'">{{ t('keys.allSubscriptions') }}</span>
               <GroupOptionItem
+                v-else
                 :name="(option as unknown as GroupOption).label"
                 :platform="(option as unknown as GroupOption).platform"
                 :subscription-type="(option as unknown as GroupOption).subscriptionType"
@@ -1074,7 +1088,7 @@
       :show="showUseKeyModal"
       :api-key="selectedKey?.key || ''"
       :base-url="publicSettings?.api_base_url || ''"
-      :platform="selectedKey?.group?.platform || null"
+      :platform="selectedKey?.routing_mode === 'all_subscriptions' ? 'composite' : selectedKey?.group?.platform || null"
       :allow-messages-dispatch="selectedKey?.group?.allow_messages_dispatch || false"
       @close="closeUseKeyModal"
     />
@@ -1163,14 +1177,18 @@
             :class="[
               'flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors',
               'border-b border-gray-100 last:border-0 dark:border-dark-700',
-              selectedKeyForGroup?.group_id === option.value ||
-              (!selectedKeyForGroup?.group_id && option.value === null)
+              (selectedKeyForGroup?.routing_mode === 'all_subscriptions' ? 'all_subscriptions' : selectedKeyForGroup?.group_id) === option.value
                 ? 'bg-primary-50 dark:bg-primary-900/20'
                 : 'hover:bg-gray-100 dark:hover:bg-dark-700'
             ]"
             :title="option.description || undefined"
           >
+            <div v-if="option.value === 'all_subscriptions'" class="text-left">
+              <p class="font-semibold">{{ t('keys.allSubscriptions') }}</p>
+              <p class="text-xs text-gray-500">{{ t('keys.allSubscriptionsHint') }}</p>
+            </div>
             <GroupOptionItem
+              v-else
               :name="option.label"
               :platform="option.platform"
               :subscription-type="option.subscriptionType"
@@ -1182,8 +1200,7 @@
               :peak-rate-multiplier="option.peakRateMultiplier"
               :description="option.description"
               :selected="
-                selectedKeyForGroup?.group_id === option.value ||
-                (!selectedKeyForGroup?.group_id && option.value === null)
+                (selectedKeyForGroup?.routing_mode === 'all_subscriptions' ? 'all_subscriptions' : selectedKeyForGroup?.group_id) === option.value
               "
             />
           </button>
@@ -1207,6 +1224,7 @@ import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 
 const { t } = useI18n()
 import { keysAPI, authAPI, usageAPI, userGroupsAPI } from '@/api'
+import { keyRoutingUpdate } from '@/api/keys'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import BulkEditKeysModal from '@/components/keys/BulkEditKeysModal.vue'
@@ -1242,8 +1260,8 @@ const formatDateTimeLocal = (isoDate: string): string => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-interface GroupOption {
-  value: number
+interface GroupOption extends Record<string, unknown> {
+  value: number | 'all_subscriptions'
   label: string
   description: string | null
   rate: number
@@ -1429,7 +1447,7 @@ const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance 
 
 const formData = ref({
   name: '',
-  group_id: null as number | null,
+  group_id: null as number | 'all_subscriptions' | null,
   status: 'active' as 'active' | 'inactive',
   use_custom_key: false,
   custom_key: '',
@@ -1509,8 +1527,13 @@ const onStatusFilterChange = (value: string | number | boolean | null) => {
 }
 
 // Convert groups to Select options format with rate multiplier and subscription type
-const groupOptions = computed(() =>
-  groups.value.map((group) => ({
+const groupOptions = computed<GroupOption[]>(() => [
+  {
+    value: 'all_subscriptions', label: t('keys.allSubscriptions'), description: t('keys.allSubscriptionsHint'),
+    rate: 1, userRate: null, peakRateEnabled: false, peakStart: '', peakEnd: '', peakRateMultiplier: 1,
+    subscriptionType: 'subscription', platform: 'anthropic'
+  },
+  ...groups.value.map((group) => ({
     value: group.id,
     label: group.name,
     description: group.description,
@@ -1523,7 +1546,7 @@ const groupOptions = computed(() =>
     subscriptionType: group.subscription_type,
     platform: group.platform
   }))
-)
+])
 
 const createProvider = ref<KeyGroupProvider>('anthropic')
 const createProviderOptions = computed(() => KEY_GROUP_PROVIDERS.map((value) => ({
@@ -1533,8 +1556,8 @@ const createProviderOptions = computed(() => KEY_GROUP_PROVIDERS.map((value) => 
 })))
 
 const formGroupOptions = computed(() => showEditModal.value
-  ? groupOptions.value
-  : groupOptions.value.filter((group) => getKeyGroupProvider(group.platform) === createProvider.value)
+  ? groupOptions.value.filter((group) => typeof group.value === 'number')
+  : groupOptions.value.filter((group) => typeof group.value === 'number' && getKeyGroupProvider(group.platform) === createProvider.value)
 )
 
 const selectCreateProvider = (provider: KeyGroupProvider) => {
@@ -1549,7 +1572,7 @@ watch([showCreateModal, createProviderOptions], ([isOpen, providers], [wasOpen])
   if (!wasOpen || !providers.some((provider) => provider.value === createProvider.value && provider.count > 0)) {
     selectCreateProvider(providers.find((provider) => provider.count > 0)?.value ?? 'anthropic')
   }
-  if (!formGroupOptions.value.some((group) => group.value === formData.value.group_id)) {
+  if (formData.value.group_id !== 'all_subscriptions' && !formGroupOptions.value.some((group) => group.value === formData.value.group_id)) {
     formData.value.group_id = null
   }
 })
@@ -1697,7 +1720,7 @@ const editKey = (key: ApiKey) => {
   const hasExpiration = !!key.expires_at
   formData.value = {
     name: key.name,
-    group_id: key.group_id,
+    group_id: key.routing_mode === 'all_subscriptions' ? 'all_subscriptions' : key.group_id,
     status: key.status === 'quota_exhausted' || key.status === 'expired' ? 'inactive' : key.status,
     use_custom_key: false,
     custom_key: '',
@@ -1764,13 +1787,13 @@ const openGroupSelector = (key: ApiKey) => {
   }
 }
 
-const changeGroup = async (key: ApiKey, newGroupId: number | null) => {
+const changeGroup = async (key: ApiKey, newGroupId: number | 'all_subscriptions' | null) => {
   groupSelectorKeyId.value = null
   dropdownPosition.value = null
-  if (key.group_id === newGroupId) return
+  if ((key.routing_mode === 'all_subscriptions' ? 'all_subscriptions' : key.group_id) === newGroupId) return
 
   try {
-    await keysAPI.update(key.id, { group_id: newGroupId })
+    await keysAPI.update(key.id, keyRoutingUpdate(newGroupId, key.routing_mode))
     appStore.showSuccess(t('keys.groupChangedSuccess'))
     loadApiKeys()
   } catch (error) {
@@ -1854,7 +1877,7 @@ const handleSubmit = async () => {
     if (showEditModal.value && selectedKey.value) {
       const updates: UpdateApiKeyRequest = {
         name: formData.value.name,
-        group_id: formData.value.group_id,
+        ...keyRoutingUpdate(formData.value.group_id, selectedKey.value.routing_mode),
         ip_whitelist: ipWhitelist,
         ip_blacklist: ipBlacklist,
         quota: quota,
@@ -1872,13 +1895,14 @@ const handleSubmit = async () => {
       const customKey = formData.value.use_custom_key ? formData.value.custom_key : undefined
       await keysAPI.create(
         formData.value.name,
-        formData.value.group_id,
+        formData.value.group_id === 'all_subscriptions' ? null : formData.value.group_id,
         customKey,
         ipWhitelist,
         ipBlacklist,
         quota,
         expiresInDays,
-        rateLimitData
+        rateLimitData,
+        formData.value.group_id === 'all_subscriptions' ? 'all_subscriptions' : undefined
       )
       appStore.showSuccess(t('keys.keyCreatedSuccess'))
       // Only advance tour if active, on submit step, and creation succeeded

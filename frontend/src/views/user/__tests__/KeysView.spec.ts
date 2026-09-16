@@ -566,6 +566,20 @@ describe('user KeysView column settings', () => {
       return wrapper
     }
 
+    it('creates all-subscriptions keys without a fixed group', async () => {
+      const wrapper = await openCreate()
+      await wrapper.get('[data-tour="key-form-name"]').setValue('All my subscriptions')
+      await wrapper.get('input[name="routing-mode"][value="all_subscriptions"]').setValue()
+      expect(wrapper.find('[data-tour="key-form-group"]').exists()).toBe(false)
+      expect(wrapper.find('[data-tour="key-form-provider"]').exists()).toBe(false)
+      await wrapper.get('#key-form').trigger('submit')
+      await flushPromises()
+      const args = vi.mocked(keysAPI.create).mock.calls.at(-1)
+      expect(args?.[1]).toBeNull()
+      expect(args?.[8]).toBe('all_subscriptions')
+      wrapper.unmount()
+    })
+
     beforeEach(() => {
       getAvailableGroups.mockResolvedValue(availableGroups)
     })

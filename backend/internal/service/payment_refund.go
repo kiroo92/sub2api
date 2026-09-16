@@ -259,9 +259,13 @@ func (s *PaymentService) prepDeduct(ctx context.Context, o *dbent.PaymentOrder, 
 		p.DeductionType = payment.DeductionTypeSubscription
 		if o.SubscriptionGroupID != nil && o.SubscriptionDays != nil {
 			p.SubDaysToDeduct = *o.SubscriptionDays
-			sub, err := s.subscriptionSvc.GetActiveSubscription(ctx, o.UserID, *o.SubscriptionGroupID)
+			sub, err := s.findPaymentSubscription(ctx, o)
 			if err == nil && sub != nil {
 				p.SubscriptionID = sub.ID
+				p.SubscriptionBeforeRefund = sub
+				if sub.DeletedAt != nil || sub.IsExpired() {
+					p.SubDaysToDeduct = 0
+				}
 			} else if !force {
 				return &RefundResult{Success: false, Warning: "cannot find active subscription for deduction, use force", RequireForce: true}
 			}
@@ -329,6 +333,7 @@ func (s *PaymentService) ExecuteRefund(ctx context.Context, p *RefundPlan) (*Ref
 						s.restoreStatus(ctx, p)
 						return nil, fmt.Errorf("revoke subscription: %w", revokeErr)
 					}
+					p.SubscriptionRevokedByRefund = true
 				} else {
 					// Other errors (DB failure, not found) — abort refund
 					s.restoreStatus(ctx, p)
@@ -702,7 +707,28 @@ func (s *PaymentService) RollbackRefund(ctx context.Context, p *RefundPlan, gErr
 		}
 	}
 	if p.DeductionType == payment.DeductionTypeSubscription && p.SubDaysToDeduct > 0 && p.SubscriptionID > 0 {
-		if _, err := s.subscriptionSvc.ExtendSubscription(ctx, p.SubscriptionID, p.SubDaysToDeduct); err != nil {
+		var restoreErr error
+		if before := p.SubscriptionBeforeRefund; p.SubscriptionRevokedByRefund && before != nil {
+			restoreErr = s.subscriptionSvc.withSubscriptionUpdateTx(ctx, func(txCtx context.Context) error {
+				current, err := s.subscriptionSvc.userSubRepo.GetByIDIncludeDeleted(txCtx, p.SubscriptionID)
+				if err != nil {
+					return err
+				}
+				if current.DeletedAt != nil {
+					if _, err := s.subscriptionSvc.userSubRepo.Restore(txCtx, current.ID, before.Status); err != nil {
+						return err
+					}
+				}
+				// Revocation never changes expiry or usage. Preserve concurrent admin edits.
+				return nil
+			})
+			if restoreErr == nil {
+				restoreErr = s.subscriptionSvc.invalidateSubscriptionCaches(before.UserID, before.GroupID)
+			}
+		} else {
+			_, restoreErr = s.subscriptionSvc.ExtendSubscription(ctx, p.SubscriptionID, p.SubDaysToDeduct)
+		}
+		if err := restoreErr; err != nil {
 			slog.Error("[CRITICAL] subscription rollback failed", "orderID", p.OrderID, "subID", p.SubscriptionID, "days", p.SubDaysToDeduct, "error", err)
 			s.writeAuditLog(ctx, p.OrderID, "REFUND_ROLLBACK_FAILED", "admin", map[string]any{"gatewayError": psErrMsg(gErr), "rollbackError": psErrMsg(err), "subDaysDeducted": p.SubDaysToDeduct})
 			return false

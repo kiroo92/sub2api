@@ -140,6 +140,19 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 	}
 
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	if apiKey.UsesAllSubscriptions() && endpoint.IsVideoLookupRequest() {
+		pending, loadErr := h.gatewayService.LoadGrokVideoPendingBilling(c.Request.Context(), requestID, subject.UserID, apiKey.ID)
+		if loadErr != nil || pending == nil || pending.Subscription == nil || pending.Group == nil || pending.Subscription.UserID != subject.UserID || pending.Subscription.GroupID != pending.Group.ID {
+			h.errorResponse(c, http.StatusNotFound, "not_found_error", "Video subscription attribution not found")
+			return
+		}
+		selected := *apiKey
+		selected.Group, selected.GroupID = pending.Group, &pending.Group.ID
+		selected.SubscriptionRate, selected.SubscriptionPricingAt = pending.SubscriptionRate, pending.SubscriptionPricingAt
+		apiKey, subscription = &selected, pending.Subscription
+		c.Set(string(middleware2.ContextKeyAPIKey), apiKey)
+		c.Set(string(middleware2.ContextKeySubscription), subscription)
+	}
 	service.SetOpsLatencyMs(c, service.OpsAuthLatencyMsKey, time.Since(requestStart).Milliseconds())
 
 	userReleaseFunc, acquired := h.acquireResponsesUserSlot(c, subject.UserID, subject.Concurrency, false, &streamStarted, reqLog)
@@ -150,14 +163,16 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		defer userReleaseFunc()
 	}
 
-	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
-		reqLog.Info("grok_media.billing_eligibility_check_failed", zap.Error(err))
-		status, code, message, retryAfter := billingErrorDetails(err)
-		if retryAfter > 0 {
-			c.Header("Retry-After", strconv.Itoa(retryAfter))
+	if !apiKey.UsesAllSubscriptions() || !endpoint.IsVideoLookupRequest() {
+		if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
+			reqLog.Info("grok_media.billing_eligibility_check_failed", zap.Error(err))
+			status, code, message, retryAfter := billingErrorDetails(err)
+			if retryAfter > 0 {
+				c.Header("Retry-After", strconv.Itoa(retryAfter))
+			}
+			h.errorResponse(c, status, code, message)
+			return
 		}
-		h.errorResponse(c, status, code, message)
-		return
 	}
 
 	sessionSeed := body
@@ -470,6 +485,12 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 				OriginalModel:        clientRequestedModel(c, requestModel),
 				// Wall-clock start for usage duration_ms: create accepted → first done discovery.
 				CreatedAt: videoCreateStartedAt,
+			}
+			if apiKey.UsesAllSubscriptions() && subscription != nil {
+				snapshot := *subscription
+				snapshot.User, snapshot.Group, snapshot.AssignedByUser = nil, nil, nil
+				pending.Subscription, pending.Group = &snapshot, apiKey.Group
+				pending.SubscriptionRate, pending.SubscriptionPricingAt = apiKey.SubscriptionRate, apiKey.SubscriptionPricingAt
 			}
 			if err := h.gatewayService.StoreGrokVideoPendingBilling(requestCtx, result.ResponseID, subject.UserID, apiKey.ID, pending); err != nil {
 				reqLog.Warn("grok_media.store_video_pending_billing_failed_retrying",

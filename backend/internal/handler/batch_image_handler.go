@@ -29,6 +29,10 @@ func NewBatchImageHandler(service *service.BatchImagePublicService, download *se
 }
 
 func (h *BatchImageHandler) Submit(c *gin.Context) {
+	if key, _ := middleware.GetAPIKeyFromContext(c); key.UsesAllSubscriptions() {
+		batchImageError(c, infraerrors.BadRequest("SUBSCRIPTION_BATCH_UNSUPPORTED", "Batch images require balance billing; use asynchronous images with subscription keys"))
+		return
+	}
 	var req service.BatchImageSubmitRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		batchImageError(c, service.ErrBatchImageInvalidItems)

@@ -64,6 +64,29 @@ func (h *SubscriptionHandler) List(c *gin.Context) {
 	response.Success(c, out)
 }
 
+type reorderSubscriptionsRequest struct {
+	SubscriptionIDs []int64 `json:"subscription_ids" binding:"required"`
+}
+
+// Reorder persists the complete active subscription order for the current user.
+func (h *SubscriptionHandler) Reorder(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not found in context")
+		return
+	}
+	var req reorderSubscriptionsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid subscription order")
+		return
+	}
+	if err := h.subscriptionService.ReorderActiveSubscriptions(c.Request.Context(), subject.UserID, req.SubscriptionIDs); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "Subscription order updated"})
+}
+
 // GetActive handles getting current user's active subscriptions
 // GET /api/v1/subscriptions/active
 func (h *SubscriptionHandler) GetActive(c *gin.Context) {

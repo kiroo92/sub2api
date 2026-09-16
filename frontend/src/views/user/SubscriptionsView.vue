@@ -70,13 +70,14 @@
               >
                 {{ t(`userSubscriptions.status.${subscription.status}`) }}
               </span>
-              <button
-                v-if="subscription.status === 'active'"
-                :class="['rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors', platformButtonClass(subscription.group?.platform || '')]"
-                @click="router.push({ path: '/purchase', query: { tab: 'subscription', group: String(subscription.group_id) } })"
-              >
-                {{ t('payment.renewNow') }}
-              </button>
+              <div v-if="activeIndex(subscription.id) >= 0" class="flex gap-1">
+                <button class="btn btn-secondary p-1.5" :disabled="savingOrder || activeIndex(subscription.id) === 0" :title="t('userSubscriptions.moveUp')" @click="moveSubscription(subscription.id, -1)">
+                  <Icon name="chevronUp" size="sm" />
+                </button>
+                <button class="btn btn-secondary p-1.5" :disabled="savingOrder || activeIndex(subscription.id) === activeSubscriptions.length - 1" :title="t('userSubscriptions.moveDown')" @click="moveSubscription(subscription.id, 1)">
+                  <Icon name="chevronDown" size="sm" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -248,9 +249,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import subscriptionsAPI from '@/api/subscriptions'
 import type { UserSubscription } from '@/types'
@@ -258,7 +258,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { formatDateTimeToMinute } from '@/utils/format'
 import { hasPeakRate, formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
-import { platformBorderClass, platformBadgeClass, platformButtonClass, platformLabel } from '@/utils/platformColors'
+import { platformBorderClass, platformBadgeClass, platformLabel } from '@/utils/platformColors'
 import {
   getExpirationDateRelation,
   getRemainingDurationParts,
@@ -277,11 +277,37 @@ function platformAccentDotClass(p: string): string {
 }
 
 const { t } = useI18n()
-const router = useRouter()
 const appStore = useAppStore()
 
 const subscriptions = ref<UserSubscription[]>([])
 const loading = ref(true)
+const savingOrder = ref(false)
+const isReorderable = (subscription: UserSubscription) => subscription.status === 'active' && (!subscription.expires_at || new Date(subscription.expires_at).getTime() > Date.now())
+const activeSubscriptions = computed(() => subscriptions.value.filter(isReorderable))
+
+function activeIndex(id: number): number {
+  return activeSubscriptions.value.findIndex((subscription) => subscription.id === id)
+}
+
+async function moveSubscription(id: number, offset: -1 | 1) {
+  const from = activeIndex(id)
+  const to = from + offset
+  if (from < 0 || to < 0 || to >= activeSubscriptions.value.length || savingOrder.value) return
+  const previous = [...subscriptions.value]
+  const active = [...activeSubscriptions.value]
+  ;[active[from], active[to]] = [active[to], active[from]]
+  const history = subscriptions.value.filter((subscription) => !isReorderable(subscription))
+  subscriptions.value = [...active, ...history]
+  savingOrder.value = true
+  try {
+    await subscriptionsAPI.reorderSubscriptions(active.map((subscription) => subscription.id))
+  } catch (error) {
+    subscriptions.value = previous
+    appStore.showError(t('userSubscriptions.failedToReorder'))
+  } finally {
+    savingOrder.value = false
+  }
+}
 
 function subscriptionHasPeakRate(subscription: UserSubscription): boolean {
   return hasPeakRate(subscription.group)
@@ -294,7 +320,8 @@ function subscriptionPeakRateLabel(subscription: UserSubscription): string {
 async function loadSubscriptions() {
   try {
     loading.value = true
-    subscriptions.value = await subscriptionsAPI.getMySubscriptions()
+    const loaded = await subscriptionsAPI.getMySubscriptions()
+    subscriptions.value = [...loaded.filter(isReorderable), ...loaded.filter((subscription) => !isReorderable(subscription))]
   } catch (error) {
     console.error('Failed to load subscriptions:', error)
     appStore.showError(t('userSubscriptions.failedToLoad'))

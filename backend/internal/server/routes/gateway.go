@@ -67,6 +67,10 @@ func RegisterGatewayRoutes(
 		}
 	}
 	codexModelsHandler := func(c *gin.Context) {
+		if key, _ := middleware.GetAPIKeyFromContext(c); key.UsesAllSubscriptions() {
+			h.Gateway.CodexModels(c)
+			return
+		}
 		dispatchCodexModelsGateway(c, h.OpenAIGateway.CodexModels, h.Gateway.CodexModels)
 	}
 	modelsHandler := func(c *gin.Context) {
@@ -112,6 +116,10 @@ func RegisterGatewayRoutes(
 		})
 	}
 	videoStatusHandler := func(c *gin.Context) {
+		if key, _ := middleware.GetAPIKeyFromContext(c); key.UsesAllSubscriptions() {
+			h.OpenAIGateway.GrokVideoStatus(c)
+			return
+		}
 		// Video status requests do not carry a model, so composite groups cannot
 		// be resolved by compositeTargetPlatformMiddleware. Route them through
 		// the Grok handler and let scheduler/account selection enforce capacity.
@@ -128,6 +136,10 @@ func RegisterGatewayRoutes(
 		})
 	}
 	videoContentHandler := func(c *gin.Context) {
+		if key, _ := middleware.GetAPIKeyFromContext(c); key.UsesAllSubscriptions() {
+			h.OpenAIGateway.GrokVideoContent(c)
+			return
+		}
 		// Video content requests do not carry a model, so composite groups cannot
 		// be resolved by compositeTargetPlatformMiddleware. Route them through
 		// the Grok handler just like video status lookups.

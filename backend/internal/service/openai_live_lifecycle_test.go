@@ -338,6 +338,15 @@ func TestGetLiveCallForIdentityRejectsMismatchedCaller(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, record.AccountID, loaded.AccountID)
+	_, err = service.GetLiveCallForIdentity(context.Background(), record.CallID, LiveCallIdentity{APIKeyID: record.APIKeyID, UserID: record.UserID, AllSubscriptions: true})
+	require.ErrorIs(t, err, ErrLiveIdentityMismatch, "balance-origin calls cannot bypass group scope")
+	record.SubscriptionID = 5
+	require.NoError(t, store.SaveLiveCall(context.Background(), record, time.Hour))
+	loaded, err = service.GetLiveCallForIdentity(context.Background(), record.CallID, LiveCallIdentity{APIKeyID: record.APIKeyID, UserID: record.UserID, AllSubscriptions: true})
+	require.NoError(t, err)
+	require.Equal(t, int64(5), loaded.SubscriptionID)
+	_, err = service.GetLiveCallForIdentity(context.Background(), record.CallID, LiveCallIdentity{APIKeyID: 99, UserID: record.UserID, AllSubscriptions: true})
+	require.ErrorIs(t, err, ErrLiveIdentityMismatch)
 }
 
 func TestProxyLiveSidebandForwardsTextAndBinary(t *testing.T) {

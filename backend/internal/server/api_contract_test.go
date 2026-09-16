@@ -228,6 +228,7 @@ func TestAPIContracts(t *testing.T) {
 					"id": 100,
 					"user_id": 1,
 					"key": "sk_custom_1234567890",
+					"routing_mode": "fixed_group",
 					"name": "Key One",
 					"group_id": null,
 					"status": "active",
@@ -258,13 +259,14 @@ func TestAPIContracts(t *testing.T) {
 			setup: func(t *testing.T, deps *contractDeps) {
 				t.Helper()
 				deps.apiKeyRepo.MustSeed(&service.APIKey{
-					ID:        100,
-					UserID:    1,
-					Key:       "sk_custom_1234567890",
-					Name:      "Key One",
-					Status:    service.StatusActive,
-					CreatedAt: deps.now,
-					UpdatedAt: deps.now,
+					ID:          100,
+					UserID:      1,
+					Key:         "sk_custom_1234567890",
+					RoutingMode: service.APIKeyRoutingFixedGroup,
+					Name:        "Key One",
+					Status:      service.StatusActive,
+					CreatedAt:   deps.now,
+					UpdatedAt:   deps.now,
 				})
 			},
 			method:     http.MethodGet,
@@ -279,6 +281,7 @@ func TestAPIContracts(t *testing.T) {
 							"id": 100,
 							"user_id": 1,
 							"key": "sk_custom_1234567890",
+							"routing_mode": "fixed_group",
 							"name": "Key One",
 							"group_id": null,
 							"status": "active",
@@ -434,6 +437,7 @@ func TestAPIContracts(t *testing.T) {
 				"data": [
 					{
 						"id": 501,
+						"sort_order": 0,
 						"user_id": 1,
 						"group_id": 10,
 						"starts_at": "2025-01-02T03:04:05Z",

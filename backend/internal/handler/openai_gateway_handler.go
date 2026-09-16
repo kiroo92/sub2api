@@ -34,6 +34,7 @@ import (
 
 // OpenAIGatewayHandler handles OpenAI API gateway requests
 type OpenAIGatewayHandler struct {
+	subscriptionService        *service.SubscriptionService
 	gatewayService             *service.OpenAIGatewayService
 	billingCacheService        *service.BillingCacheService
 	apiKeyService              *service.APIKeyService
@@ -2330,6 +2331,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		ctx = ingressLease.Context()
 		c.Request = c.Request.WithContext(ctx)
 	}
+	subscriptionBaseCtx := ctx
 
 	wsConn, err := coderws.Accept(c.Writer, c.Request, &coderws.AcceptOptions{
 		CompressionMode: coderws.CompressionContextTakeover,
@@ -2391,6 +2393,21 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return
 	}
 	// 分组级模型白名单：首帧校验客户端模型，不通过则关闭连接并标记运维原因。
+	if apiKey.UsesAllSubscriptions() {
+		if h.subscriptionService == nil {
+			closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "subscription service unavailable")
+			return
+		}
+		selected, sub, err := h.subscriptionService.SelectForRequest(ctx, apiKey, service.SubscriptionRequest{Models: requestmodel.FromBodyCandidates("", "application/json", firstMessage), Path: c.Request.URL.Path, WebSocket: true})
+		if err != nil {
+			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, err.Error())
+			return
+		}
+		apiKey = selected
+		c.Set(string(middleware2.ContextKeyAPIKey), selected)
+		c.Set(string(middleware2.ContextKeySubscription), sub)
+		c.Request = c.Request.WithContext(service.SubscriptionRequestContext(c.Request.Context(), selected))
+	}
 	// 必须在 ensureCompositeTargetPlatform（合成路由改写）之前执行。
 	// 与 HTTP 准入一致：帧内重复 model 键/大小写变体可能被上游按末值绑定，
 	// 全部候选值逐一校验，任一未命中即拒绝。
@@ -2783,6 +2800,8 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		// turn 级定价：首轮回退到 TurnStarted 的所属 turn 时刻；后续 turn 由
 		// BeforeTurn 重新冻结 pricingAt 并按最新门复核当前账号。
 		var turnPricing openAIWSTurnPricing
+		var nextSubscriptionKey *service.APIKey
+		var nextSubscription *service.UserSubscription
 		hooks := &service.OpenAIWSIngressHooks{
 			ClientLifecycleContext:      clientLifecycleCtx,
 			InitialRequestModel:         reqModel,
@@ -2820,6 +2839,25 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				// 帧内重复 model 键/大小写变体/嵌套 session.model 额外逐一校验，
 				// 防止候选集非空时掩盖被轮换掉的禁用模型。
 				candidates := append([]string{model}, requestmodel.FromBodyCandidates("", "application/json", payload)...)
+				if apiKey.UsesAllSubscriptions() {
+					selected, sub, err := h.subscriptionService.SelectForRequest(ctx, apiKey, service.SubscriptionRequest{Models: candidates, Path: c.Request.URL.Path, WebSocket: true})
+					if err != nil {
+						return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
+					}
+					selectedCtx := service.SubscriptionRequestContext(ctx, selected)
+					if selected.Group.ID != apiKey.Group.ID || service.QuotaPlatform(selectedCtx, selected) != service.QuotaPlatform(ctx, apiKey) {
+						nextSubscriptionKey, nextSubscription = selected, sub
+						return service.ErrSubscriptionWSReselect
+					}
+					apiKey, subscription = selected, sub
+					ctx = selectedCtx
+					c.Request = c.Request.WithContext(ctx)
+					c.Set(string(middleware2.ContextKeyAPIKey), selected)
+					c.Set(string(middleware2.ContextKeySubscription), sub)
+					if err := h.billingCacheService.CheckBillingEligibility(ctx, apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(ctx, apiKey)); err != nil {
+						return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
+					}
+				}
 				if blocked := blockedModelAllowlistCandidate(apiKey.Group, candidates); blocked != "" {
 					service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalModelConfiguration)
 					middleware2.MarkIngressRejected(c, middleware2.IngressRejectModelNotAllowed)
@@ -3024,6 +3062,58 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 
 		for {
 			err := h.gatewayService.ProxyResponsesWebSocketFromClient(ctx, c, wsConn, account, token, wsFirstMessage, hooks)
+			if errors.Is(err, service.ErrSubscriptionWSReselect) && nextSubscriptionKey != nil {
+				payload, safe := service.OpenAIWSCurrentTurnRetryPayload(err)
+				if !safe || len(payload) == 0 {
+					closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "subscription switch needs complete conversation history")
+					return
+				}
+				releaseTurnSlots()
+				apiKey, subscription = nextSubscriptionKey, nextSubscription
+				c.Set(string(middleware2.ContextKeyAPIKey), apiKey)
+				c.Set(string(middleware2.ContextKeySubscription), subscription)
+				ctx = service.SubscriptionRequestContext(subscriptionBaseCtx, apiKey)
+				c.Request = c.Request.WithContext(ctx)
+				c.Request.Header.Del("x-codex-turn-state")
+				reqModel = strings.TrimSpace(gjson.GetBytes(payload, "model").String())
+				wsAttemptMessage, firstMessage = payload, payload
+				previousResponseID, previousResponseCanMove = "", true
+				firstTurnStartedAt = time.Now()
+				channelMappingWS, _ = h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, reqModel)
+				wsForwardModel = openAIChannelForwardModel(channelMappingWS, reqModel)
+				requestPlatform = openAICompatibleRequestPlatform(ctx, apiKey)
+				requiredTransport = service.OpenAIUpstreamTransportResponsesWebsocketV2Ingress
+				if requestPlatform == service.PlatformGrok {
+					requiredTransport = service.OpenAIUpstreamTransportHTTPSSE
+				}
+				imageIntent = service.IsExplicitImageGenerationIntent("/v1/responses", reqModel, payload)
+				requiredCapability = service.OpenAIEndpointCapabilityChatCompletions
+				if imageIntent && requestPlatform == service.PlatformOpenAI {
+					requiredCapability = service.OpenAIEndpointCapabilityResponses
+				}
+				if imageIntent && !service.GroupAllowsImageGeneration(apiKey.Group) {
+					closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, service.ImageGenerationPermissionMessage())
+					return
+				}
+				if decision := h.checkSecurityAuditStage(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIResponses, reqModel, payload, "subsequent_turn"); decision != nil && !decision.AllowNextStage {
+					writeSecurityAuditWSError(ctx, wsConn, decision)
+					closeOpenAIClientWS(wsConn, securityAuditWSCloseStatus(decision), securityAuditWSCloseReason(decision))
+					return
+				}
+				if err := h.billingCacheService.CheckBillingEligibility(ctx, apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(ctx, apiKey)); err != nil {
+					closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, err.Error())
+					return
+				}
+				if !ensureUserSlotHeld() {
+					return
+				}
+				ctx, _ = h.gatewayService.WithOpenAIRequestPricingContext(ctx, apiKey.GroupID)
+				failedAccountIDs = make(map[int64]struct{})
+				sameAccountRetryCount = make(map[int64]int)
+				switchCount, profitVetoCount, lastFailoverErr = 0, 0, nil
+				setCyberTurnBody(1, payload)
+				break
+			}
 			if err == nil {
 				reqLog.Info("openai.websocket_ingress_closed", zap.Int64("account_id", account.ID))
 				return
@@ -3248,7 +3338,7 @@ func (h *OpenAIGatewayHandler) submitUsageRecordTask(parent context.Context, tas
 		return
 	}
 	task = wrapUsageRecordTaskContext(parent, task)
-	if h.usageRecordWorkerPool != nil {
+	if h.usageRecordWorkerPool != nil && (parent == nil || parent.Value(ctxkey.AllSubscriptions) != true) {
 		if mode := h.usageRecordWorkerPool.Submit(task); mode != service.UsageRecordSubmitModeDroppedStopped {
 			return
 		}
@@ -3287,7 +3377,7 @@ func (h *OpenAIGatewayHandler) submitMandatoryUsageRecordTask(parent context.Con
 		return
 	}
 	task = wrapUsageRecordTaskContext(parent, task)
-	if h.usageRecordWorkerPool != nil {
+	if h.usageRecordWorkerPool != nil && (parent == nil || parent.Value(ctxkey.AllSubscriptions) != true) {
 		if mode := h.usageRecordWorkerPool.Submit(task); !mode.Dropped() {
 			return
 		}

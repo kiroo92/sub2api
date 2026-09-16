@@ -54,6 +54,7 @@ type AdminUser struct {
 }
 
 type APIKey struct {
+	RoutingMode string     `json:"routing_mode"`
 	ID          int64      `json:"id"`
 	UserID      int64      `json:"user_id"`
 	Key         string     `json:"key"`
@@ -754,6 +755,7 @@ type UserSubscription struct {
 	StartsAt  time.Time `json:"starts_at"`
 	ExpiresAt time.Time `json:"expires_at"`
 	Status    string    `json:"status"`
+	SortOrder int       `json:"sort_order"`
 
 	DailyWindowStart   *time.Time `json:"daily_window_start"`
 	WeeklyWindowStart  *time.Time `json:"weekly_window_start"`

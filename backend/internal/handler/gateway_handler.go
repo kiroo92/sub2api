@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -1122,6 +1123,10 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 // Falls back to default models if no whitelist is configured
 func (h *GatewayHandler) Models(c *gin.Context) {
 	apiKey, _ := middleware2.GetAPIKeyFromContext(c)
+	if apiKey.UsesAllSubscriptions() {
+		writeModelsList(c, "", h.subscriptionModelIDs(c.Request.Context(), apiKey.SubscriptionGroups))
+		return
+	}
 
 	var groupID *int64
 	var platform string
@@ -1189,11 +1194,56 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	writeModelsListResponse(c, claude.DefaultModels)
 }
 
+func (h *GatewayHandler) subscriptionModelIDs(ctx context.Context, groups []*service.Group) []string {
+	seen := make(map[string]struct{})
+	models := make([]string, 0)
+	for _, group := range groups {
+		if group == nil {
+			continue
+		}
+		var available []string
+		if group.Platform == service.PlatformComposite {
+			available = h.compositeAvailableModels(ctx, &group.ID)
+		} else {
+			available = h.gatewayService.GetAvailableModels(ctx, &group.ID, group.Platform)
+		}
+		if len(available) == 0 {
+			available = defaultModelIDsForPlatform(group.Platform)
+		}
+		if group.ModelAllowlistEnabled() {
+			available = group.ModelAllowlist.FilterForListing(available)
+		}
+		for _, model := range available {
+			model = strings.TrimSpace(model)
+			if model == "" {
+				continue
+			}
+			if _, ok := seen[model]; ok {
+				continue
+			}
+			seen[model] = struct{}{}
+			models = append(models, model)
+		}
+	}
+	sort.Strings(models)
+	return models
+}
+
 // CodexModels returns the effective group model list using the manifest shape
 // expected by Codex custom providers. Official OpenAI groups continue to use
 // OpenAIGatewayHandler.CodexModels so their live upstream metadata is preserved.
 func (h *GatewayHandler) CodexModels(c *gin.Context) {
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if apiKey.UsesAllSubscriptions() {
+		models := h.subscriptionModelIDs(c.Request.Context(), apiKey.SubscriptionGroups)
+		body, err := h.gatewayService.BuildCodexModelsManifestForGroup(c.Request.Context(), nil, "", models)
+		if err != nil {
+			h.errorResponse(c, http.StatusInternalServerError, "api_error", "Failed to build models manifest")
+			return
+		}
+		c.Data(http.StatusOK, "application/json", body)
+		return
+	}
 	if !ok || apiKey == nil || apiKey.Group == nil {
 		h.errorResponse(c, http.StatusUnauthorized, "invalid_request_error", "API key group is required")
 		return
@@ -1739,6 +1789,10 @@ func (h *GatewayHandler) usageQuotaLimited(c *gin.Context, ctx context.Context, 
 
 // usageUnrestricted 处理 unrestricted 模式的响应（向后兼容）
 func (h *GatewayHandler) usageUnrestricted(c *gin.Context, ctx context.Context, apiKey *service.APIKey, subject middleware2.AuthSubject, usageData gin.H, dailyUsage any, modelStats any) {
+	if apiKey.UsesAllSubscriptions() {
+		c.JSON(http.StatusOK, gin.H{"mode": "unrestricted", "routing_mode": service.APIKeyRoutingAllSubscriptions, "isValid": len(apiKey.SubscriptionGroups) > 0, "planName": "All subscriptions", "unit": "USD", "usage": usageData, "daily_usage": dailyUsage, "model_stats": modelStats})
+		return
+	}
 	// 订阅模式
 	if apiKey.Group != nil && apiKey.Group.IsSubscriptionType() {
 		resp := gin.H{
@@ -2502,7 +2556,7 @@ func (h *GatewayHandler) submitUsageRecordTask(parent context.Context, task serv
 		return
 	}
 	task = wrapUsageRecordTaskContext(parent, task)
-	if h.usageRecordWorkerPool != nil {
+	if h.usageRecordWorkerPool != nil && (parent == nil || parent.Value(ctxkey.AllSubscriptions) != true) {
 		if mode := h.usageRecordWorkerPool.Submit(task); mode != service.UsageRecordSubmitModeDroppedStopped {
 			return
 		}
@@ -2532,7 +2586,7 @@ func (h *GatewayHandler) submitMandatoryUsageRecordTask(parent context.Context, 
 		return
 	}
 	task = wrapUsageRecordTaskContext(parent, task)
-	if h.usageRecordWorkerPool != nil {
+	if h.usageRecordWorkerPool != nil && (parent == nil || parent.Value(ctxkey.AllSubscriptions) != true) {
 		if mode := h.usageRecordWorkerPool.Submit(task); !mode.Dropped() {
 			return
 		}

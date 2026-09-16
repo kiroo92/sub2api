@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"entgo.io/ent/dialect"
+	"errors"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
@@ -28,6 +30,34 @@ func (r *userSubscriptionRepository) Create(ctx context.Context, sub *service.Us
 	}
 
 	client := clientFromContext(ctx, r.client)
+	var ownTx *dbent.Tx
+	if dbent.TxFromContext(ctx) == nil {
+		var err error
+		ownTx, err = client.Tx(ctx)
+		if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+			return err
+		}
+		if ownTx != nil {
+			defer func() { _ = ownTx.Rollback() }()
+			client = ownTx.Client()
+		}
+	}
+	ownerQuery := client.User.Query().Where(user.IDEQ(sub.UserID))
+	if client.Driver().Dialect() == dialect.Postgres {
+		ownerQuery.ForUpdate()
+	}
+	if _, err := ownerQuery.Only(ctx); err != nil {
+		return err
+	}
+	last, err := client.UserSubscription.Query().Where(usersubscription.UserIDEQ(sub.UserID)).
+		Order(dbent.Desc(usersubscription.FieldSortOrder)).First(ctx)
+	if err != nil && !dbent.IsNotFound(err) {
+		return err
+	}
+	sub.SortOrder = 0
+	if last != nil {
+		sub.SortOrder = last.SortOrder + 1
+	}
 	builder := client.UserSubscription.Create().
 		SetUserID(sub.UserID).
 		SetGroupID(sub.GroupID).
@@ -39,6 +69,7 @@ func (r *userSubscriptionRepository) Create(ctx context.Context, sub *service.Us
 		SetWeeklyUsageUsd(sub.WeeklyUsageUSD).
 		SetMonthlyUsageUsd(sub.MonthlyUsageUSD).
 		SetNillableAssignedBy(sub.AssignedBy)
+	builder.SetSortOrder(sub.SortOrder)
 
 	if sub.StartsAt.IsZero() {
 		builder.SetStartsAt(time.Now())
@@ -55,6 +86,9 @@ func (r *userSubscriptionRepository) Create(ctx context.Context, sub *service.Us
 	builder.SetNotes(sub.Notes)
 
 	created, err := builder.Save(ctx)
+	if err == nil && ownTx != nil {
+		err = ownTx.Commit()
+	}
 	if err == nil {
 		applyUserSubscriptionEntityToService(sub, created)
 	}
@@ -107,7 +141,8 @@ func (r *userSubscriptionRepository) GetByUserIDAndGroupID(ctx context.Context, 
 	m, err := client.UserSubscription.Query().
 		Where(usersubscription.UserIDEQ(userID), usersubscription.GroupIDEQ(groupID)).
 		WithGroup().
-		Only(ctx)
+		Order(dbent.Desc(usersubscription.FieldExpiresAt), dbent.Desc(usersubscription.FieldID)).
+		First(ctx)
 	if err != nil {
 		return nil, translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
 	}
@@ -124,7 +159,8 @@ func (r *userSubscriptionRepository) GetActiveByUserIDAndGroupID(ctx context.Con
 			usersubscription.ExpiresAtGT(time.Now()),
 		).
 		WithGroup().
-		Only(ctx)
+		Order(dbent.Desc(usersubscription.FieldExpiresAt), dbent.Desc(usersubscription.FieldID)).
+		First(ctx)
 	if err != nil {
 		return nil, translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
 	}
@@ -187,7 +223,7 @@ func (r *userSubscriptionRepository) ListByUserID(ctx context.Context, userID in
 	subs, err := client.UserSubscription.Query().
 		Where(usersubscription.UserIDEQ(userID)).
 		WithGroup().
-		Order(dbent.Desc(usersubscription.FieldCreatedAt)).
+		Order(dbent.Asc(usersubscription.FieldSortOrder), dbent.Asc(usersubscription.FieldID)).
 		All(ctx)
 	if err != nil {
 		return nil, err
@@ -204,12 +240,57 @@ func (r *userSubscriptionRepository) ListActiveByUserID(ctx context.Context, use
 			usersubscription.ExpiresAtGT(time.Now()),
 		).
 		WithGroup().
-		Order(dbent.Desc(usersubscription.FieldCreatedAt)).
+		Order(dbent.Asc(usersubscription.FieldSortOrder), dbent.Asc(usersubscription.FieldID)).
 		All(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return userSubscriptionEntitiesToService(subs), nil
+}
+
+func (r *userSubscriptionRepository) ReorderActive(ctx context.Context, userID int64, subscriptionIDs []int64) error {
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	// Serialize ordering with payment delivery for this user, including empty lists.
+	ownerQuery := tx.User.Query().Where(user.IDEQ(userID))
+	if tx.Client().Driver().Dialect() == dialect.Postgres {
+		ownerQuery.ForUpdate()
+	}
+	if _, err := ownerQuery.Only(ctx); err != nil {
+		return err
+	}
+
+	active, err := tx.UserSubscription.Query().Where(
+		usersubscription.UserIDEQ(userID),
+		usersubscription.StatusEQ(service.SubscriptionStatusActive),
+		usersubscription.ExpiresAtGT(time.Now()),
+	).IDs(ctx)
+	if err != nil {
+		return err
+	}
+	if len(active) != len(subscriptionIDs) {
+		return service.ErrSubscriptionOrderConflict
+	}
+	want := make(map[int64]struct{}, len(active))
+	for _, id := range active {
+		want[id] = struct{}{}
+	}
+	for position, id := range subscriptionIDs {
+		if _, ok := want[id]; !ok {
+			return service.ErrSubscriptionOrderConflict
+		}
+		delete(want, id)
+		if _, err := tx.UserSubscription.UpdateOneID(id).SetSortOrder(position).Save(ctx); err != nil {
+			return err
+		}
+	}
+	if len(want) != 0 {
+		return service.ErrSubscriptionOrderConflict
+	}
+	return tx.Commit()
 }
 
 func (r *userSubscriptionRepository) ListByGroupID(ctx context.Context, groupID int64, params pagination.PaginationParams) ([]service.UserSubscription, *pagination.PaginationResult, error) {
@@ -656,6 +737,7 @@ func userSubscriptionEntityToServiceWithStatusMapping(m *dbent.UserSubscription,
 		AssignedBy:         m.AssignedBy,
 		AssignedAt:         m.AssignedAt,
 		Notes:              derefString(m.Notes),
+		SortOrder:          m.SortOrder,
 		CreatedAt:          m.CreatedAt,
 		UpdatedAt:          m.UpdatedAt,
 		DeletedAt:          m.DeletedAt,

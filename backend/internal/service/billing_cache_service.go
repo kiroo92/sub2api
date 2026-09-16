@@ -733,6 +733,9 @@ func (s *BillingCacheService) IncrementUserPlatformQuotaUsage(userID int64, plat
 // 订阅模式：检查缓存用量未超过限额（Group限额从参数传入）
 // platform 为请求的目标平台（如 "anthropic"），传空串 "" 时跳过 user × platform quota 检查。
 func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user *User, apiKey *APIKey, group *Group, subscription *UserSubscription, platform string) error {
+	if apiKey.UsesAllSubscriptions() && (user == nil || subscription == nil || group == nil || subscription.UserID != user.ID || subscription.GroupID != group.ID || !group.IsSubscriptionType()) {
+		return ErrSubscriptionInvalid
+	}
 	// 简易模式：跳过所有计费检查
 	if s.cfg.RunMode == config.RunModeSimple {
 		return nil
@@ -745,7 +748,17 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 	isSubscriptionMode := group != nil && group.IsSubscriptionType() && subscription != nil
 
 	if isSubscriptionMode {
-		if err := s.checkSubscriptionEligibility(ctx, user.ID, group, subscription); err != nil {
+		var err error
+		if apiKey.UsesAllSubscriptions() {
+			var current *UserSubscription
+			current, err = s.subRepo.GetByID(ctx, subscription.ID)
+			if err == nil {
+				err = checkSelectedSubscription(current, user.ID, group, time.Now())
+			}
+		} else {
+			err = s.checkSubscriptionEligibility(ctx, user.ID, group, subscription)
+		}
+		if err != nil {
 			return err
 		}
 	} else {
@@ -773,6 +786,22 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 		return err
 	}
 
+	return nil
+}
+
+func checkSelectedSubscription(sub *UserSubscription, userID int64, group *Group, now time.Time) error {
+	if sub == nil || group == nil || sub.UserID != userID || sub.GroupID != group.ID || sub.DeletedAt != nil || sub.Status != SubscriptionStatusActive || !sub.ExpiresAt.After(now) || sub.StartsAt.After(now) {
+		return ErrSubscriptionInvalid
+	}
+	if group.HasDailyLimit() && sub.DailyUsageUSD >= *group.DailyLimitUSD {
+		return ErrDailyLimitExceeded
+	}
+	if group.HasWeeklyLimit() && sub.WeeklyUsageUSD >= *group.WeeklyLimitUSD {
+		return ErrWeeklyLimitExceeded
+	}
+	if group.HasMonthlyLimit() && sub.MonthlyUsageUSD >= *group.MonthlyLimitUSD {
+		return ErrMonthlyLimitExceeded
+	}
 	return nil
 }
 
