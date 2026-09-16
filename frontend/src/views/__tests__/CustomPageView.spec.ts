@@ -4,7 +4,7 @@ import CustomPageView from '../user/CustomPageView.vue'
 
 const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
-  item: { id: 'image', label: 'Image', url: 'https://image.example/image/', open_mode: undefined as string | undefined },
+  item: { id: 'image', label: 'Image', url: 'https://image.example/image/', open_mode: undefined as string | undefined, hide_open_button: false },
   admin: false,
   visible: true,
 }))
@@ -24,6 +24,7 @@ describe('custom menu open mode', () => {
   beforeEach(() => {
     mocks.replace.mockReset()
     mocks.item.open_mode = undefined
+    mocks.item.hide_open_button = false
     mocks.admin = false
     mocks.visible = true
     vi.stubGlobal('location', { origin: 'https://sub.example', href: 'https://sub.example/custom/image', replace: mocks.replace })
@@ -36,14 +37,16 @@ describe('custom menu open mode', () => {
     wrapper.unmount()
   })
 
-  it('opens a standalone page with website credentials and renders no iframe', () => {
+  it.each([false, true])('opens a standalone page even when the embedded button is hidden: %s', (hidden) => {
     mocks.item.open_mode = 'new_tab'
+    mocks.item.hide_open_button = hidden
     const wrapper = mount(CustomPageView)
     const url = new URL(mocks.replace.mock.calls[0][0])
     expect(url.searchParams.get('ui_mode')).toBe('standalone')
     expect(url.searchParams.get('token')).toBe('fixture-token')
     expect(url.searchParams.get('src_host')).toBe('https://sub.example')
     expect(wrapper.find('iframe').exists()).toBe(false)
+    expect(wrapper.get('a').attributes('href')).toBe(url.toString())
     wrapper.unmount()
   })
 
