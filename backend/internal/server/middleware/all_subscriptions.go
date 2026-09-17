@@ -2,11 +2,14 @@ package middleware
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -20,8 +23,22 @@ func allSubscriptionsResourceRead(c *gin.Context) bool {
 }
 
 func selectAllSubscriptions(c *gin.Context, key *service.APIKey, subscriptions *service.SubscriptionService) (*service.APIKey, *service.UserSubscription, bool) {
-	if key == nil || !key.UsesAllSubscriptions() {
+	if key == nil || !key.UsesDynamicRouting() {
 		return key, nil, true
+	}
+	if key.UsesTeam() {
+		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.TeamBilling, true))
+		if err := service.ValidateTeamTextRequest(c.Request.URL.Path, nil, nil); err != nil {
+			AbortWithError(c, http.StatusBadRequest, "TEAM_ENDPOINT_UNSUPPORTED", err.Error())
+			return nil, nil, false
+		}
+		var err error
+		key, err = subscriptions.PrepareTeamKey(c.Request.Context(), key)
+		if err != nil {
+			groupModelAllowlistErrorWriter(c)(c, infraerrors.Code(err), infraerrors.Message(err))
+			c.Abort()
+			return nil, nil, false
+		}
 	}
 	if allSubscriptionsResourceRead(c) {
 		selected := *key
@@ -50,7 +67,18 @@ func selectAllSubscriptions(c *gin.Context, key *service.APIKey, subscriptions *
 	if len(models) == 0 && c.Query("model") != "" {
 		models = []string{c.Query("model")}
 	}
+	var body []byte
+	if key.UsesTeam() && !discovery && c.Request.Body != nil {
+		var err error
+		body, err = httputil.ReadRequestBodyWithPrealloc(c.Request)
+		if err != nil {
+			AbortWithError(c, http.StatusBadRequest, "INVALID_REQUEST", "Cannot read request body")
+			return nil, nil, false
+		}
+		c.Request.Body = httputil.NewPrereadBody(body)
+	}
 	selected, sub, err := subscriptions.SelectForRequest(c.Request.Context(), key, service.SubscriptionRequest{
+		Body:   body,
 		Models: models, Path: c.Request.URL.Path, Discovery: discovery, WebSocket: isResponsesWebSocketRoute(c),
 	})
 	if err != nil {
@@ -60,4 +88,19 @@ func selectAllSubscriptions(c *gin.Context, key *service.APIKey, subscriptions *
 	}
 	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.AllSubscriptions, true))
 	return selected, sub, true
+}
+
+func releaseTeamRequest(c *gin.Context, subscriptions *service.SubscriptionService) {
+	if c.GetBool("team_request_detached") {
+		return
+	}
+	key, _ := GetAPIKeyFromContext(c)
+	if !key.UsesTeam() || key.Team == nil || key.Team.RequestID == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), 10*time.Second)
+	defer cancel()
+	if err := subscriptions.ReleaseTeamRequest(ctx, key); err != nil {
+		slog.Error("release team request failed", "error", err)
+	}
 }

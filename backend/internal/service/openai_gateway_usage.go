@@ -202,7 +202,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if apiKey.GroupID != nil && apiKey.Group != nil {
 		multiplier = s.ResolveUserGroupRateMultiplier(ctx, user.ID, *apiKey.GroupID, apiKey.Group.RateMultiplier)
 	}
-	if apiKey.UsesAllSubscriptions() && apiKey.SubscriptionRate != nil {
+	if apiKey.UsesDynamicRouting() && apiKey.SubscriptionRate != nil {
 		multiplier = *apiKey.SubscriptionRate
 	}
 	// token 倍率叠加高峰因子（token 计费含图片 token，图片按次倍率不受影响）。
@@ -211,7 +211,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	// Resolve，以免污染 user:group 倍率缓存。
 	baseMultiplier := multiplier
 	pricingAt := openAIUsagePricingAt(input)
-	if apiKey.UsesAllSubscriptions() && !apiKey.SubscriptionPricingAt.IsZero() {
+	if apiKey.UsesDynamicRouting() && !apiKey.SubscriptionPricingAt.IsZero() {
 		pricingAt = apiKey.SubscriptionPricingAt
 	}
 	multiplier, imageMultiplier := computePeakAwareMultipliers(apiKey, baseMultiplier, pricingAt)

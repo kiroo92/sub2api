@@ -2393,12 +2393,12 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return
 	}
 	// 分组级模型白名单：首帧校验客户端模型，不通过则关闭连接并标记运维原因。
-	if apiKey.UsesAllSubscriptions() {
+	if apiKey.UsesDynamicRouting() {
 		if h.subscriptionService == nil {
 			closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "subscription service unavailable")
 			return
 		}
-		selected, sub, err := h.subscriptionService.SelectForRequest(ctx, apiKey, service.SubscriptionRequest{Models: requestmodel.FromBodyCandidates("", "application/json", firstMessage), Path: c.Request.URL.Path, WebSocket: true})
+		selected, sub, err := h.subscriptionService.SelectForRequest(ctx, apiKey, service.SubscriptionRequest{Body: firstMessage, Models: requestmodel.FromBodyCandidates("", "application/json", firstMessage), Path: c.Request.URL.Path, WebSocket: true})
 		if err != nil {
 			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, err.Error())
 			return
@@ -2839,8 +2839,8 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				// 帧内重复 model 键/大小写变体/嵌套 session.model 额外逐一校验，
 				// 防止候选集非空时掩盖被轮换掉的禁用模型。
 				candidates := append([]string{model}, requestmodel.FromBodyCandidates("", "application/json", payload)...)
-				if apiKey.UsesAllSubscriptions() {
-					selected, sub, err := h.subscriptionService.SelectForRequest(ctx, apiKey, service.SubscriptionRequest{Models: candidates, Path: c.Request.URL.Path, WebSocket: true})
+				if apiKey.UsesDynamicRouting() {
+					selected, sub, err := h.subscriptionService.SelectForRequest(ctx, apiKey, service.SubscriptionRequest{Body: payload, Models: candidates, Path: c.Request.URL.Path, WebSocket: true})
 					if err != nil {
 						return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
 					}

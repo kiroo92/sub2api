@@ -241,6 +241,7 @@ import { useAppStore } from "@/stores";
 import { extractApiErrorMessage } from "@/utils/apiError";
 
 const { t, locale } = useI18n();
+const props = defineProps<{ eventFilter?: string }>();
 const appStore = useAppStore();
 
 const fallbackPlaceholders = [
@@ -340,6 +341,11 @@ function localText(zh: string, en: string): string {
 }
 
 const eventDisplayMeta: Record<string, EventDisplayMeta> = {
+  "team.invitation": {
+    label: "团队邀请",
+    timing: "团队所有者或管理员邀请成员时发送，链接使用后台配置的前端地址。",
+    categoryLabel: "团队",
+  },
   "auth.verify_code": {
     label: "邮箱验证码",
     timing: "注册、绑定邮箱、OAuth 补全邮箱或 TOTP 邮箱校验时发送。",
@@ -403,6 +409,11 @@ const eventDisplayMeta: Record<string, EventDisplayMeta> = {
 };
 
 const eventDisplayMetaEn: Record<string, EventDisplayMeta> = {
+  "team.invitation": {
+    label: "Team invitation",
+    timing: "Sent when a team owner or administrator invites a member, using the configured frontend URL.",
+    categoryLabel: "Team",
+  },
   "auth.verify_code": {
     label: "Email Verification Code",
     timing: "Sent for registration, email binding, OAuth pending email completion, or TOTP email verification.",
@@ -618,7 +629,7 @@ async function loadTemplateList() {
   loadingList.value = true;
   try {
     const response = await adminAPI.settings.getEmailTemplates();
-    eventOptions.value = response.events.map(normalizeEventOption);
+    eventOptions.value = response.events.map(normalizeEventOption).filter(option => !props.eventFilter || option.value === props.eventFilter);
     localeOptions.value = response.locales;
     placeholders.value = response.placeholders || [];
     initializingSelection.value = true;

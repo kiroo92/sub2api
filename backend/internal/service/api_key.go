@@ -1,6 +1,7 @@
 package service
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
@@ -33,12 +34,14 @@ func IsWindowExpired(windowStart *time.Time, duration time.Duration) bool {
 }
 
 type APIKey struct {
-	ID          int64
-	UserID      int64
-	Key         string
-	Name        string
-	GroupID     *int64
-	RoutingMode string
+	ID                    int64
+	UserID                int64
+	Key                   string
+	Name                  string
+	GroupID               *int64
+	RoutingMode           string
+	Team                  *TeamAttribution `json:"-"`
+	TeamBillingUnrecorded *atomic.Bool     `json:"-"`
 	// SubscriptionGroups is request-local and used only for union model discovery.
 	SubscriptionGroups    []*Group                `json:"-"`
 	SubscriptionRoute     *CompositeRouteDecision `json:"-"`
@@ -78,6 +81,9 @@ type APIKey struct {
 func (k *APIKey) UsesAllSubscriptions() bool {
 	return k != nil && k.RoutingMode == APIKeyRoutingAllSubscriptions
 }
+
+func (k *APIKey) UsesTeam() bool           { return k != nil && (k.RoutingMode == "team" || k.Team != nil) }
+func (k *APIKey) UsesDynamicRouting() bool { return k.UsesAllSubscriptions() || k.UsesTeam() }
 
 func (k *APIKey) IsActive() bool {
 	return k.Status == StatusActive

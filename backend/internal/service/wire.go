@@ -821,14 +821,16 @@ func ProvideAPIKeyService(
 }
 
 // ProviderSet is the Wire provider set for all services
-func ProvideSubscriptionService(groupRepo GroupRepository, userSubRepo UserSubscriptionRepository, billingCacheService *BillingCacheService, entClient *dbent.Client, cfg *config.Config, accounts AccountRepository, resolver *CompositeRouteResolver, channels *ChannelService, rates UserGroupRateRepository) *SubscriptionService {
+func ProvideSubscriptionService(groupRepo GroupRepository, userSubRepo UserSubscriptionRepository, billingCacheService *BillingCacheService, entClient *dbent.Client, cfg *config.Config, accounts AccountRepository, resolver *CompositeRouteResolver, channels *ChannelService, rates UserGroupRateRepository, teams TeamRepository, users UserRepository) *SubscriptionService {
 	svc := NewSubscriptionService(groupRepo, userSubRepo, billingCacheService, entClient, cfg)
 	svc.accountRepo, svc.compositeResolver, svc.channels = accounts, resolver, channels
 	svc.subscriptionRates = rates
+	svc.teamRepo, svc.teamUsers = teams, users
 	return svc
 }
 
 var ProviderSet = wire.NewSet(
+	NewTeamService,
 	NewLotteryService,
 	NewLotteryCaptchaService,
 	// Core services

@@ -33,6 +33,7 @@ func NewAPIKeyAuthMiddleware(apiKeyService *service.APIKeyService, subscriptionS
 // 异步生图查询允许已耗尽额度的 Key 拉取自身任务结果。
 func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscriptionService *service.SubscriptionService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		defer releaseTeamRequest(c, subscriptionService)
 		// ── 1. 提取 API Key ──────────────────────────────────────────
 		if rejectInvalidAuthAbuse(c, apiKeyService) {
 			AbortWithError(c, http.StatusTooManyRequests, "INVALID_AUTH_RATE_LIMITED", "Too many invalid authentication attempts; retry later")
@@ -158,12 +159,13 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			return
 		}
 		var routedSubscription *service.UserSubscription
-		if apiKey.UsesAllSubscriptions() {
+		if apiKey.UsesDynamicRouting() {
 			var selected bool
 			apiKey, routedSubscription, selected = selectAllSubscriptions(c, apiKey, subscriptionService)
 			if !selected {
 				return
 			}
+			c.Set(string(ContextKeyAPIKey), apiKey)
 		}
 		if abortIfAPIKeyGroupUnavailable(c, apiKey) {
 			return
@@ -178,7 +180,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		// authenticated key and must remain available after the completed
 		// generation consumes the key's remaining balance.
 		skipBilling := c.Request.URL.Path == "/v1/usage" || billingInfoRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
-		if apiKey.UsesAllSubscriptions() && allSubscriptionsReadOnly(c) {
+		if apiKey.UsesDynamicRouting() && allSubscriptionsReadOnly(c) {
 			skipBilling = true
 		}
 

@@ -42,7 +42,7 @@ func (h *GatewayHandler) KeyBillingInfo(c *gin.Context) {
 		h.errorResponse(c, http.StatusNotFound, "not_found_error", "Billing information is not supported in simple mode")
 		return
 	}
-	if apiKey.UsesAllSubscriptions() {
+	if apiKey.UsesDynamicRouting() {
 		groups := make([]gin.H, 0, len(apiKey.SubscriptionGroups))
 		seen := make(map[int64]bool)
 		for _, group := range apiKey.SubscriptionGroups {
@@ -60,7 +60,7 @@ func (h *GatewayHandler) KeyBillingInfo(c *gin.Context) {
 			groups = append(groups, gin.H{"group_id": group.ID, "billing": buildKeyBillingInfo(&local, rate, timezone.Now())})
 		}
 		c.Header("Cache-Control", "no-store")
-		c.JSON(http.StatusOK, gin.H{"object": "sub2api.key_billing", "routing_mode": service.APIKeyRoutingAllSubscriptions, "groups": groups})
+		c.JSON(http.StatusOK, gin.H{"object": "sub2api.key_billing", "routing_mode": apiKey.RoutingMode, "groups": groups})
 		return
 	}
 	if apiKey.GroupID == nil {

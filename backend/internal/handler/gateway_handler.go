@@ -1123,7 +1123,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 // Falls back to default models if no whitelist is configured
 func (h *GatewayHandler) Models(c *gin.Context) {
 	apiKey, _ := middleware2.GetAPIKeyFromContext(c)
-	if apiKey.UsesAllSubscriptions() {
+	if apiKey.UsesDynamicRouting() {
 		writeModelsList(c, "", h.subscriptionModelIDs(c.Request.Context(), apiKey.SubscriptionGroups))
 		return
 	}
@@ -1215,6 +1215,9 @@ func (h *GatewayHandler) subscriptionModelIDs(ctx context.Context, groups []*ser
 		}
 		for _, model := range available {
 			model = strings.TrimSpace(model)
+			if ctx.Value(ctxkey.TeamBilling) == true && service.ValidateTeamTextRequest("", []string{model}, nil) != nil {
+				continue
+			}
 			if model == "" {
 				continue
 			}
@@ -1234,7 +1237,7 @@ func (h *GatewayHandler) subscriptionModelIDs(ctx context.Context, groups []*ser
 // OpenAIGatewayHandler.CodexModels so their live upstream metadata is preserved.
 func (h *GatewayHandler) CodexModels(c *gin.Context) {
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
-	if apiKey.UsesAllSubscriptions() {
+	if apiKey.UsesDynamicRouting() {
 		models := h.subscriptionModelIDs(c.Request.Context(), apiKey.SubscriptionGroups)
 		body, err := h.gatewayService.BuildCodexModelsManifestForGroup(c.Request.Context(), nil, "", models)
 		if err != nil {
@@ -1789,8 +1792,12 @@ func (h *GatewayHandler) usageQuotaLimited(c *gin.Context, ctx context.Context, 
 
 // usageUnrestricted 处理 unrestricted 模式的响应（向后兼容）
 func (h *GatewayHandler) usageUnrestricted(c *gin.Context, ctx context.Context, apiKey *service.APIKey, subject middleware2.AuthSubject, usageData gin.H, dailyUsage any, modelStats any) {
-	if apiKey.UsesAllSubscriptions() {
-		c.JSON(http.StatusOK, gin.H{"mode": "unrestricted", "routing_mode": service.APIKeyRoutingAllSubscriptions, "isValid": len(apiKey.SubscriptionGroups) > 0, "planName": "All subscriptions", "unit": "USD", "usage": usageData, "daily_usage": dailyUsage, "model_stats": modelStats})
+	if apiKey.UsesDynamicRouting() {
+		planName := "All subscriptions"
+		if apiKey.UsesTeam() {
+			planName = "Team"
+		}
+		c.JSON(http.StatusOK, gin.H{"mode": "unrestricted", "routing_mode": apiKey.RoutingMode, "isValid": len(apiKey.SubscriptionGroups) > 0, "planName": planName, "unit": "USD", "usage": usageData, "daily_usage": dailyUsage, "model_stats": modelStats})
 		return
 	}
 	// 订阅模式

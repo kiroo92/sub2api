@@ -48,6 +48,23 @@ func RegisterAdminRoutes(
 
 		admin.GET("/lottery", h.Lottery.AdminGet)
 		admin.PUT("/lottery/config", h.Lottery.Configure)
+		admin.GET("/teams", h.Team.AdminList)
+		admin.GET("/teams/config", h.Team.AdminConfig)
+		admin.PUT("/teams/config", h.Team.AdminConfig)
+		teams := admin.Group("/teams/:team_id", h.Team.AdminScope)
+		teams.GET("", h.Team.Get)
+		teams.PUT("", h.Team.Update)
+		teams.DELETE("", h.Team.Dissolve)
+		teams.GET("/groups", h.Team.Groups)
+		teams.GET("/keys", h.Team.Keys)
+		teams.PUT("/keys/:id", h.Team.UpdateKey)
+		teams.DELETE("/keys/:id", h.Team.DeleteKey)
+		teams.PUT("/members/:user_id/limits", h.Team.Limits)
+		teams.DELETE("/members/:user_id", h.Team.RemoveMember)
+		teams.DELETE("/invitations/:id", h.Team.RevokeInvite)
+		teams.POST("/invitations", h.Team.Invite)
+		teams.POST("/invitations/:id/resend", h.Team.Resend)
+		teams.POST("/billing/recover", panelRateLimiter.Heavy(), h.Team.RecoverBilling)
 
 		// 公告管理
 		registerAnnouncementRoutes(admin, h)

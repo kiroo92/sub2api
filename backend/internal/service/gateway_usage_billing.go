@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -287,6 +288,15 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 		AccountType:        p.Account.Type,
 		RequestPayloadHash: strings.TrimSpace(p.RequestPayloadHash),
 	}
+	if p.APIKey.Team != nil {
+		cmd.TeamMemberID = p.APIKey.Team.MemberID
+		cmd.TeamRequestID = p.APIKey.Team.RequestID
+		if usageLog != nil {
+			snapshot := *usageLog
+			snapshot.User, snapshot.APIKey, snapshot.Account, snapshot.Group, snapshot.Subscription = nil, nil, nil, nil, nil
+			cmd.TeamUsageLog = &snapshot
+		}
+	}
 	if usageLog != nil {
 		cmd.Model = usageLog.Model
 		cmd.BillingType = usageLog.BillingType
@@ -312,7 +322,7 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 	// on "> 0" still correctly skip free subscriptions (RateMultiplier == 0).
 	if p.IsSubscriptionBill && p.Subscription != nil && p.Cost.TotalCost > 0 {
 		cmd.SubscriptionID = &p.Subscription.ID
-		cmd.AdmittedSubscription = p.APIKey.UsesAllSubscriptions()
+		cmd.AdmittedSubscription = p.APIKey.UsesDynamicRouting()
 		cmd.SubscriptionCost = p.Cost.ActualCost
 	} else if p.Cost.ActualCost > 0 {
 		cmd.BalanceCost = p.Cost.ActualCost
@@ -341,7 +351,10 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 	}
 
 	cmd := buildUsageBillingCommand(requestID, usageLog, p)
-	if p.APIKey.UsesAllSubscriptions() && (repo == nil || cmd == nil || cmd.RequestID == "") {
+	if p.APIKey.UsesDynamicRouting() && (repo == nil || cmd == nil || cmd.RequestID == "") {
+		if p.APIKey.TeamBillingUnrecorded != nil {
+			p.APIKey.TeamBillingUnrecorded.Store(true)
+		}
 		return false, ErrBillingServiceUnavailable
 	}
 	if cmd == nil || cmd.RequestID == "" || repo == nil {
@@ -354,6 +367,9 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 
 	result, err := repo.Apply(billingCtx, cmd)
 	if err != nil {
+		if errors.Is(err, ErrTeamBillingUnrecorded) && p.APIKey.TeamBillingUnrecorded != nil {
+			p.APIKey.TeamBillingUnrecorded.Store(true)
+		}
 		return false, err
 	}
 
@@ -379,7 +395,7 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 
 	if p.IsSubscriptionBill {
 		if p.Cost.ActualCost > 0 && p.User != nil && p.APIKey != nil && p.APIKey.GroupID != nil {
-			if p.APIKey.UsesAllSubscriptions() {
+			if p.APIKey.UsesDynamicRouting() {
 				_ = deps.billingCacheService.InvalidateSubscription(ctx, p.User.ID, *p.APIKey.GroupID)
 			} else {
 				deps.billingCacheService.QueueUpdateSubscriptionUsage(p.User.ID, *p.APIKey.GroupID, p.Cost.ActualCost)
@@ -581,6 +597,13 @@ func writeUsageLogBestEffort(ctx context.Context, repo UsageLogRepository, usage
 	}
 	usageCtx, cancel := detachedBillingContext(ctx)
 	defer cancel()
+	if ctx.Value(ctxkey.TeamBilling) == true {
+		// Finish usage persistence before the admission lease can be released and the team deleted.
+		if _, err := repo.Create(usageCtx, usageLog); err != nil {
+			logger.LegacyPrintf(logKey, "Create team usage log failed: %v", err)
+		}
+		return
+	}
 
 	if writer, ok := repo.(usageLogBestEffortWriter); ok {
 		if err := writer.CreateBestEffort(usageCtx, usageLog); err != nil {
@@ -759,13 +782,13 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		groupDefault := apiKey.Group.RateMultiplier
 		multiplier = s.ResolveUserGroupRateMultiplier(ctx, user.ID, *apiKey.GroupID, groupDefault)
 	}
-	if apiKey.UsesAllSubscriptions() && apiKey.SubscriptionRate != nil {
+	if apiKey.UsesDynamicRouting() && apiKey.SubscriptionRate != nil {
 		multiplier = *apiKey.SubscriptionRate
 	}
 	// token 倍率叠加高峰因子（token 计费含图片 token，图片按次倍率不受影响）。高峰因子按请求时刻现算，
 	// 不并入上面的 getUserGroupRateMultiplier，以免污染 user:group 倍率缓存。
 	pricingAt := input.PricingAt
-	if apiKey.UsesAllSubscriptions() && !apiKey.SubscriptionPricingAt.IsZero() {
+	if apiKey.UsesDynamicRouting() && !apiKey.SubscriptionPricingAt.IsZero() {
 		pricingAt = apiKey.SubscriptionPricingAt
 	}
 	if pricingAt.IsZero() {

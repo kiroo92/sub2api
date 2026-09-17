@@ -23,6 +23,9 @@ type UsageBillingCommand struct {
 	RequestPayloadHash string
 
 	UserID         int64
+	TeamMemberID   int64
+	TeamRequestID  string
+	TeamUsageLog   *UsageLog `json:",omitempty"`
 	AccountID      int64
 	SubscriptionID *int64
 	// AdmittedSubscription retains billing on the original row after revocation.
@@ -133,6 +136,9 @@ func buildUsageBillingFingerprint(c *UsageBillingCommand) string {
 	)
 	if payloadHash := strings.TrimSpace(c.RequestPayloadHash); payloadHash != "" {
 		raw += "|" + payloadHash
+	}
+	if c.TeamMemberID > 0 {
+		raw += fmt.Sprintf("|team:%d:%s", c.TeamMemberID, c.TeamRequestID)
 	}
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])

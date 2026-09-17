@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"strings"
+	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -31,6 +33,11 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBi
 	if cmd.RequestID == "" {
 		return nil, service.ErrUsageBillingRequestIDRequired
 	}
+	if cmd.TeamMemberID > 0 {
+		if err := r.saveTeamBill(ctx, cmd); err != nil {
+			return nil, service.ErrTeamBillingUnrecorded.WithCause(err)
+		}
+	}
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -47,11 +54,21 @@ func (r *usageBillingRepository) Apply(ctx context.Context, cmd *service.UsageBi
 		return nil, err
 	}
 	if !applied {
+		if err = deletePendingTeamBill(ctx, tx, cmd); err != nil {
+			return nil, err
+		}
+		if err = tx.Commit(); err != nil {
+			return nil, err
+		}
+		tx = nil
 		return &service.UsageBillingApplyResult{Applied: false}, nil
 	}
 
 	result := &service.UsageBillingApplyResult{Applied: true}
 	if err := r.applyUsageBillingEffects(ctx, tx, cmd, result); err != nil {
+		return nil, err
+	}
+	if err = deletePendingTeamBill(ctx, tx, cmd); err != nil {
 		return nil, err
 	}
 
@@ -172,6 +189,27 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 }
 
 func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, tx *sql.Tx, cmd *service.UsageBillingCommand, result *service.UsageBillingApplyResult) error {
+	if cmd.TeamMemberID > 0 {
+		// Durable admission is mandatory, including completion after member removal.
+		var member int64
+		if err := tx.QueryRowContext(ctx, `SELECT m.id FROM team_requests r JOIN team_members m ON m.id=r.member_id JOIN teams t ON t.id=m.team_id WHERE r.id=$1 AND r.api_key_id=$2 AND m.id=$3 AND t.owner_id=$4 FOR UPDATE OF m`, cmd.TeamRequestID, cmd.APIKeyID, cmd.TeamMemberID, cmd.UserID).Scan(&member); err != nil {
+			return service.ErrTeamForbidden
+		}
+		cost := service.QuantizeUsageBillingAmount(cmd.BalanceCost + cmd.SubscriptionCost)
+		if _, err := tx.ExecContext(ctx, `UPDATE team_members SET
+daily_used=CASE WHEN daily_start IS NULL OR daily_start<$3 THEN $2 ELSE daily_used+$2 END,
+weekly_used=CASE WHEN weekly_start IS NULL OR weekly_start+INTERVAL '7 days'<=NOW() THEN $2 ELSE weekly_used+$2 END,
+monthly_used=CASE WHEN monthly_start IS NULL OR monthly_start+INTERVAL '30 days'<=NOW() THEN $2 ELSE monthly_used+$2 END,
+daily_start=$3,
+weekly_start=CASE WHEN weekly_start IS NULL OR weekly_start+INTERVAL '7 days'<=NOW() THEN NOW() ELSE weekly_start END,
+monthly_start=CASE WHEN monthly_start IS NULL OR monthly_start+INTERVAL '30 days'<=NOW() THEN NOW() ELSE monthly_start END,
+total_used=total_used+$2 WHERE id=$1`, member, cost, timezone.StartOfDay(time.Now())); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE api_keys SET quota_used=quota_used+$2 WHERE id=$1`, cmd.APIKeyID, cost); err != nil {
+			return err
+		}
+	}
 	if cmd.SubscriptionCost > 0 && cmd.SubscriptionID != nil {
 		var err error
 		if cmd.AdmittedSubscription {

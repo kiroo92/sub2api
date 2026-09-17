@@ -13,6 +13,7 @@ import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveRouteDocumentTitle } from './title'
+import { rememberTeamInvitation, hasPendingTeamInvitation } from '@/utils/teamInvitation'
 
 /**
  * Route definitions with lazy loading
@@ -188,6 +189,17 @@ const routes: RouteRecordRaw[] = [
 
   // ==================== User Routes ====================
   {
+    path: '/admin/teams', name: 'AdminTeams',
+    component: () => import('@/views/admin/TeamsView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Teams', titleKey: 'team.adminTitle' }
+  },
+  {
+    path: '/admin/teams/:id(\\d+)', name: 'AdminTeamDetail',
+    component: () => import('@/views/admin/TeamDetailView.vue'),
+    props: route => ({ adminTeamId: Number(route.params.id) }),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Team', titleKey: 'team.adminTitle' }
+  },
+  {
     path: '/',
     redirect: '/home'
   },
@@ -294,6 +306,18 @@ const routes: RouteRecordRaw[] = [
       title: 'Profile',
       titleKey: 'profile.title',
       descriptionKey: 'profile.description'
+    }
+  },
+  {
+    path: '/team',
+    name: 'Team',
+    component: () => import('@/views/user/TeamView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Team',
+      titleKey: 'team.title',
+      descriptionKey: 'team.description'
     }
   },
   {
@@ -797,6 +821,16 @@ router.beforeEach(async (to, _from, next) => {
   if (!authInitialized) {
     authStore.checkAuth()
     authInitialized = true
+  }
+
+  // Keep invitation tokens out of login query strings and preserve them through registration.
+  if (to.path === '/team' && rememberTeamInvitation(to.hash)) {
+    next({ path: '/team', replace: true })
+    return
+  }
+  if (authStore.isAuthenticated && ['/dashboard', '/admin/dashboard'].includes(to.path) && hasPendingTeamInvitation()) {
+    next('/team')
+    return
   }
 
   // Set page title

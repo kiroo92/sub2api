@@ -749,7 +749,7 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 
 	if isSubscriptionMode {
 		var err error
-		if apiKey.UsesAllSubscriptions() {
+		if apiKey.UsesDynamicRouting() {
 			var current *UserSubscription
 			current, err = s.subRepo.GetByID(ctx, subscription.ID)
 			if err == nil {

@@ -797,7 +797,7 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 	}
 
 	// 验证所有权
-	if apiKey.UserID != userID {
+	if apiKey.UserID != userID || apiKey.UsesTeam() {
 		return nil, ErrInsufficientPerms
 	}
 

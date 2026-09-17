@@ -171,7 +171,7 @@ func (h *APIKeyHandler) GetByID(c *gin.Context) {
 	}
 
 	// 验证所有权
-	if key.UserID != subject.UserID {
+	if key.UserID != subject.UserID || key.UsesTeam() {
 		response.NotFound(c, "API key not found")
 		return
 	}

@@ -48,6 +48,8 @@ var (
 
 // SubscriptionService 订阅服务
 type SubscriptionService struct {
+	teamRepo            TeamRepository
+	teamUsers           UserRepository
 	accountRepo         AccountRepository
 	compositeResolver   *CompositeRouteResolver
 	channels            *ChannelService

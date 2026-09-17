@@ -114,12 +114,14 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			return
 		}
 		var routedSubscription *service.UserSubscription
-		if apiKey.UsesAllSubscriptions() {
+		if apiKey.UsesDynamicRouting() {
+			defer releaseTeamRequest(c, subscriptionService)
 			var selected bool
 			apiKey, routedSubscription, selected = selectAllSubscriptions(c, apiKey, subscriptionService)
 			if !selected {
 				return
 			}
+			c.Set(string(ContextKeyAPIKey), apiKey)
 		}
 		if code, message, ok := validateAPIKeyGroupAvailable(apiKey); !ok {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonAPIKeyGroupUnavailable)

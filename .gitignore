@@ -139,6 +139,10 @@ docs/*
 !docs/ASYNC_IMAGE_TASKS.md
 !docs/BATCH_IMAGE_MVP.md
 !docs/lottery.md
+!docs/team-requirements.md
+!docs/team-api.md
+!docs/team-billing.md
+!docs/team-implementation.md
 !docs/COMPOSITE_GROUPS.md
 !docs/PLUGIN_DEVELOPMENT.md
 !docs/channel-monitor-v2-safe-defaults.md

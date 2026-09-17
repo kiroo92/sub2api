@@ -122,6 +122,9 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		"poll_url":   pollURL,
 	})
 
+	if apiKey.UsesTeam() {
+		c.Set("team_request_detached", true)
+	}
 	go h.run(task.ID, platform, taskCtx, recorder, cancel)
 }
 
@@ -222,6 +225,16 @@ func (h *AsyncImageHandler) executeWithGateway(platform string, c *gin.Context) 
 
 func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, recorder *httptest.ResponseRecorder, cancel context.CancelFunc) {
 	defer cancel()
+	defer func() {
+		key, _ := middleware2.GetAPIKeyFromContext(taskCtx)
+		if key.UsesTeam() && h.openAI != nil && h.openAI.subscriptionService != nil {
+			ctx, done := context.WithTimeout(context.Background(), 10*time.Second)
+			defer done()
+			if err := h.openAI.subscriptionService.ReleaseTeamRequest(ctx, key); err != nil {
+				logger.L().Error("team.async_release_failed", zap.Error(err))
+			}
+		}
+	}()
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			logger.L().Error("image_task.execution_panicked", zap.String("task_id", taskID), zap.Any("panic", recovered))

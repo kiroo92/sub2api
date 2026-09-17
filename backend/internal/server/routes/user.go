@@ -73,6 +73,26 @@ func RegisterUserRoutes(
 		}
 
 		// API Key管理
+		team := authenticated.Group("/team")
+		{
+			team.GET("", h.Team.Get)
+			team.POST("", h.Team.Create)
+			team.PUT("", h.Team.Update)
+			team.DELETE("", h.Team.Dissolve)
+			team.POST("/leave", h.Team.Leave)
+			team.POST("/billing/recover", panelRateLimiter.Heavy(), h.Team.RecoverBilling)
+			team.GET("/groups", h.Team.Groups)
+			team.PUT("/members/:user_id/limits", h.Team.Limits)
+			team.DELETE("/members/:user_id", h.Team.RemoveMember)
+			team.POST("/invitations", h.Team.Invite)
+			team.POST("/invitations/accept", h.Team.Accept)
+			team.POST("/invitations/:id/resend", h.Team.Resend)
+			team.DELETE("/invitations/:id", h.Team.RevokeInvite)
+			team.GET("/keys", h.Team.Keys)
+			team.POST("/keys", h.Team.CreateKey)
+			team.PUT("/keys/:id", h.Team.UpdateKey)
+			team.DELETE("/keys/:id", h.Team.DeleteKey)
+		}
 		keys := authenticated.Group("/keys")
 		{
 			keys.GET("", h.APIKey.List)

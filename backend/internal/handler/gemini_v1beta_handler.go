@@ -40,7 +40,7 @@ func (h *GatewayHandler) GeminiV1BetaListModels(c *gin.Context) {
 		return
 	}
 	// 检查平台：优先使用强制平台（/antigravity 路由），否则要求 gemini 分组
-	if apiKey.UsesAllSubscriptions() {
+	if apiKey.UsesDynamicRouting() {
 		groups := make([]*service.Group, 0)
 		for _, group := range apiKey.SubscriptionGroups {
 			if group.Platform == service.PlatformGemini || group.Platform == service.PlatformAntigravity || group.Platform == service.PlatformComposite {
@@ -184,7 +184,7 @@ func filterUpstreamGeminiModelsBody(body []byte, allowlist service.GroupModelAll
 // GET /v1beta/models/{model}
 func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
 	apiKey, ok := middleware.GetAPIKeyFromContext(c)
-	if apiKey.UsesAllSubscriptions() {
+	if apiKey.UsesDynamicRouting() {
 		h.GeminiV1BetaListModels(c)
 		return
 	}

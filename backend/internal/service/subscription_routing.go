@@ -12,14 +12,30 @@ import (
 var ErrNoEligibleSubscription = infraerrors.Forbidden("SUBSCRIPTION_NOT_AVAILABLE", "no eligible subscription is available")
 
 type SubscriptionRequest struct {
-	Models    []string
-	Path      string
-	Discovery bool
-	WebSocket bool
+	Body               []byte
+	Models             []string
+	Path               string
+	Discovery          bool
+	WebSocket          bool
+	RequireSchedulable bool
 }
 
 // SelectForRequest reads individual records, never the single-row group cache.
 func (s *SubscriptionService) SelectForRequest(ctx context.Context, key *APIKey, request SubscriptionRequest) (*APIKey, *UserSubscription, error) {
+	if key.UsesTeam() {
+		if err := ValidateTeamTextRequest(request.Path, request.Models, request.Body); err != nil {
+			return nil, nil, err
+		}
+		selected, sub, err := s.selectTeamForRequest(ctx, key, request)
+		if err == nil && !request.Discovery {
+			err = s.AdmitTeamRequest(ctx, selected)
+		}
+		return selected, sub, err
+	}
+	return s.selectSubscriptionsForRequest(ctx, key, request, nil)
+}
+
+func (s *SubscriptionService) selectSubscriptionsForRequest(ctx context.Context, key *APIKey, request SubscriptionRequest, groupID *int64) (*APIKey, *UserSubscription, error) {
 	if key == nil || key.User == nil || !key.UsesAllSubscriptions() {
 		return nil, nil, ErrNoEligibleSubscription
 	}
@@ -38,6 +54,9 @@ func (s *SubscriptionService) SelectForRequest(ctx context.Context, key *APIKey,
 	now := time.Now()
 	for i := range subs {
 		sub := &subs[i]
+		if groupID != nil && sub.GroupID != *groupID {
+			continue
+		}
 		if sub.UserID != key.User.ID || sub.Status != SubscriptionStatusActive || sub.DeletedAt != nil || !sub.ExpiresAt.After(now) || sub.StartsAt.After(now) || sub.Group == nil || !sub.Group.IsActive() || !sub.Group.IsSubscriptionType() {
 			continue
 		}
@@ -97,6 +116,9 @@ func (s *SubscriptionService) SelectForRequest(ctx context.Context, key *APIKey,
 }
 
 func SubscriptionRequestContext(ctx context.Context, key *APIKey) context.Context {
+	if key.UsesTeam() {
+		ctx = context.WithValue(ctx, ctxkey.TeamBilling, true)
+	}
 	ctx = context.WithValue(ctx, ctxkey.Group, key.Group)
 	for _, name := range []ctxkey.Key{ctxkey.ResolvedTargetPlatform, ctxkey.ResolvedUpstreamModel, ctxkey.RequestedPublicModel, ctxkey.CompositeRouteSource} {
 		ctx = context.WithValue(ctx, name, "")
@@ -195,6 +217,9 @@ func (s *SubscriptionService) subscriptionSupportsRequest(ctx context.Context, g
 			supported := false
 			for i := range accounts {
 				account := &accounts[i]
+				if request.RequireSchedulable && !account.IsSchedulable() {
+					continue
+				}
 				if account.Platform == PlatformAntigravity && platform != PlatformAntigravity && !account.IsMixedSchedulingEnabled() {
 					continue
 				}
