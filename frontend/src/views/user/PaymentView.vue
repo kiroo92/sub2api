@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout :class="{ 'subscription-layout': activeTab === 'subscription' }">
     <div class="mx-auto max-w-4xl space-y-6">
       <div v-if="loading" class="flex items-center justify-center py-20">
         <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
@@ -99,6 +99,13 @@
           </template>
           <!-- Subscribe Tab -->
           <template v-else-if="activeTab === 'subscription'">
+            <section class="subscription-intro" :aria-labelledby="!selectedPlan ? 'subscription-intro-title' : undefined">
+              <h2 v-if="!selectedPlan" id="subscription-intro-title" class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('payment.subscriptionPlansTitle') }}</h2>
+              <div class="flex items-start gap-3 rounded-lg border border-primary-100 bg-primary-50/70 px-4 py-3.5 dark:border-primary-900/60 dark:bg-primary-950/30" :class="{ 'mt-3': !selectedPlan }" role="note">
+                <Icon name="infoCircle" size="sm" class="mt-0.5 shrink-0 text-primary-600 dark:text-primary-400" aria-hidden="true" />
+                <div><p class="text-sm font-medium text-gray-800 dark:text-gray-100">{{ t('payment.independentSubscriptionTitle') }}</p><p class="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-400">{{ t('payment.independentSubscriptionHint') }}</p></div>
+              </div>
+            </section>
             <!-- Subscription confirm (inline, replaces plan list) -->
             <template v-if="selectedPlan">
               <div class="card p-5">
@@ -330,7 +337,7 @@ const loading = ref(true)
 const submitting = ref(false)
 const errorMessage = ref('')
 const errorHintMessage = ref('')
-const activeTab = ref<'recharge' | 'subscription'>('recharge')
+const activeTab = ref<'recharge' | 'subscription'>(route.query.tab === 'recharge' ? 'recharge' : 'subscription')
 const amount = ref<number | null>(null)
 const selectedMethod = ref('')
 const selectedPlan = ref<SubscriptionPlan | null>(null)
@@ -523,8 +530,8 @@ const subscriptionEnabled = computed(() => resolveFeatureFlag(appStore.cachedPub
 
 const tabs = computed(() => {
   const result: { key: 'recharge' | 'subscription'; label: string }[] = []
-  if (!checkout.value.balance_disabled) result.push({ key: 'recharge', label: t('payment.tabTopUp') })
   if (subscriptionEnabled.value) result.push({ key: 'subscription', label: t('payment.tabSubscribe') })
+  if (!checkout.value.balance_disabled) result.push({ key: 'recharge', label: t('payment.tabTopUp') })
   return result
 })
 
@@ -535,7 +542,7 @@ watch(tabs, (available) => {
   const leavingSubscription = activeTab.value === 'subscription'
   activeTab.value = available[0]?.key ?? 'recharge'
   if (leavingSubscription) selectedPlan.value = null
-})
+}, { immediate: true })
 
 const visibleMethods = computed(() => getVisibleMethods(checkout.value.methods))
 const enabledMethods = computed(() => Object.keys(visibleMethods.value))
@@ -1094,6 +1101,7 @@ async function resumeWechatPaymentFromQuery() {
   }
 
   selectedMethod.value = resume.paymentType
+  activeTab.value = resume.orderType === 'subscription' ? 'subscription' : 'recharge'
   if (resume.orderType === 'balance' && resume.orderAmount > 0) {
     amount.value = resume.orderAmount
   }
@@ -1149,6 +1157,7 @@ onMounted(async () => {
       )
       if (restored) {
         paymentState.value = restored
+        activeTab.value = restored.orderType === 'subscription' ? 'subscription' : 'recharge'
         paymentPhase.value = 'paying'
         const restoredMethod = normalizeVisibleMethod(restored.paymentType)
           || (visibleMethods.value[restored.paymentType] ? restored.paymentType : '')
@@ -1183,3 +1192,9 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+.subscription-layout { background: #f8fafc; }
+.dark .subscription-layout { background: #0f172a; }
+.subscription-layout :deep(.bg-mesh-gradient) { display: none; }
+</style>

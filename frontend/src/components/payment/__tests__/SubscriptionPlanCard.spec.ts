@@ -99,7 +99,7 @@ describe("SubscriptionPlanCard", () => {
     expect(title.attributes("title")).toBe(name);
     expect(title.classes()).toEqual(expect.arrayContaining([
       "min-w-0",
-      "h-12",
+      "min-h-14",
       "break-words",
       "line-clamp-2",
       "[overflow-wrap:anywhere]",
@@ -119,16 +119,15 @@ describe("SubscriptionPlanCard", () => {
     const price = wrapper.findAll("span").find((node) => node.text() === "123.45");
 
     expect(title.element.parentElement?.classList).toContain("min-w-0");
-    expect(title.element.parentElement?.classList).toContain("flex-1");
     expect(badge?.classes()).toContain("shrink-0");
     expect([...(badge?.element.parentElement?.classList ?? [])]).toEqual(expect.arrayContaining([
       "flex",
       "items-center",
-      "justify-end",
+      "justify-between",
     ]));
-    expect(badge?.element.parentElement?.textContent).toContain("/ 30payment.days");
-    expect(badge?.element.parentElement?.parentElement?.classList).toContain("shrink-0");
-    expect(price?.element.parentElement?.parentElement?.classList).toContain("shrink-0");
+    expect(badge?.element.parentElement?.textContent).toContain("30payment.days");
+    expect(price?.element.parentElement?.textContent).toContain("/ 30payment.days");
+    expect(title.element.parentElement?.contains(price!.element)).toBe(false);
     expect(wrapper.get("p").text()).toBe("Includes advanced models and priority support.");
     expect(wrapper.get("button").text()).toBe("payment.subscribeNow");
   });
@@ -140,12 +139,12 @@ describe("SubscriptionPlanCard", () => {
 
     expect(title.text()).toBe("Pro");
     expect(title.attributes("title")).toBe("Pro");
-    expect(title.classes()).toEqual(expect.arrayContaining(["text-base", "font-bold", "h-12"]));
+    expect(title.classes()).toEqual(expect.arrayContaining(["text-lg", "font-semibold", "min-h-14"]));
     expect([...(badge?.element.parentElement?.classList ?? [])]).toEqual(expect.arrayContaining([
       "flex",
       "items-center",
-      "justify-end",
+      "justify-between",
     ]));
-    expect(badge?.element.parentElement?.textContent).toContain("/ 30payment.days");
+    expect(badge?.element.parentElement?.textContent).toContain("30payment.days");
   });
 });

@@ -256,10 +256,10 @@ async function mountSubscriptionConfirm(options: Parameters<typeof checkoutInfoW
   return wrapper
 }
 
-async function mountSubscriptionPlanList(planCount: number) {
+async function mountSubscriptionPlanList(planCount: number, query: Record<string, unknown> = { tab: 'subscription' }) {
   vi.useRealTimers()
   routeState.path = '/purchase'
-  routeState.query = { tab: 'subscription' }
+  routeState.query = query
   routerReplace.mockReset().mockResolvedValue(undefined)
   routerPush.mockReset().mockResolvedValue(undefined)
   routerResolve.mockClear()
@@ -378,7 +378,7 @@ describe('PaymentView recharge rate preview', () => {
   it('uses the selected payment method currency in both locale templates', async () => {
     translate.mockClear()
     routeState.path = '/purchase'
-    routeState.query = {}
+    routeState.query = { tab: 'recharge' }
     getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({
       balance_recharge_multiplier: 0.5,
       methods: {
@@ -832,11 +832,32 @@ describe('PaymentView subscription feature flag', () => {
       .filter((text) => text === 'payment.tabTopUp' || text === 'payment.tabSubscribe')
   }
 
-  it('keeps the top-up / subscribe switcher when subscription_enabled is absent (opt-out default)', async () => {
-    const wrapper = await mountSubscriptionPlanList(2)
+  it('puts subscriptions first and opens them by default', async () => {
+    const wrapper = await mountSubscriptionPlanList(2, {})
 
-    expect(tabLabels(wrapper)).toEqual(['payment.tabTopUp', 'payment.tabSubscribe'])
+    expect(tabLabels(wrapper)).toEqual(['payment.tabSubscribe', 'payment.tabTopUp'])
     expect(wrapper.findAllComponents(SubscriptionPlanCard)).toHaveLength(2)
+    expect(wrapper.get('[role="note"]').text()).toContain('payment.independentSubscriptionHint')
+    const recharge = wrapper.findAll('button').find(button => button.text() === 'payment.tabTopUp')!
+    await recharge.trigger('click')
+    expect(wrapper.findComponent(AmountInput).exists()).toBe(true)
+    expect(wrapper.find('[role="note"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('explains independent repeat purchases before payment confirmation', async () => {
+    const wrapper = await mountSubscriptionConfirm()
+    expect(wrapper.get('[role="note"]').text()).toContain('payment.independentSubscriptionHint')
+    expect(zh.payment.independentSubscriptionHint).toContain('不叠加时长')
+    expect(createOrder).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('respects a direct top-up link while keeping subscriptions first', async () => {
+    const wrapper = await mountSubscriptionPlanList(2, { tab: 'recharge' })
+    expect(tabLabels(wrapper)).toEqual(['payment.tabSubscribe', 'payment.tabTopUp'])
+    expect(wrapper.findComponent(AmountInput).exists()).toBe(true)
+    wrapper.unmount()
   })
 
   it('drops the subscribe tab, hides the switcher and ignores ?tab=subscription when subscriptions are disabled', async () => {

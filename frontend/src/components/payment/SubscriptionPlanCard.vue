@@ -1,111 +1,94 @@
 <template>
-  <div
-    :class="[
-      'group relative flex flex-col overflow-hidden rounded-2xl border transition-all',
-      'hover:shadow-xl hover:-translate-y-0.5',
-      borderClass,
-      'bg-white dark:bg-dark-800',
-    ]"
-  >
-    <!-- Colored top accent bar -->
-    <div :class="['h-1.5', accentClass]" />
-
-    <div class="flex flex-1 flex-col p-4">
-      <!-- Header: name + badge + price -->
-      <div class="mb-3 flex items-start justify-between gap-2">
-        <div class="min-w-0 flex-1">
-          <h3
-            :title="plan.name"
-            class="h-12 min-w-0 break-words [overflow-wrap:anywhere] text-base font-bold leading-6 text-gray-900 dark:text-white line-clamp-2"
-          >
-            {{ plan.name }}
-          </h3>
-          <p v-if="plan.description" class="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-dark-400 line-clamp-2">
-            {{ plan.description }}
-          </p>
-        </div>
-        <div class="shrink-0 text-right">
-          <div class="flex items-baseline gap-1">
-            <span class="text-xs text-gray-400 dark:text-dark-500">{{ planCurrencySymbol }}</span>
-            <span :class="['text-2xl font-extrabold tracking-tight', textClass]">{{ plan.price }}</span>
-            <span v-if="plan.currency" class="text-xs font-medium text-gray-400 dark:text-dark-500">{{ plan.currency }}</span>
-          </div>
-          <div class="flex items-center justify-end gap-1">
-            <span :class="['inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium', badgeLightClass]">
-              {{ pLabel }}
-            </span>
-            <span class="text-[11px] text-gray-400 dark:text-dark-500">/ {{ validitySuffix }}</span>
-          </div>
-          <div v-if="plan.original_price" class="mt-0.5 flex items-center justify-end gap-1.5">
-            <span class="text-xs text-gray-400 line-through dark:text-dark-500">{{ planCurrencySymbol }}{{ plan.original_price }}<template v-if="plan.currency"> {{ plan.currency }}</template></span>
-            <span :class="['rounded px-1 py-0.5 text-[10px] font-semibold', discountClass]">{{ discountText }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Group quota info (compact) -->
-      <div class="mb-3 grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg bg-gray-50 px-3 py-2 text-xs dark:bg-dark-700/50">
-        <div class="flex items-center justify-between">
-          <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.rate') }}</span>
-          <span class="font-medium text-gray-700 dark:text-gray-300">{{ rateDisplay }}</span>
-        </div>
-        <div v-if="hasPeakRate" class="col-span-2 flex items-center justify-between gap-2">
-          <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.peakRate') }}</span>
-          <span class="text-right font-medium text-amber-700 dark:text-amber-300">{{ peakRateDisplay }}</span>
-        </div>
-        <div v-if="plan.daily_limit_usd != null" class="flex items-center justify-between">
-          <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.dailyLimit') }}</span>
-          <span class="font-medium text-gray-700 dark:text-gray-300">${{ plan.daily_limit_usd }}</span>
-        </div>
-        <div v-if="plan.weekly_limit_usd != null" class="flex items-center justify-between">
-          <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.weeklyLimit') }}</span>
-          <span class="font-medium text-gray-700 dark:text-gray-300">${{ plan.weekly_limit_usd }}</span>
-        </div>
-        <div v-if="plan.monthly_limit_usd != null" class="flex items-center justify-between">
-          <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.monthlyLimit') }}</span>
-          <span class="font-medium text-gray-700 dark:text-gray-300">${{ plan.monthly_limit_usd }}</span>
-        </div>
-        <div v-if="plan.daily_limit_usd == null && plan.weekly_limit_usd == null && plan.monthly_limit_usd == null" class="flex items-center justify-between">
-          <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.quota') }}</span>
-          <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('payment.planCard.unlimited') }}</span>
-        </div>
-        <div v-if="modelScopeLabels.length > 0" class="col-span-2 flex items-center justify-between">
-          <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.models') }}</span>
-          <div class="flex flex-wrap justify-end gap-1">
-            <span v-for="scope in modelScopeLabels" :key="scope"
-              class="rounded bg-gray-200/80 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-dark-600 dark:text-gray-300">
-              {{ scope }}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Features list (compact) -->
-      <div v-if="plan.features.length > 0" class="mb-3 space-y-1">
-        <div v-for="feature in plan.features" :key="feature" class="flex items-start gap-1.5">
-          <svg :class="['mt-0.5 h-3.5 w-3.5 flex-shrink-0', iconClass]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-          </svg>
-          <span class="text-xs text-gray-600 dark:text-gray-300">{{ feature }}</span>
-        </div>
-      </div>
-
-      <div class="flex-1" />
-
-      <!-- Subscribe Button -->
-      <button
-        type="button"
-        :class="['w-full rounded-xl py-2.5 text-sm font-semibold transition-all active:scale-[0.98]', btnClass]"
-        @click="emit('select', plan)"
-      >
-        {{ t('payment.subscribeNow') }}
-      </button>
+  <article class="subscription-plan flex min-w-0 flex-col rounded-lg border border-gray-200 bg-white p-5 transition-colors hover:border-primary-300 dark:border-dark-700 dark:bg-dark-800 dark:hover:border-primary-600">
+    <div class="mb-4 flex items-center justify-between gap-3">
+      <span :class="['inline-flex shrink-0 rounded-md px-2 py-1 text-xs font-medium', badgeLightClass]">{{ pLabel }}</span>
+      <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.planCard.validity') }} · {{ validitySuffix }}</span>
     </div>
-  </div>
+    <div class="min-w-0">
+      <h3
+        :title="plan.name"
+        class="min-h-14 min-w-0 break-words [overflow-wrap:anywhere] text-lg font-semibold leading-7 text-gray-900 dark:text-white line-clamp-2"
+      >
+        {{ plan.name }}
+      </h3>
+      <p v-if="plan.description" class="mt-2 min-h-10 text-sm leading-5 text-gray-500 dark:text-gray-400 line-clamp-2" :title="plan.description">
+        {{ plan.description }}
+      </p>
+    </div>
+    <div class="my-5">
+      <div class="flex flex-wrap items-baseline gap-x-1.5 text-gray-900 dark:text-white">
+        <span class="text-lg font-medium">{{ planCurrencySymbol }}</span>
+        <span class="text-3xl font-semibold tabular-nums">{{ plan.price }}</span>
+        <span v-if="plan.currency" class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ plan.currency }}</span>
+        <span class="ml-1 text-sm text-gray-500 dark:text-gray-400">/ {{ validitySuffix }}</span>
+      </div>
+      <div v-if="plan.original_price" class="mt-2 flex items-center gap-2">
+        <span class="text-xs text-gray-400 line-through dark:text-dark-500">{{ planCurrencySymbol }}{{ plan.original_price }}<template v-if="plan.currency"> {{ plan.currency }}</template></span>
+        <span :class="['rounded px-1 py-0.5 text-[10px] font-semibold', discountClass]">{{ discountText }}</span>
+      </div>
+    </div>
+
+    <div class="plan-quotas mb-5 grid grid-cols-2 gap-x-5 gap-y-4 border-y border-gray-100 py-4 text-sm dark:border-dark-700">
+      <div class="flex items-center justify-between">
+        <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.rate') }}</span>
+        <span class="font-medium text-gray-700 dark:text-gray-300">{{ rateDisplay }}</span>
+      </div>
+      <div v-if="hasPeakRate" class="col-span-2 flex items-center justify-between gap-2">
+        <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.peakRate') }}</span>
+        <span class="text-right font-medium text-amber-700 dark:text-amber-300">{{ peakRateDisplay }}</span>
+      </div>
+      <div v-if="plan.daily_limit_usd != null" class="flex items-center justify-between">
+        <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.dailyLimit') }}</span>
+        <span class="font-medium text-gray-700 dark:text-gray-300">${{ plan.daily_limit_usd }}</span>
+      </div>
+      <div v-if="plan.weekly_limit_usd != null" class="flex items-center justify-between">
+        <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.weeklyLimit') }}</span>
+        <span class="font-medium text-gray-700 dark:text-gray-300">${{ plan.weekly_limit_usd }}</span>
+      </div>
+      <div v-if="plan.monthly_limit_usd != null" class="flex items-center justify-between">
+        <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.monthlyLimit') }}</span>
+        <span class="font-medium text-gray-700 dark:text-gray-300">${{ plan.monthly_limit_usd }}</span>
+      </div>
+      <div v-if="plan.daily_limit_usd == null && plan.weekly_limit_usd == null && plan.monthly_limit_usd == null" class="flex items-center justify-between">
+        <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.quota') }}</span>
+        <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('payment.planCard.unlimited') }}</span>
+      </div>
+      <div v-if="modelScopeLabels.length > 0" class="col-span-2 flex items-center justify-between">
+        <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.models') }}</span>
+        <div class="flex flex-wrap justify-end gap-1">
+          <span v-for="scope in modelScopeLabels" :key="scope"
+                class="rounded bg-gray-200/80 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-dark-600 dark:text-gray-300">
+            {{ scope }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Features list (compact) -->
+    <div v-if="plan.features.length > 0" class="mb-6 space-y-2.5">
+      <div v-for="feature in plan.features" :key="feature" class="flex items-start gap-1.5">
+        <Icon name="check" size="sm" :class="['mt-0.5 flex-shrink-0', iconClass]" aria-hidden="true" />
+        <span class="min-w-0 break-words text-sm text-gray-600 dark:text-gray-300">{{ feature }}</span>
+      </div>
+    </div>
+
+    <div class="flex-1" />
+
+    <!-- Subscribe Button -->
+    <button
+      type="button"
+      class="flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-primary-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
+      @click="emit('select', plan)"
+    >
+      {{ t('payment.subscribeNow') }}
+      <Icon name="chevronRight" size="sm" aria-hidden="true" />
+    </button>
+  </article>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import Icon from '@/components/icons/Icon.vue'
 import { useI18n } from 'vue-i18n'
 import type { SubscriptionPlan } from '@/types/payment'
 import { useAppStore } from '@/stores/app'
@@ -113,12 +96,8 @@ import { hasPeakRate as groupHasPeakRate, formatPeakRateWindow, serverTimezoneLa
 import { planValiditySuffix } from './validity'
 import { currencySymbol } from '@/components/payment/currency'
 import {
-  platformAccentBarClass,
   platformBadgeLightClass,
-  platformBorderClass,
-  platformTextClass,
   platformIconClass,
-  platformButtonClass,
   platformDiscountClass,
   platformLabel,
 } from '@/utils/platformColors'
@@ -130,12 +109,8 @@ const { t } = useI18n()
 const platform = computed(() => props.plan.group_platform || '')
 
 // Derived color classes from central config
-const accentClass = computed(() => platformAccentBarClass(platform.value))
-const borderClass = computed(() => platformBorderClass(platform.value))
 const badgeLightClass = computed(() => platformBadgeLightClass(platform.value))
-const textClass = computed(() => platformTextClass(platform.value))
 const iconClass = computed(() => platformIconClass(platform.value))
-const btnClass = computed(() => platformButtonClass(platform.value))
 const discountClass = computed(() => platformDiscountClass(platform.value))
 const pLabel = computed(() => platformLabel(platform.value))
 
@@ -174,3 +149,11 @@ const modelScopeLabels = computed(() => {
 
 const validitySuffix = computed(() => planValiditySuffix(props.plan, t))
 </script>
+
+<style scoped>
+.plan-quotas > div { flex-direction: column; align-items: flex-start; gap: 4px; }
+.plan-quotas > div > span:first-child { color: #64748b; font-size: 12px; }
+.plan-quotas > div > span:last-child { font-size: 15px; font-variant-numeric: tabular-nums; }
+.dark .plan-quotas > div > span:first-child { color: #94a3b8; }
+@media (prefers-reduced-motion: reduce) { .subscription-plan, .subscription-plan button { transition: none; } }
+</style>
