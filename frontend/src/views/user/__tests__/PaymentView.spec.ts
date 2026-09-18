@@ -360,7 +360,7 @@ describe('PaymentView help text', () => {
 })
 
 describe('PaymentView subscription plan grid', () => {
-  it.each([3, 4, 6])('keeps %i plans on the existing mobile/tablet/desktop grid', async (planCount) => {
+  it.each([3, 4, 6])('shows %i plans in a responsive grid with four columns on wide screens', async (planCount) => {
     const wrapper = await mountSubscriptionPlanList(planCount)
     const cards = wrapper.findAllComponents(SubscriptionPlanCard)
 
@@ -369,7 +369,7 @@ describe('PaymentView subscription plan grid', () => {
       'grid',
       'grid-cols-1',
       'sm:grid-cols-2',
-      'lg:grid-cols-3',
+      'xl:grid-cols-4',
     ]))
   })
 })

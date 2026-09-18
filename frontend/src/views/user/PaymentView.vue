@@ -1,6 +1,9 @@
 <template>
   <AppLayout :class="{ 'subscription-layout': activeTab === 'subscription' }">
-    <div class="mx-auto max-w-4xl space-y-6">
+    <div
+      class="mx-auto space-y-6"
+      :class="activeTab === 'subscription' && paymentPhase === 'select' && !selectedPlan ? 'max-w-6xl' : 'max-w-4xl'"
+    >
       <div v-if="loading" class="flex items-center justify-center py-20">
         <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
       </div>
@@ -198,7 +201,7 @@
                 <Icon name="gift" size="xl" class="mx-auto mb-3 text-gray-300 dark:text-dark-600" />
                 <p class="text-gray-500 dark:text-gray-400">{{ t('payment.noPlans') }}</p>
               </div>
-              <div v-else :class="planGridClass">
+              <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <SubscriptionPlanCard v-for="plan in checkout.plans" :key="plan.id" :plan="plan" @select="selectPlan" />
               </div>
               <!-- Active subscriptions (compact, below plan list) -->
@@ -557,13 +560,6 @@ const subscriptionUsdToCnyRate = computed(() => {
   return Number.isFinite(rate) && rate > 0 ? rate : 0
 })
 const creditedAmount = computed(() => Math.round((validAmount.value * balanceRechargeMultiplier.value) * 100) / 100)
-
-// Adaptive grid: center single card, 2-col for 2 plans, 3-col for 3+
-const planGridClass = computed(() => {
-  const n = checkout.value.plans.length
-  if (n <= 2) return 'grid grid-cols-1 gap-5 sm:grid-cols-2'
-  return 'grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3'
-})
 
 // Check if an amount fits a method's [min, max]. 0 = no limit.
 function amountFitsMethod(amt: number, methodType: string): boolean {
