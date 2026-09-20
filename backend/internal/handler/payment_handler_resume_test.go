@@ -57,6 +57,17 @@ func TestApplyWeChatPaymentResumeClaims(t *testing.T) {
 	}
 }
 
+func TestApplyWeChatPaymentResumeClaimsDiscount(t *testing.T) {
+	req := CreateOrderRequest{CouponCode: "vip80"}
+	claims := &service.WeChatPaymentResumeClaims{OpenID: "openid", PaymentType: payment.TypeWxpay, OrderType: payment.OrderTypeSubscription, PlanID: 7, CouponCode: "VIP80", ExpectedPayAmount: "80.00"}
+	require.NoError(t, applyWeChatPaymentResumeClaims(&req, claims))
+	require.Equal(t, "VIP80", req.CouponCode)
+	require.NotNil(t, req.ExpectedPayAmount)
+	require.Equal(t, 80.0, *req.ExpectedPayAmount)
+	req.CouponCode = "OTHER"
+	require.Error(t, applyWeChatPaymentResumeClaims(&req, claims))
+}
+
 func TestApplyWeChatPaymentResumeClaimsRejectsPaymentTypeMismatch(t *testing.T) {
 	t.Parallel()
 

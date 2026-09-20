@@ -414,6 +414,7 @@ func (w *Wxpay) QueryOrder(ctx context.Context, tradeNo string) (*payment.QueryO
 		pa = *tx.SuccessTime
 	}
 	return &payment.QueryOrderResponse{
+		Closed:   wxSV(tx.TradeState) == wxpayTradeStateClosed,
 		TradeNo:  id,
 		Status:   mapWxState(wxSV(tx.TradeState)),
 		Amount:   amt,

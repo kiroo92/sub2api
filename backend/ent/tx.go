@@ -72,6 +72,8 @@ type Tx struct {
 	SecuritySecret *SecuritySecretClient
 	// Setting is the client for interacting with the Setting builders.
 	Setting *SettingClient
+	// SubscriptionDiscountCode is the client for interacting with the SubscriptionDiscountCode builders.
+	SubscriptionDiscountCode *SubscriptionDiscountCodeClient
 	// SubscriptionPlan is the client for interacting with the SubscriptionPlan builders.
 	SubscriptionPlan *SubscriptionPlanClient
 	// TLSFingerprintProfile is the client for interacting with the TLSFingerprintProfile builders.
@@ -252,6 +254,7 @@ func (tx *Tx) init() {
 	tx.RedeemCode = NewRedeemCodeClient(tx.config)
 	tx.SecuritySecret = NewSecuritySecretClient(tx.config)
 	tx.Setting = NewSettingClient(tx.config)
+	tx.SubscriptionDiscountCode = NewSubscriptionDiscountCodeClient(tx.config)
 	tx.SubscriptionPlan = NewSubscriptionPlanClient(tx.config)
 	tx.TLSFingerprintProfile = NewTLSFingerprintProfileClient(tx.config)
 	tx.UsageCleanupTask = NewUsageCleanupTaskClient(tx.config)

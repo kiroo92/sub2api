@@ -81,6 +81,40 @@ func (_c *PaymentOrderCreate) SetNillableFeeRate(v *float64) *PaymentOrderCreate
 	return _c
 }
 
+// SetDiscountCodeID sets the "discount_code_id" field.
+func (_c *PaymentOrderCreate) SetDiscountCodeID(v int64) *PaymentOrderCreate {
+	_c.mutation.SetDiscountCodeID(v)
+	return _c
+}
+
+// SetNillableDiscountCodeID sets the "discount_code_id" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableDiscountCodeID(v *int64) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetDiscountCodeID(*v)
+	}
+	return _c
+}
+
+// SetDiscountState sets the "discount_state" field.
+func (_c *PaymentOrderCreate) SetDiscountState(v string) *PaymentOrderCreate {
+	_c.mutation.SetDiscountState(v)
+	return _c
+}
+
+// SetNillableDiscountState sets the "discount_state" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableDiscountState(v *string) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetDiscountState(*v)
+	}
+	return _c
+}
+
+// SetDiscountSnapshot sets the "discount_snapshot" field.
+func (_c *PaymentOrderCreate) SetDiscountSnapshot(v map[string]interface{}) *PaymentOrderCreate {
+	_c.mutation.SetDiscountSnapshot(v)
+	return _c
+}
+
 // SetRechargeCode sets the "recharge_code" field.
 func (_c *PaymentOrderCreate) SetRechargeCode(v string) *PaymentOrderCreate {
 	_c.mutation.SetRechargeCode(v)
@@ -517,6 +551,10 @@ func (_c *PaymentOrderCreate) defaults() {
 		v := paymentorder.DefaultFeeRate
 		_c.mutation.SetFeeRate(v)
 	}
+	if _, ok := _c.mutation.DiscountState(); !ok {
+		v := paymentorder.DefaultDiscountState
+		_c.mutation.SetDiscountState(v)
+	}
 	if _, ok := _c.mutation.OutTradeNo(); !ok {
 		v := paymentorder.DefaultOutTradeNo
 		_c.mutation.SetOutTradeNo(v)
@@ -576,6 +614,14 @@ func (_c *PaymentOrderCreate) check() error {
 	}
 	if _, ok := _c.mutation.FeeRate(); !ok {
 		return &ValidationError{Name: "fee_rate", err: errors.New(`ent: missing required field "PaymentOrder.fee_rate"`)}
+	}
+	if _, ok := _c.mutation.DiscountState(); !ok {
+		return &ValidationError{Name: "discount_state", err: errors.New(`ent: missing required field "PaymentOrder.discount_state"`)}
+	}
+	if v, ok := _c.mutation.DiscountState(); ok {
+		if err := paymentorder.DiscountStateValidator(v); err != nil {
+			return &ValidationError{Name: "discount_state", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.discount_state": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.RechargeCode(); !ok {
 		return &ValidationError{Name: "recharge_code", err: errors.New(`ent: missing required field "PaymentOrder.recharge_code"`)}
@@ -724,6 +770,18 @@ func (_c *PaymentOrderCreate) createSpec() (*PaymentOrder, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.FeeRate(); ok {
 		_spec.SetField(paymentorder.FieldFeeRate, field.TypeFloat64, value)
 		_node.FeeRate = value
+	}
+	if value, ok := _c.mutation.DiscountCodeID(); ok {
+		_spec.SetField(paymentorder.FieldDiscountCodeID, field.TypeInt64, value)
+		_node.DiscountCodeID = &value
+	}
+	if value, ok := _c.mutation.DiscountState(); ok {
+		_spec.SetField(paymentorder.FieldDiscountState, field.TypeString, value)
+		_node.DiscountState = value
+	}
+	if value, ok := _c.mutation.DiscountSnapshot(); ok {
+		_spec.SetField(paymentorder.FieldDiscountSnapshot, field.TypeJSON, value)
+		_node.DiscountSnapshot = value
 	}
 	if value, ok := _c.mutation.RechargeCode(); ok {
 		_spec.SetField(paymentorder.FieldRechargeCode, field.TypeString, value)
@@ -1027,6 +1085,60 @@ func (u *PaymentOrderUpsert) UpdateFeeRate() *PaymentOrderUpsert {
 // AddFeeRate adds v to the "fee_rate" field.
 func (u *PaymentOrderUpsert) AddFeeRate(v float64) *PaymentOrderUpsert {
 	u.Add(paymentorder.FieldFeeRate, v)
+	return u
+}
+
+// SetDiscountCodeID sets the "discount_code_id" field.
+func (u *PaymentOrderUpsert) SetDiscountCodeID(v int64) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldDiscountCodeID, v)
+	return u
+}
+
+// UpdateDiscountCodeID sets the "discount_code_id" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateDiscountCodeID() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldDiscountCodeID)
+	return u
+}
+
+// AddDiscountCodeID adds v to the "discount_code_id" field.
+func (u *PaymentOrderUpsert) AddDiscountCodeID(v int64) *PaymentOrderUpsert {
+	u.Add(paymentorder.FieldDiscountCodeID, v)
+	return u
+}
+
+// ClearDiscountCodeID clears the value of the "discount_code_id" field.
+func (u *PaymentOrderUpsert) ClearDiscountCodeID() *PaymentOrderUpsert {
+	u.SetNull(paymentorder.FieldDiscountCodeID)
+	return u
+}
+
+// SetDiscountState sets the "discount_state" field.
+func (u *PaymentOrderUpsert) SetDiscountState(v string) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldDiscountState, v)
+	return u
+}
+
+// UpdateDiscountState sets the "discount_state" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateDiscountState() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldDiscountState)
+	return u
+}
+
+// SetDiscountSnapshot sets the "discount_snapshot" field.
+func (u *PaymentOrderUpsert) SetDiscountSnapshot(v map[string]interface{}) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldDiscountSnapshot, v)
+	return u
+}
+
+// UpdateDiscountSnapshot sets the "discount_snapshot" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateDiscountSnapshot() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldDiscountSnapshot)
+	return u
+}
+
+// ClearDiscountSnapshot clears the value of the "discount_snapshot" field.
+func (u *PaymentOrderUpsert) ClearDiscountSnapshot() *PaymentOrderUpsert {
+	u.SetNull(paymentorder.FieldDiscountSnapshot)
 	return u
 }
 
@@ -1708,6 +1820,69 @@ func (u *PaymentOrderUpsertOne) AddFeeRate(v float64) *PaymentOrderUpsertOne {
 func (u *PaymentOrderUpsertOne) UpdateFeeRate() *PaymentOrderUpsertOne {
 	return u.Update(func(s *PaymentOrderUpsert) {
 		s.UpdateFeeRate()
+	})
+}
+
+// SetDiscountCodeID sets the "discount_code_id" field.
+func (u *PaymentOrderUpsertOne) SetDiscountCodeID(v int64) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetDiscountCodeID(v)
+	})
+}
+
+// AddDiscountCodeID adds v to the "discount_code_id" field.
+func (u *PaymentOrderUpsertOne) AddDiscountCodeID(v int64) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.AddDiscountCodeID(v)
+	})
+}
+
+// UpdateDiscountCodeID sets the "discount_code_id" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateDiscountCodeID() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateDiscountCodeID()
+	})
+}
+
+// ClearDiscountCodeID clears the value of the "discount_code_id" field.
+func (u *PaymentOrderUpsertOne) ClearDiscountCodeID() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearDiscountCodeID()
+	})
+}
+
+// SetDiscountState sets the "discount_state" field.
+func (u *PaymentOrderUpsertOne) SetDiscountState(v string) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetDiscountState(v)
+	})
+}
+
+// UpdateDiscountState sets the "discount_state" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateDiscountState() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateDiscountState()
+	})
+}
+
+// SetDiscountSnapshot sets the "discount_snapshot" field.
+func (u *PaymentOrderUpsertOne) SetDiscountSnapshot(v map[string]interface{}) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetDiscountSnapshot(v)
+	})
+}
+
+// UpdateDiscountSnapshot sets the "discount_snapshot" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateDiscountSnapshot() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateDiscountSnapshot()
+	})
+}
+
+// ClearDiscountSnapshot clears the value of the "discount_snapshot" field.
+func (u *PaymentOrderUpsertOne) ClearDiscountSnapshot() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearDiscountSnapshot()
 	})
 }
 
@@ -2640,6 +2815,69 @@ func (u *PaymentOrderUpsertBulk) AddFeeRate(v float64) *PaymentOrderUpsertBulk {
 func (u *PaymentOrderUpsertBulk) UpdateFeeRate() *PaymentOrderUpsertBulk {
 	return u.Update(func(s *PaymentOrderUpsert) {
 		s.UpdateFeeRate()
+	})
+}
+
+// SetDiscountCodeID sets the "discount_code_id" field.
+func (u *PaymentOrderUpsertBulk) SetDiscountCodeID(v int64) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetDiscountCodeID(v)
+	})
+}
+
+// AddDiscountCodeID adds v to the "discount_code_id" field.
+func (u *PaymentOrderUpsertBulk) AddDiscountCodeID(v int64) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.AddDiscountCodeID(v)
+	})
+}
+
+// UpdateDiscountCodeID sets the "discount_code_id" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateDiscountCodeID() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateDiscountCodeID()
+	})
+}
+
+// ClearDiscountCodeID clears the value of the "discount_code_id" field.
+func (u *PaymentOrderUpsertBulk) ClearDiscountCodeID() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearDiscountCodeID()
+	})
+}
+
+// SetDiscountState sets the "discount_state" field.
+func (u *PaymentOrderUpsertBulk) SetDiscountState(v string) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetDiscountState(v)
+	})
+}
+
+// UpdateDiscountState sets the "discount_state" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateDiscountState() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateDiscountState()
+	})
+}
+
+// SetDiscountSnapshot sets the "discount_snapshot" field.
+func (u *PaymentOrderUpsertBulk) SetDiscountSnapshot(v map[string]interface{}) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetDiscountSnapshot(v)
+	})
+}
+
+// UpdateDiscountSnapshot sets the "discount_snapshot" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateDiscountSnapshot() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateDiscountSnapshot()
+	})
+}
+
+// ClearDiscountSnapshot clears the value of the "discount_snapshot" field.
+func (u *PaymentOrderUpsertBulk) ClearDiscountSnapshot() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearDiscountSnapshot()
 	})
 }
 

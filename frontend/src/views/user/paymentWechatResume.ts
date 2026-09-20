@@ -3,6 +3,8 @@ import type { SubscriptionPlan } from '@/types/payment'
 import { normalizeVisibleMethod } from '@/components/payment/paymentFlow'
 
 export interface ParsedWechatResumeRoute {
+  couponCode?: string
+  expectedPayAmount?: number
   orderAmount: number
   orderType: 'balance' | 'subscription'
   paymentType: string
@@ -37,6 +39,9 @@ export function parseWechatResumeRoute(
   }
 
   const wechatResumeToken = readQueryString(query, 'wechat_resume_token')
+  const couponCode = readQueryString(query, 'coupon_code').trim()
+  const expectedPayAmount = Number.parseFloat(readQueryString(query, 'expected_pay_amount'))
+  const discount = couponCode ? { couponCode, expectedPayAmount: Number.isFinite(expectedPayAmount) && expectedPayAmount > 0 ? expectedPayAmount : undefined } : {}
   const paymentType = normalizeVisibleMethod(readQueryString(query, 'payment_type')) || 'wxpay'
   const planId = Number.parseInt(readQueryString(query, 'plan_id'), 10)
   const hasPlanId = Number.isFinite(planId) && planId > 0
@@ -46,6 +51,7 @@ export function parseWechatResumeRoute(
 
   if (wechatResumeToken) {
     return {
+      ...discount,
       wechatResumeToken,
       paymentType,
       orderType,
@@ -68,6 +74,7 @@ export function parseWechatResumeRoute(
 
   return {
     openid,
+    ...discount,
     paymentType,
     orderType,
     orderAmount,
@@ -86,5 +93,7 @@ export function stripWechatResumeQuery(query: LocationQuery): LocationQueryRaw {
   delete nextQuery.amount
   delete nextQuery.order_type
   delete nextQuery.plan_id
+  delete nextQuery.coupon_code
+  delete nextQuery.expected_pay_amount
   return nextQuery
 }

@@ -33,6 +33,12 @@ type PaymentOrder struct {
 	PayAmount float64 `json:"pay_amount,omitempty"`
 	// FeeRate holds the value of the "fee_rate" field.
 	FeeRate float64 `json:"fee_rate,omitempty"`
+	// DiscountCodeID holds the value of the "discount_code_id" field.
+	DiscountCodeID *int64 `json:"discount_code_id,omitempty"`
+	// DiscountState holds the value of the "discount_state" field.
+	DiscountState string `json:"discount_state,omitempty"`
+	// DiscountSnapshot holds the value of the "discount_snapshot" field.
+	DiscountSnapshot map[string]interface{} `json:"discount_snapshot,omitempty"`
 	// RechargeCode holds the value of the "recharge_code" field.
 	RechargeCode string `json:"recharge_code,omitempty"`
 	// OutTradeNo holds the value of the "out_trade_no" field.
@@ -128,15 +134,15 @@ func (*PaymentOrder) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case paymentorder.FieldProviderSnapshot:
+		case paymentorder.FieldDiscountSnapshot, paymentorder.FieldProviderSnapshot:
 			values[i] = new([]byte)
 		case paymentorder.FieldForceRefund:
 			values[i] = new(sql.NullBool)
 		case paymentorder.FieldAmount, paymentorder.FieldPayAmount, paymentorder.FieldFeeRate, paymentorder.FieldRefundAmount:
 			values[i] = new(sql.NullFloat64)
-		case paymentorder.FieldID, paymentorder.FieldUserID, paymentorder.FieldPlanID, paymentorder.FieldSubscriptionGroupID, paymentorder.FieldSubscriptionDays:
+		case paymentorder.FieldID, paymentorder.FieldUserID, paymentorder.FieldDiscountCodeID, paymentorder.FieldPlanID, paymentorder.FieldSubscriptionGroupID, paymentorder.FieldSubscriptionDays:
 			values[i] = new(sql.NullInt64)
-		case paymentorder.FieldUserEmail, paymentorder.FieldUserName, paymentorder.FieldUserNotes, paymentorder.FieldRechargeCode, paymentorder.FieldOutTradeNo, paymentorder.FieldPaymentType, paymentorder.FieldPaymentTradeNo, paymentorder.FieldPayURL, paymentorder.FieldQrCode, paymentorder.FieldQrCodeImg, paymentorder.FieldOrderType, paymentorder.FieldProviderInstanceID, paymentorder.FieldProviderKey, paymentorder.FieldStatus, paymentorder.FieldRefundReason, paymentorder.FieldRefundRequestReason, paymentorder.FieldRefundRequestedBy, paymentorder.FieldFailedReason, paymentorder.FieldClientIP, paymentorder.FieldSrcHost, paymentorder.FieldSrcURL:
+		case paymentorder.FieldUserEmail, paymentorder.FieldUserName, paymentorder.FieldUserNotes, paymentorder.FieldDiscountState, paymentorder.FieldRechargeCode, paymentorder.FieldOutTradeNo, paymentorder.FieldPaymentType, paymentorder.FieldPaymentTradeNo, paymentorder.FieldPayURL, paymentorder.FieldQrCode, paymentorder.FieldQrCodeImg, paymentorder.FieldOrderType, paymentorder.FieldProviderInstanceID, paymentorder.FieldProviderKey, paymentorder.FieldStatus, paymentorder.FieldRefundReason, paymentorder.FieldRefundRequestReason, paymentorder.FieldRefundRequestedBy, paymentorder.FieldFailedReason, paymentorder.FieldClientIP, paymentorder.FieldSrcHost, paymentorder.FieldSrcURL:
 			values[i] = new(sql.NullString)
 		case paymentorder.FieldRefundAt, paymentorder.FieldRefundRequestedAt, paymentorder.FieldExpiresAt, paymentorder.FieldPaidAt, paymentorder.FieldCompletedAt, paymentorder.FieldFailedAt, paymentorder.FieldCreatedAt, paymentorder.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -203,6 +209,27 @@ func (_m *PaymentOrder) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field fee_rate", values[i])
 			} else if value.Valid {
 				_m.FeeRate = value.Float64
+			}
+		case paymentorder.FieldDiscountCodeID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field discount_code_id", values[i])
+			} else if value.Valid {
+				_m.DiscountCodeID = new(int64)
+				*_m.DiscountCodeID = value.Int64
+			}
+		case paymentorder.FieldDiscountState:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field discount_state", values[i])
+			} else if value.Valid {
+				_m.DiscountState = value.String
+			}
+		case paymentorder.FieldDiscountSnapshot:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field discount_snapshot", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.DiscountSnapshot); err != nil {
+					return fmt.Errorf("unmarshal field discount_snapshot: %w", err)
+				}
 			}
 		case paymentorder.FieldRechargeCode:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -479,6 +506,17 @@ func (_m *PaymentOrder) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("fee_rate=")
 	builder.WriteString(fmt.Sprintf("%v", _m.FeeRate))
+	builder.WriteString(", ")
+	if v := _m.DiscountCodeID; v != nil {
+		builder.WriteString("discount_code_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("discount_state=")
+	builder.WriteString(_m.DiscountState)
+	builder.WriteString(", ")
+	builder.WriteString("discount_snapshot=")
+	builder.WriteString(fmt.Sprintf("%v", _m.DiscountSnapshot))
 	builder.WriteString(", ")
 	builder.WriteString("recharge_code=")
 	builder.WriteString(_m.RechargeCode)

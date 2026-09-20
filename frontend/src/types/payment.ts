@@ -83,6 +83,8 @@ export interface CheckoutInfoResponse {
 // ==================== Orders ====================
 
 export interface PaymentOrder {
+  discount?: PaymentDiscount
+  discount_state?: string
   id: number
   user_id: number
   amount: number
@@ -167,6 +169,8 @@ export interface ProviderInstance {
 // ==================== Request / Response ====================
 
 export interface CreateOrderRequest {
+  coupon_code?: string
+  expected_pay_amount?: number
   amount: number
   payment_type: string
   order_type: string
@@ -199,6 +203,7 @@ export interface WechatJSAPIPayload {
 }
 
 export interface CreateOrderResult {
+  discount?: PaymentDiscount
   order_id: number
   amount: number
   pay_url?: string
@@ -223,6 +228,44 @@ export interface CreateOrderResult {
 }
 
 export type CurrencyAmounts = Record<string, number>
+
+export interface PaymentDiscount {
+  version: number
+  code_id: number
+  code: string
+  type: 'percentage' | 'fixed_amount'
+  value: number
+  original_amount: number
+  discount_amount: number
+  amount: number
+  usd_to_cny_rate: number
+}
+
+export interface SubscriptionQuote {
+  original_amount: number
+  amount: number
+  pay_amount: number
+  fee_rate: number
+  currency: string
+  discount?: PaymentDiscount
+}
+
+export interface DiscountCodeInput {
+  code: string
+  discount_type: 'percentage' | 'fixed_amount'
+  discount_value: number
+  plan_ids: number[]
+  enabled: boolean
+  expires_at: string | null
+  max_uses: number
+  per_user_limit: number
+}
+
+export interface DiscountCode extends DiscountCodeInput {
+  id: number
+  reserved_count: number
+  used_count: number
+}
 
 export interface DailyPaymentStats {
   date: string

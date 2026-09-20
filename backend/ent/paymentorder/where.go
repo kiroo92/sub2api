@@ -90,6 +90,16 @@ func FeeRate(v float64) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldEQ(FieldFeeRate, v))
 }
 
+// DiscountCodeID applies equality check predicate on the "discount_code_id" field. It's identical to DiscountCodeIDEQ.
+func DiscountCodeID(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldDiscountCodeID, v))
+}
+
+// DiscountState applies equality check predicate on the "discount_state" field. It's identical to DiscountStateEQ.
+func DiscountState(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldDiscountState, v))
+}
+
 // RechargeCode applies equality check predicate on the "recharge_code" field. It's identical to RechargeCodeEQ.
 func RechargeCode(v string) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeCode, v))
@@ -588,6 +598,131 @@ func FeeRateLT(v float64) predicate.PaymentOrder {
 // FeeRateLTE applies the LTE predicate on the "fee_rate" field.
 func FeeRateLTE(v float64) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldLTE(FieldFeeRate, v))
+}
+
+// DiscountCodeIDEQ applies the EQ predicate on the "discount_code_id" field.
+func DiscountCodeIDEQ(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldDiscountCodeID, v))
+}
+
+// DiscountCodeIDNEQ applies the NEQ predicate on the "discount_code_id" field.
+func DiscountCodeIDNEQ(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldDiscountCodeID, v))
+}
+
+// DiscountCodeIDIn applies the In predicate on the "discount_code_id" field.
+func DiscountCodeIDIn(vs ...int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIn(FieldDiscountCodeID, vs...))
+}
+
+// DiscountCodeIDNotIn applies the NotIn predicate on the "discount_code_id" field.
+func DiscountCodeIDNotIn(vs ...int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotIn(FieldDiscountCodeID, vs...))
+}
+
+// DiscountCodeIDGT applies the GT predicate on the "discount_code_id" field.
+func DiscountCodeIDGT(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGT(FieldDiscountCodeID, v))
+}
+
+// DiscountCodeIDGTE applies the GTE predicate on the "discount_code_id" field.
+func DiscountCodeIDGTE(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGTE(FieldDiscountCodeID, v))
+}
+
+// DiscountCodeIDLT applies the LT predicate on the "discount_code_id" field.
+func DiscountCodeIDLT(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLT(FieldDiscountCodeID, v))
+}
+
+// DiscountCodeIDLTE applies the LTE predicate on the "discount_code_id" field.
+func DiscountCodeIDLTE(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLTE(FieldDiscountCodeID, v))
+}
+
+// DiscountCodeIDIsNil applies the IsNil predicate on the "discount_code_id" field.
+func DiscountCodeIDIsNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIsNull(FieldDiscountCodeID))
+}
+
+// DiscountCodeIDNotNil applies the NotNil predicate on the "discount_code_id" field.
+func DiscountCodeIDNotNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotNull(FieldDiscountCodeID))
+}
+
+// DiscountStateEQ applies the EQ predicate on the "discount_state" field.
+func DiscountStateEQ(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldDiscountState, v))
+}
+
+// DiscountStateNEQ applies the NEQ predicate on the "discount_state" field.
+func DiscountStateNEQ(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldDiscountState, v))
+}
+
+// DiscountStateIn applies the In predicate on the "discount_state" field.
+func DiscountStateIn(vs ...string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIn(FieldDiscountState, vs...))
+}
+
+// DiscountStateNotIn applies the NotIn predicate on the "discount_state" field.
+func DiscountStateNotIn(vs ...string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotIn(FieldDiscountState, vs...))
+}
+
+// DiscountStateGT applies the GT predicate on the "discount_state" field.
+func DiscountStateGT(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGT(FieldDiscountState, v))
+}
+
+// DiscountStateGTE applies the GTE predicate on the "discount_state" field.
+func DiscountStateGTE(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGTE(FieldDiscountState, v))
+}
+
+// DiscountStateLT applies the LT predicate on the "discount_state" field.
+func DiscountStateLT(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLT(FieldDiscountState, v))
+}
+
+// DiscountStateLTE applies the LTE predicate on the "discount_state" field.
+func DiscountStateLTE(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLTE(FieldDiscountState, v))
+}
+
+// DiscountStateContains applies the Contains predicate on the "discount_state" field.
+func DiscountStateContains(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldContains(FieldDiscountState, v))
+}
+
+// DiscountStateHasPrefix applies the HasPrefix predicate on the "discount_state" field.
+func DiscountStateHasPrefix(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldHasPrefix(FieldDiscountState, v))
+}
+
+// DiscountStateHasSuffix applies the HasSuffix predicate on the "discount_state" field.
+func DiscountStateHasSuffix(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldHasSuffix(FieldDiscountState, v))
+}
+
+// DiscountStateEqualFold applies the EqualFold predicate on the "discount_state" field.
+func DiscountStateEqualFold(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEqualFold(FieldDiscountState, v))
+}
+
+// DiscountStateContainsFold applies the ContainsFold predicate on the "discount_state" field.
+func DiscountStateContainsFold(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldContainsFold(FieldDiscountState, v))
+}
+
+// DiscountSnapshotIsNil applies the IsNil predicate on the "discount_snapshot" field.
+func DiscountSnapshotIsNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIsNull(FieldDiscountSnapshot))
+}
+
+// DiscountSnapshotNotNil applies the NotNil predicate on the "discount_snapshot" field.
+func DiscountSnapshotNotNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotNull(FieldDiscountSnapshot))
 }
 
 // RechargeCodeEQ applies the EQ predicate on the "recharge_code" field.

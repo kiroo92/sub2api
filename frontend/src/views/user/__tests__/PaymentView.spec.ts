@@ -24,6 +24,7 @@ const showError = vi.hoisted(() => vi.fn())
 const showInfo = vi.hoisted(() => vi.fn())
 const showWarning = vi.hoisted(() => vi.fn())
 const getCheckoutInfo = vi.hoisted(() => vi.fn())
+const quoteSubscription = vi.hoisted(() => vi.fn())
 const bridgeInvoke = vi.hoisted(() => vi.fn())
 const translate = vi.hoisted(() => vi.fn((key: string) => key))
 // Public settings live in a reactive holder so tests can flip feature flags after mount
@@ -99,6 +100,7 @@ vi.mock('@/stores', async () => {
 vi.mock('@/api/payment', () => ({
   paymentAPI: {
     getCheckoutInfo,
+    quoteSubscription,
   },
 }))
 
@@ -498,6 +500,50 @@ describe('PaymentView subscription confirmation amounts', () => {
     expect(text).toContain(fee)
     expect(text).toContain(total)
     expect(wrapper.findAll('button').some(button => button.text().includes(total))).toBe(true)
+  })
+})
+
+describe('PaymentView subscription coupons', () => {
+  const quote = { original_amount: 128, amount: 102.4, pay_amount: 102.4, fee_rate: 0, currency: 'CNY', discount: { version: 1, code_id: 1, code: 'VIP80', type: 'percentage', value: 80, original_amount: 128, amount: 102.4, discount_amount: 25.6, usd_to_cny_rate: 0 } }
+  beforeEach(() => {
+    translate.mockImplementation(key => key)
+    appStoreState.setPublicSettings({ subscription_enabled: true })
+    quoteSubscription.mockReset().mockResolvedValue({ data: quote })
+  })
+
+  it('requires applying the code, then submits the server price using normal checkout', async () => {
+    const wrapper = await mountSubscriptionConfirm()
+    const submit = () => wrapper.findAll('button').find(b => b.text().includes('payment.createOrder'))!
+    await wrapper.get('#subscription-coupon').setValue('vip80')
+    expect(submit().attributes('disabled')).toBeDefined()
+    await wrapper.get('#subscription-coupon').trigger('keydown.enter')
+    await flushPromises()
+    expect(quoteSubscription).toHaveBeenCalledWith({ plan_id: 7, payment_type: 'wxpay', coupon_code: 'vip80' })
+    expect(wrapper.text()).toContain('VIP80')
+    expect(submit().attributes('disabled')).toBeUndefined()
+    createOrder.mockResolvedValue({ order_id: 1, amount: 102.4, pay_amount: 102.4, fee_rate: 0, expires_at: '2099-01-01T00:00:00Z', qr_code: 'coupon-qr', result_type: 'order_created', payment_mode: 'qrcode' })
+    await submit().trigger('click')
+    await flushPromises()
+    expect(createOrder).toHaveBeenCalledWith(expect.objectContaining({ order_type: 'subscription', plan_id: 7, coupon_code: 'VIP80', expected_pay_amount: 102.4 }))
+    wrapper.unmount()
+  })
+
+  it('ignores a stale preview and never submits an invalid code at full price', async () => {
+    let finish!: (result: { data: typeof quote }) => void
+    quoteSubscription.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const wrapper = await mountSubscriptionConfirm()
+    await wrapper.get('#subscription-coupon').setValue('VIP80')
+    await wrapper.get('#subscription-coupon').trigger('keydown.enter')
+    await wrapper.get('#subscription-coupon').setValue('OTHER')
+    finish({ data: quote })
+    await flushPromises()
+    expect(wrapper.findAll('button').find(b => b.text().includes('payment.createOrder'))!.attributes('disabled')).toBeDefined()
+    quoteSubscription.mockRejectedValueOnce({ message: 'Code expired' })
+    await wrapper.get('#subscription-coupon').trigger('keydown.enter')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Code expired')
+    expect(createOrder).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 })
 

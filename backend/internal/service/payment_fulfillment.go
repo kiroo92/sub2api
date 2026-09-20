@@ -149,25 +149,61 @@ func expectedNotificationProviderKey(registry *payment.Registry, orderPaymentTyp
 }
 
 func (s *PaymentService) toPaid(ctx context.Context, o *dbent.PaymentOrder, tradeNo string, paid float64, pk string) error {
+	client := s.entClient
+	var tx *dbent.Tx
+	if o.DiscountCodeID != nil {
+		var err error
+		tx, err = s.entClient.Tx(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback() }()
+		client = tx.Client()
+		if err := lockPaymentDiscount(ctx, client, *o.DiscountCodeID); err != nil {
+			return err
+		}
+		o, err = client.PaymentOrder.Get(ctx, o.ID)
+		if err != nil {
+			return err
+		}
+		if o.DiscountState == discountReleased {
+			_ = tx.Rollback()
+			s.writeAuditLog(ctx, o.ID, "COUPON_PAYMENT_RECONCILIATION_REQUIRED", pk, map[string]any{"tradeNo": tradeNo, "paidAmount": paid})
+			return infraerrors.Conflict("COUPON_PAYMENT_RECONCILIATION_REQUIRED", "payment arrived after confirmed closure; administrator reconciliation is required")
+		}
+	}
 	previousStatus := o.Status
 	now := time.Now()
 	grace := now.Add(-paymentGraceMinutes * time.Minute)
-	c, err := s.entClient.PaymentOrder.Update().Where(
+	update := client.PaymentOrder.Update().Where(
 		paymentorder.IDEQ(o.ID),
 		paymentorder.Or(
 			paymentorder.StatusEQ(OrderStatusPending),
 			paymentorder.StatusEQ(OrderStatusCancelled),
+			paymentorder.And(paymentorder.StatusEQ(OrderStatusFailed), paymentorder.DiscountCodeIDNotNil(), paymentorder.PaidAtIsNil()),
 			paymentorder.And(
 				paymentorder.StatusEQ(OrderStatusExpired),
 				paymentorder.UpdatedAtGTE(grace),
 			),
 		),
-	).SetStatus(OrderStatusPaid).SetPayAmount(paid).SetPaymentTradeNo(tradeNo).SetPaidAt(now).ClearFailedAt().ClearFailedReason().Save(ctx)
+	).SetStatus(OrderStatusPaid).SetPayAmount(paid).SetPaymentTradeNo(tradeNo).SetPaidAt(now).ClearFailedAt().ClearFailedReason()
+	if o.DiscountCodeID != nil {
+		update.SetDiscountState(discountConsumed)
+	}
+	c, err := update.Save(ctx)
 	if err != nil {
 		return fmt.Errorf("update to PAID: %w", err)
 	}
 	if c == 0 {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
 		return s.alreadyProcessed(ctx, o)
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
 	}
 	if previousStatus == OrderStatusCancelled || previousStatus == OrderStatusExpired {
 		slog.Info("order recovered from webhook payment success",
@@ -256,6 +292,9 @@ func (s *PaymentService) ExecuteBalanceFulfillment(ctx context.Context, oid int6
 func (s *PaymentService) acquirePaymentFulfillmentLease(ctx context.Context, o *dbent.PaymentOrder) (*paymentFulfillmentLease, error) {
 	if o == nil {
 		return nil, infraerrors.BadRequest("INVALID_STATUS", "nil payment order")
+	}
+	if o.DiscountCodeID != nil && (o.DiscountState != discountConsumed || o.PaidAt == nil) {
+		return nil, infraerrors.BadRequest("PAYMENT_NOT_CONFIRMED", "discount order has no confirmed payment")
 	}
 
 	now := time.Now().UTC().Truncate(time.Microsecond)

@@ -170,10 +170,24 @@
                   @select="selectedMethod = $event"
                 />
               </div>
-              <div v-if="feeRate > 0 && selectedPlan.price > 0" class="card p-6">
+              <div class="card space-y-3 p-6">
+                <label for="subscription-coupon" class="input-label">{{ t('payment.coupon.label') }}</label>
+                <div class="flex gap-2">
+                  <input id="subscription-coupon" v-model="couponCode" class="input min-w-0 flex-1" maxlength="64" autocomplete="off" :disabled="submitting" :placeholder="t('payment.coupon.placeholder')" @keydown.enter.prevent="applyCoupon" />
+                  <button class="btn btn-secondary" :disabled="couponLoading || submitting || !couponCode.trim()" @click="applyCoupon">{{ t('payment.coupon.apply') }}</button>
+                  <button v-if="couponCode" class="btn btn-secondary" :disabled="submitting" @click="couponCode = ''">{{ t('payment.coupon.remove') }}</button>
+                </div>
+                <p v-if="couponError" role="alert" class="text-sm text-red-600">{{ couponError }}</p>
+                <p v-else-if="couponCode && !couponQuote" class="text-sm text-gray-500" aria-live="polite">{{ t('payment.coupon.applyFirst') }}</p>
+                <div v-if="couponQuote?.discount" class="space-y-2 text-sm" aria-live="polite">
+                  <div class="flex justify-between"><span>{{ t('payment.coupon.original') }}</span><span>{{ formatSelectedSubscriptionPaymentAmount(couponQuote.original_amount) }}</span></div>
+                  <div class="flex justify-between text-emerald-600"><span>{{ t('payment.coupon.discount') }} ({{ couponQuote.discount.code }})</span><span>−{{ formatSelectedSubscriptionPaymentAmount(couponQuote.discount.discount_amount) }}</span></div>
+                </div>
+              </div>
+              <div v-if="(feeRate > 0 || couponQuote) && selectedPlan.price > 0" class="card p-6">
                 <div class="space-y-2 text-sm">
                   <div class="flex justify-between">
-                    <span class="text-gray-500 dark:text-gray-400">{{ t('payment.amountLabel') }}</span>
+                    <span class="text-gray-500 dark:text-gray-400">{{ t('payment.coupon.subtotal') }}</span>
                     <span class="text-gray-900 dark:text-white">{{ formatSelectedPaymentAmount(subPaymentAmount) }}</span>
                   </div>
                   <div class="flex justify-between">
@@ -344,6 +358,33 @@ const activeTab = ref<'recharge' | 'subscription'>(route.query.tab === 'recharge
 const amount = ref<number | null>(null)
 const selectedMethod = ref('')
 const selectedPlan = ref<SubscriptionPlan | null>(null)
+const couponCode = ref('')
+const couponQuote = ref<import('@/types/payment').SubscriptionQuote | null>(null)
+const couponLoading = ref(false)
+const couponError = ref('')
+let couponRequest = 0
+watch([couponCode, selectedPlan, selectedMethod], () => {
+  couponRequest++
+  couponQuote.value = null
+  couponError.value = ''
+  couponLoading.value = false
+}, { flush: 'sync' })
+
+async function applyCoupon() {
+  if (!selectedPlan.value || !selectedMethod.value || !couponCode.value.trim() || submitting.value) return
+  const request = ++couponRequest
+  couponLoading.value = true
+  couponError.value = ''
+  couponQuote.value = null
+  try {
+    const { data } = await paymentAPI.quoteSubscription({ plan_id: selectedPlan.value.id, payment_type: selectedMethod.value, coupon_code: couponCode.value.trim() })
+    if (request === couponRequest) couponQuote.value = data
+  } catch (err) {
+    if (request === couponRequest) couponError.value = extractApiErrorMessage(err, t('payment.coupon.invalid'))
+  } finally {
+    if (request === couponRequest) couponLoading.value = false
+  }
+}
 const previewImage = ref('')
 
 const paymentPhase = ref<'select' | 'paying'>('select')
@@ -474,6 +515,10 @@ function buildWechatOAuthAuthorizeUrl(
 
     redirectUrl.searchParams.set('payment_type', paymentType)
     redirectUrl.searchParams.set('order_type', context.orderType)
+    for (const key of ['coupon_code', 'expected_pay_amount']) {
+      const value = targetUrl.searchParams.get(key)
+      if (value) redirectUrl.searchParams.set(key, value)
+    }
 
     if (context.planId) {
       redirectUrl.searchParams.set('plan_id', String(context.planId))
@@ -680,16 +725,18 @@ const canSubmit = computed(() =>
 )
 
 const subPaymentAmount = computed(() => {
-  const price = selectedPlan.value?.price ?? 0
+  const price = couponQuote.value?.amount ?? selectedPlan.value?.price ?? 0
   return subscriptionPaymentAmountForCurrency(price, selectedCurrency.value)
 })
 
 const subFeeAmount = computed(() => {
+  if (couponQuote.value) return roundPaymentAmount(couponQuote.value.pay_amount - subPaymentAmount.value, couponQuote.value.currency)
   if (feeRate.value <= 0 || subPaymentAmount.value <= 0) return 0
   return ceilPaymentAmount((subPaymentAmount.value * feeRate.value) / 100, selectedCurrency.value)
 })
 
 const subTotalAmount = computed(() => {
+  if (couponQuote.value) return couponQuote.value.pay_amount
   if (feeRate.value <= 0 || subPaymentAmount.value <= 0) return subPaymentAmount.value
   return roundPaymentAmount(subPaymentAmount.value + subFeeAmount.value, selectedCurrency.value)
 })
@@ -703,7 +750,7 @@ function subscriptionTotalAmountForCurrency(value: number, currency: string): nu
 
 // Subscription-specific: method options based on gateway pay amount
 const subMethodOptions = computed<PaymentMethodOption[]>(() => {
-  const price = selectedPlan.value?.price ?? 0
+  const price = couponQuote.value?.amount ?? selectedPlan.value?.price ?? 0
   return enabledMethods.value.map((type) => {
     const ml = visibleMethods.value[type]
     const currency = normalizePaymentCurrency(ml?.currency)
@@ -718,6 +765,7 @@ const subMethodOptions = computed<PaymentMethodOption[]>(() => {
 
 const canSubmitSubscription = computed(() =>
   selectedPlan.value !== null
+    && !couponLoading.value && (!couponCode.value.trim() || !!couponQuote.value?.discount)
     && amountFitsMethod(subTotalAmount.value, selectedMethod.value)
     && selectedLimit.value?.available !== false
 )
@@ -788,7 +836,7 @@ async function handleSubmitRecharge() {
 }
 
 async function confirmSubscribe() {
-  if (!selectedPlan.value || submitting.value) return
+  if (!selectedPlan.value || submitting.value || !canSubmitSubscription.value) return
   await createOrder(selectedPlan.value.price, 'subscription', selectedPlan.value.id)
 }
 
@@ -803,6 +851,8 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
       paymentType: requestType,
       orderType,
       planId,
+      couponCode: couponQuote.value?.discount?.code,
+      expectedPayAmount: couponQuote.value?.pay_amount,
       origin: typeof window !== 'undefined' ? window.location.origin : '',
       isMobile: isMobileDevice(),
       isWechatBrowser: typeof window !== 'undefined' && /MicroMessenger/i.test(window.navigator.userAgent),
@@ -948,6 +998,10 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
       const metadata = apiErr.metadata as Record<string, unknown> | undefined
       errorMessage.value = t('payment.errors.tooManyPending', { max: metadata?.max || '' })
       errorHintMessage.value = ''
+    } else if ((typeof apiErr.reason === 'string' && apiErr.reason.startsWith('COUPON_')) || apiErr.reason === 'CHECKOUT_PRICE_CHANGED') {
+      couponQuote.value = null
+      errorMessage.value = extractApiErrorMessage(err, t('payment.coupon.invalid'))
+      errorHintMessage.value = ''
     } else if (apiErr.reason === 'CANCEL_RATE_LIMITED') {
       errorMessage.value = t('payment.errors.cancelRateLimited')
       errorHintMessage.value = ''
@@ -1020,6 +1074,8 @@ function shouldFallbackToDesktopQr(err: unknown, paymentMethod: string, attempte
 }
 
 async function attemptMobileQrFallback(err: unknown, context: MobileQrFallbackContext): Promise<boolean> {
+  // A timed-out discounted order may already exist upstream and owns its use.
+  if (context.orderType === 'subscription' && couponCode.value.trim()) return false
   if (!shouldFallbackToDesktopQr(err, context.paymentType, context.attempted)) {
     return false
   }
@@ -1106,6 +1162,16 @@ async function resumeWechatPaymentFromQuery() {
   }
 
   await router.replace({ path: route.path, query: stripWechatResumeQuery(route.query) })
+
+  if (resume.couponCode) {
+    couponCode.value = resume.couponCode
+    await applyCoupon()
+    if (!couponQuote.value) return
+    if (resume.expectedPayAmount != null && couponQuote.value.pay_amount !== resume.expectedPayAmount) {
+      errorMessage.value = t('payment.coupon.priceChanged')
+      return
+    }
+  }
 
   if (resume.wechatResumeToken) {
     await createOrder(0, resume.orderType, resume.planId, {

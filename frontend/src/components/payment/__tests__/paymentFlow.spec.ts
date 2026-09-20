@@ -33,6 +33,11 @@ function createOrderResult(overrides: Partial<CreateOrderResult> = {}): CreateOr
 }
 
 describe('getVisibleMethods', () => {
+  it('only carries discounts on subscription checkout', () => {
+    const input = { amount: 100, paymentType: 'wxpay', planId: 7, isMobile: false, isWechatBrowser: false, couponCode: ' vip80 ', expectedPayAmount: 80 }
+    expect(buildCreateOrderPayload({ ...input, orderType: 'subscription' })).toMatchObject({ coupon_code: 'VIP80', expected_pay_amount: 80 })
+    expect(buildCreateOrderPayload({ ...input, orderType: 'balance' })).not.toHaveProperty('coupon_code')
+  })
   it('normalizes provider aliases and keeps stripe as a top-level method', () => {
     const visible = getVisibleMethods({
       alipay_direct: methodLimit({ single_min: 5 }),

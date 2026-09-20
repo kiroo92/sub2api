@@ -749,6 +749,12 @@ const routes: RouteRecordRaw[] = [
 
   // ==================== 404 Not Found ====================
   {
+    path: '/admin/orders/discount-codes',
+    name: 'AdminDiscountCodes',
+    component: () => import('@/views/admin/orders/AdminDiscountCodesView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, requiresPayment: true, title: 'Subscription Discounts', titleKey: 'payment.coupon.management' }
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/views/NotFoundView.vue'),

@@ -77,6 +77,8 @@ export interface PaymentLaunchDecision {
 }
 
 export interface BuildCreateOrderPayloadInput {
+  couponCode?: string
+  expectedPayAmount?: number
   amount: number
   paymentType: string
   orderType: OrderType
@@ -138,6 +140,10 @@ export function buildCreateOrderPayload(input: BuildCreateOrderPayloadInput): Cr
 
   if (input.planId) {
     payload.plan_id = input.planId
+  }
+  if (input.orderType === 'subscription' && input.couponCode?.trim()) {
+    payload.coupon_code = input.couponCode.trim().toUpperCase()
+    payload.expected_pay_amount = input.expectedPayAmount
   }
   if (normalizedOrigin) {
     payload.return_url = `${normalizedOrigin}/payment/result`

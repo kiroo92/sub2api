@@ -277,14 +277,16 @@ func TestWeChatPaymentResumeTokenRoundTrip(t *testing.T) {
 
 	svc := NewPaymentResumeService([]byte("0123456789abcdef0123456789abcdef"))
 	token, err := svc.CreateWeChatPaymentResumeToken(WeChatPaymentResumeClaims{
-		OpenID:      "openid-123",
-		PaymentType: payment.TypeWxpay,
-		Amount:      "12.50",
-		OrderType:   payment.OrderTypeSubscription,
-		PlanID:      7,
-		RedirectTo:  "/purchase?from=wechat",
-		Scope:       "snsapi_base",
-		IssuedAt:    1234567890,
+		CouponCode:        "VIP80",
+		ExpectedPayAmount: "10.00",
+		OpenID:            "openid-123",
+		PaymentType:       payment.TypeWxpay,
+		Amount:            "12.50",
+		OrderType:         payment.OrderTypeSubscription,
+		PlanID:            7,
+		RedirectTo:        "/purchase?from=wechat",
+		Scope:             "snsapi_base",
+		IssuedAt:          1234567890,
 	})
 	if err != nil {
 		t.Fatalf("CreateWeChatPaymentResumeToken returned error: %v", err)
@@ -302,6 +304,9 @@ func TestWeChatPaymentResumeTokenRoundTrip(t *testing.T) {
 	}
 	if claims.RedirectTo != "/purchase?from=wechat" || claims.Scope != "snsapi_base" {
 		t.Fatalf("claims redirect/scope mismatch: %+v", claims)
+	}
+	if claims.CouponCode != "VIP80" || claims.ExpectedPayAmount != "10.00" {
+		t.Fatal("signed resume token lost its discount context")
 	}
 }
 

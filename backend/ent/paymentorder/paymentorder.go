@@ -28,6 +28,12 @@ const (
 	FieldPayAmount = "pay_amount"
 	// FieldFeeRate holds the string denoting the fee_rate field in the database.
 	FieldFeeRate = "fee_rate"
+	// FieldDiscountCodeID holds the string denoting the discount_code_id field in the database.
+	FieldDiscountCodeID = "discount_code_id"
+	// FieldDiscountState holds the string denoting the discount_state field in the database.
+	FieldDiscountState = "discount_state"
+	// FieldDiscountSnapshot holds the string denoting the discount_snapshot field in the database.
+	FieldDiscountSnapshot = "discount_snapshot"
 	// FieldRechargeCode holds the string denoting the recharge_code field in the database.
 	FieldRechargeCode = "recharge_code"
 	// FieldOutTradeNo holds the string denoting the out_trade_no field in the database.
@@ -115,6 +121,9 @@ var Columns = []string{
 	FieldAmount,
 	FieldPayAmount,
 	FieldFeeRate,
+	FieldDiscountCodeID,
+	FieldDiscountState,
+	FieldDiscountSnapshot,
 	FieldRechargeCode,
 	FieldOutTradeNo,
 	FieldPaymentType,
@@ -166,6 +175,10 @@ var (
 	UserNameValidator func(string) error
 	// DefaultFeeRate holds the default value on creation for the "fee_rate" field.
 	DefaultFeeRate float64
+	// DefaultDiscountState holds the default value on creation for the "discount_state" field.
+	DefaultDiscountState string
+	// DiscountStateValidator is a validator for the "discount_state" field. It is called by the builders before save.
+	DiscountStateValidator func(string) error
 	// RechargeCodeValidator is a validator for the "recharge_code" field. It is called by the builders before save.
 	RechargeCodeValidator func(string) error
 	// DefaultOutTradeNo holds the default value on creation for the "out_trade_no" field.
@@ -247,6 +260,16 @@ func ByPayAmount(opts ...sql.OrderTermOption) OrderOption {
 // ByFeeRate orders the results by the fee_rate field.
 func ByFeeRate(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFeeRate, opts...).ToFunc()
+}
+
+// ByDiscountCodeID orders the results by the discount_code_id field.
+func ByDiscountCodeID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDiscountCodeID, opts...).ToFunc()
+}
+
+// ByDiscountState orders the results by the discount_state field.
+func ByDiscountState(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDiscountState, opts...).ToFunc()
 }
 
 // ByRechargeCode orders the results by the recharge_code field.

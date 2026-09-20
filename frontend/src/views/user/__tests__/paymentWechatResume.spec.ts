@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { parseWechatResumeRoute, stripWechatResumeQuery } from '../paymentWechatResume'
 
 describe('parseWechatResumeRoute', () => {
+  it('preserves the selected discount through authorization and strips it after recovery', () => {
+    const query = { wechat_resume_token: 'signed', order_type: 'subscription', plan_id: '7', coupon_code: 'VIP80', expected_pay_amount: '80' }
+    expect(parseWechatResumeRoute(query, [], 0)).toMatchObject({ couponCode: 'VIP80', expectedPayAmount: 80, planId: 7 })
+    expect(stripWechatResumeQuery(query)).toEqual({})
+  })
   it('prefers the opaque resume token over legacy openid query params', () => {
     expect(parseWechatResumeRoute({
       wechat_resume: '1',

@@ -357,6 +357,18 @@ func (f SettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SettingMutation", m)
 }
 
+// The SubscriptionDiscountCodeFunc type is an adapter to allow the use of ordinary
+// function as SubscriptionDiscountCode mutator.
+type SubscriptionDiscountCodeFunc func(context.Context, *ent.SubscriptionDiscountCodeMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SubscriptionDiscountCodeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SubscriptionDiscountCodeMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SubscriptionDiscountCodeMutation", m)
+}
+
 // The SubscriptionPlanFunc type is an adapter to allow the use of ordinary
 // function as SubscriptionPlan mutator.
 type SubscriptionPlanFunc func(context.Context, *ent.SubscriptionPlanMutation) (ent.Value, error)

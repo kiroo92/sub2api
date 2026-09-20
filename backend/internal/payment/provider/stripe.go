@@ -160,6 +160,7 @@ func (s *Stripe) QueryOrder(ctx context.Context, tradeNo string) (*payment.Query
 
 	currency := stripeIntentCurrency(pi.Currency, s.currency())
 	return &payment.QueryOrderResponse{
+		Closed:  pi.Status == stripe.PaymentIntentStatusCanceled,
 		TradeNo: pi.ID,
 		Status:  status,
 		Amount:  payment.MinorUnitToAmount(pi.Amount, currency),

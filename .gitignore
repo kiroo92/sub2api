@@ -143,6 +143,7 @@ docs/*
 !docs/team-requirements.md
 !docs/team-api.md
 !docs/team-billing.md
+!docs/subscription-discounts.md
 !docs/team-implementation.md
 !docs/COMPOSITE_GROUPS.md
 !docs/PLUGIN_DEVELOPMENT.md

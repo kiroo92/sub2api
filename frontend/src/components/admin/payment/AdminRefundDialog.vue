@@ -6,6 +6,7 @@
     @close="emit('cancel')"
   >
     <form id="refund-form" @submit.prevent="handleSubmit" class="space-y-4">
+      <p v-if="order?.discount" class="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-900/20">{{ order.discount.code }} · {{ t('payment.coupon.refundHint') }}</p>
       <!-- Refund Request Info -->
       <div
         v-if="order?.refund_requested_at || order?.refund_request_reason"

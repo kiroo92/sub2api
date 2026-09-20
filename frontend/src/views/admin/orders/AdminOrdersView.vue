@@ -62,6 +62,7 @@
     <!-- Order Detail Dialog -->
     <BaseDialog :show="showDetailDialog" :title="t('payment.admin.orderDetail')" width="wide" @close="showDetailDialog = false">
       <div v-if="selectedOrder" class="space-y-4">
+        <p v-if="selectedOrder.discount" class="text-sm text-emerald-600">{{ selectedOrder.discount.code }} · {{ t('payment.coupon.original') }} {{ selectedOrder.discount.original_amount.toFixed(2) }} − {{ selectedOrder.discount.discount_amount.toFixed(2) }} = {{ selectedOrder.discount.amount.toFixed(2) }} {{ t('payment.coupon.priceUnits') }}</p>
         <div class="grid grid-cols-2 gap-4">
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderId') }}</p><p class="font-mono text-sm font-medium text-gray-900 dark:text-white">#{{ selectedOrder.id }}</p></div>
           <div><p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderNo') }}</p><p class="text-sm font-medium text-gray-900 dark:text-white">{{ selectedOrder.out_trade_no }}</p></div>
@@ -117,6 +118,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminPaymentAPI } from '@/api/admin/payment'
@@ -142,6 +144,7 @@ interface AuditLog {
 }
 
 const { t } = useI18n()
+const route = useRoute()
 const appStore = useAppStore()
 
 const ordersLoading = ref(false)
@@ -173,6 +176,7 @@ async function loadOrders() {
   ordersLoading.value = true
   try {
     const res = await adminPaymentAPI.getOrders({
+      discount_code_id: Number(route.query.discount_code_id) || undefined,
       page: orderPagination.page, page_size: orderPagination.page_size,
       keyword: orderSearch.value || undefined, status: orderFilters.status || undefined,
       payment_type: orderFilters.payment_type || undefined, order_type: orderFilters.order_type || undefined,

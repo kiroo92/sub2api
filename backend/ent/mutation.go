@@ -42,6 +42,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
+	"github.com/Wei-Shaw/sub2api/ent/subscriptiondiscountcode"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
 	"github.com/Wei-Shaw/sub2api/ent/tlsfingerprintprofile"
 	"github.com/Wei-Shaw/sub2api/ent/usagecleanuptask"
@@ -93,6 +94,7 @@ const (
 	TypeRedeemCode                    = "RedeemCode"
 	TypeSecuritySecret                = "SecuritySecret"
 	TypeSetting                       = "Setting"
+	TypeSubscriptionDiscountCode      = "SubscriptionDiscountCode"
 	TypeSubscriptionPlan              = "SubscriptionPlan"
 	TypeTLSFingerprintProfile         = "TLSFingerprintProfile"
 	TypeUsageCleanupTask              = "UsageCleanupTask"
@@ -30221,6 +30223,10 @@ type PaymentOrderMutation struct {
 	addpay_amount            *float64
 	fee_rate                 *float64
 	addfee_rate              *float64
+	discount_code_id         *int64
+	adddiscount_code_id      *int64
+	discount_state           *string
+	discount_snapshot        *map[string]interface{}
 	recharge_code            *string
 	out_trade_no             *string
 	payment_type             *string
@@ -30686,6 +30692,161 @@ func (m *PaymentOrderMutation) AddedFeeRate() (r float64, exists bool) {
 func (m *PaymentOrderMutation) ResetFeeRate() {
 	m.fee_rate = nil
 	m.addfee_rate = nil
+}
+
+// SetDiscountCodeID sets the "discount_code_id" field.
+func (m *PaymentOrderMutation) SetDiscountCodeID(i int64) {
+	m.discount_code_id = &i
+	m.adddiscount_code_id = nil
+}
+
+// DiscountCodeID returns the value of the "discount_code_id" field in the mutation.
+func (m *PaymentOrderMutation) DiscountCodeID() (r int64, exists bool) {
+	v := m.discount_code_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDiscountCodeID returns the old "discount_code_id" field's value of the PaymentOrder entity.
+// If the PaymentOrder object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PaymentOrderMutation) OldDiscountCodeID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDiscountCodeID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDiscountCodeID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDiscountCodeID: %w", err)
+	}
+	return oldValue.DiscountCodeID, nil
+}
+
+// AddDiscountCodeID adds i to the "discount_code_id" field.
+func (m *PaymentOrderMutation) AddDiscountCodeID(i int64) {
+	if m.adddiscount_code_id != nil {
+		*m.adddiscount_code_id += i
+	} else {
+		m.adddiscount_code_id = &i
+	}
+}
+
+// AddedDiscountCodeID returns the value that was added to the "discount_code_id" field in this mutation.
+func (m *PaymentOrderMutation) AddedDiscountCodeID() (r int64, exists bool) {
+	v := m.adddiscount_code_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearDiscountCodeID clears the value of the "discount_code_id" field.
+func (m *PaymentOrderMutation) ClearDiscountCodeID() {
+	m.discount_code_id = nil
+	m.adddiscount_code_id = nil
+	m.clearedFields[paymentorder.FieldDiscountCodeID] = struct{}{}
+}
+
+// DiscountCodeIDCleared returns if the "discount_code_id" field was cleared in this mutation.
+func (m *PaymentOrderMutation) DiscountCodeIDCleared() bool {
+	_, ok := m.clearedFields[paymentorder.FieldDiscountCodeID]
+	return ok
+}
+
+// ResetDiscountCodeID resets all changes to the "discount_code_id" field.
+func (m *PaymentOrderMutation) ResetDiscountCodeID() {
+	m.discount_code_id = nil
+	m.adddiscount_code_id = nil
+	delete(m.clearedFields, paymentorder.FieldDiscountCodeID)
+}
+
+// SetDiscountState sets the "discount_state" field.
+func (m *PaymentOrderMutation) SetDiscountState(s string) {
+	m.discount_state = &s
+}
+
+// DiscountState returns the value of the "discount_state" field in the mutation.
+func (m *PaymentOrderMutation) DiscountState() (r string, exists bool) {
+	v := m.discount_state
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDiscountState returns the old "discount_state" field's value of the PaymentOrder entity.
+// If the PaymentOrder object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PaymentOrderMutation) OldDiscountState(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDiscountState is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDiscountState requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDiscountState: %w", err)
+	}
+	return oldValue.DiscountState, nil
+}
+
+// ResetDiscountState resets all changes to the "discount_state" field.
+func (m *PaymentOrderMutation) ResetDiscountState() {
+	m.discount_state = nil
+}
+
+// SetDiscountSnapshot sets the "discount_snapshot" field.
+func (m *PaymentOrderMutation) SetDiscountSnapshot(value map[string]interface{}) {
+	m.discount_snapshot = &value
+}
+
+// DiscountSnapshot returns the value of the "discount_snapshot" field in the mutation.
+func (m *PaymentOrderMutation) DiscountSnapshot() (r map[string]interface{}, exists bool) {
+	v := m.discount_snapshot
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDiscountSnapshot returns the old "discount_snapshot" field's value of the PaymentOrder entity.
+// If the PaymentOrder object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PaymentOrderMutation) OldDiscountSnapshot(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDiscountSnapshot is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDiscountSnapshot requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDiscountSnapshot: %w", err)
+	}
+	return oldValue.DiscountSnapshot, nil
+}
+
+// ClearDiscountSnapshot clears the value of the "discount_snapshot" field.
+func (m *PaymentOrderMutation) ClearDiscountSnapshot() {
+	m.discount_snapshot = nil
+	m.clearedFields[paymentorder.FieldDiscountSnapshot] = struct{}{}
+}
+
+// DiscountSnapshotCleared returns if the "discount_snapshot" field was cleared in this mutation.
+func (m *PaymentOrderMutation) DiscountSnapshotCleared() bool {
+	_, ok := m.clearedFields[paymentorder.FieldDiscountSnapshot]
+	return ok
+}
+
+// ResetDiscountSnapshot resets all changes to the "discount_snapshot" field.
+func (m *PaymentOrderMutation) ResetDiscountSnapshot() {
+	m.discount_snapshot = nil
+	delete(m.clearedFields, paymentorder.FieldDiscountSnapshot)
 }
 
 // SetRechargeCode sets the "recharge_code" field.
@@ -32231,7 +32392,7 @@ func (m *PaymentOrderMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PaymentOrderMutation) Fields() []string {
-	fields := make([]string, 0, 39)
+	fields := make([]string, 0, 42)
 	if m.user != nil {
 		fields = append(fields, paymentorder.FieldUserID)
 	}
@@ -32252,6 +32413,15 @@ func (m *PaymentOrderMutation) Fields() []string {
 	}
 	if m.fee_rate != nil {
 		fields = append(fields, paymentorder.FieldFeeRate)
+	}
+	if m.discount_code_id != nil {
+		fields = append(fields, paymentorder.FieldDiscountCodeID)
+	}
+	if m.discount_state != nil {
+		fields = append(fields, paymentorder.FieldDiscountState)
+	}
+	if m.discount_snapshot != nil {
+		fields = append(fields, paymentorder.FieldDiscountSnapshot)
 	}
 	if m.recharge_code != nil {
 		fields = append(fields, paymentorder.FieldRechargeCode)
@@ -32371,6 +32541,12 @@ func (m *PaymentOrderMutation) Field(name string) (ent.Value, bool) {
 		return m.PayAmount()
 	case paymentorder.FieldFeeRate:
 		return m.FeeRate()
+	case paymentorder.FieldDiscountCodeID:
+		return m.DiscountCodeID()
+	case paymentorder.FieldDiscountState:
+		return m.DiscountState()
+	case paymentorder.FieldDiscountSnapshot:
+		return m.DiscountSnapshot()
 	case paymentorder.FieldRechargeCode:
 		return m.RechargeCode()
 	case paymentorder.FieldOutTradeNo:
@@ -32458,6 +32634,12 @@ func (m *PaymentOrderMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldPayAmount(ctx)
 	case paymentorder.FieldFeeRate:
 		return m.OldFeeRate(ctx)
+	case paymentorder.FieldDiscountCodeID:
+		return m.OldDiscountCodeID(ctx)
+	case paymentorder.FieldDiscountState:
+		return m.OldDiscountState(ctx)
+	case paymentorder.FieldDiscountSnapshot:
+		return m.OldDiscountSnapshot(ctx)
 	case paymentorder.FieldRechargeCode:
 		return m.OldRechargeCode(ctx)
 	case paymentorder.FieldOutTradeNo:
@@ -32579,6 +32761,27 @@ func (m *PaymentOrderMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetFeeRate(v)
+		return nil
+	case paymentorder.FieldDiscountCodeID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDiscountCodeID(v)
+		return nil
+	case paymentorder.FieldDiscountState:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDiscountState(v)
+		return nil
+	case paymentorder.FieldDiscountSnapshot:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDiscountSnapshot(v)
 		return nil
 	case paymentorder.FieldRechargeCode:
 		v, ok := value.(string)
@@ -32821,6 +33024,9 @@ func (m *PaymentOrderMutation) AddedFields() []string {
 	if m.addfee_rate != nil {
 		fields = append(fields, paymentorder.FieldFeeRate)
 	}
+	if m.adddiscount_code_id != nil {
+		fields = append(fields, paymentorder.FieldDiscountCodeID)
+	}
 	if m.addplan_id != nil {
 		fields = append(fields, paymentorder.FieldPlanID)
 	}
@@ -32847,6 +33053,8 @@ func (m *PaymentOrderMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedPayAmount()
 	case paymentorder.FieldFeeRate:
 		return m.AddedFeeRate()
+	case paymentorder.FieldDiscountCodeID:
+		return m.AddedDiscountCodeID()
 	case paymentorder.FieldPlanID:
 		return m.AddedPlanID()
 	case paymentorder.FieldSubscriptionGroupID:
@@ -32884,6 +33092,13 @@ func (m *PaymentOrderMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddFeeRate(v)
+		return nil
+	case paymentorder.FieldDiscountCodeID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDiscountCodeID(v)
 		return nil
 	case paymentorder.FieldPlanID:
 		v, ok := value.(int64)
@@ -32923,6 +33138,12 @@ func (m *PaymentOrderMutation) ClearedFields() []string {
 	var fields []string
 	if m.FieldCleared(paymentorder.FieldUserNotes) {
 		fields = append(fields, paymentorder.FieldUserNotes)
+	}
+	if m.FieldCleared(paymentorder.FieldDiscountCodeID) {
+		fields = append(fields, paymentorder.FieldDiscountCodeID)
+	}
+	if m.FieldCleared(paymentorder.FieldDiscountSnapshot) {
+		fields = append(fields, paymentorder.FieldDiscountSnapshot)
 	}
 	if m.FieldCleared(paymentorder.FieldPayURL) {
 		fields = append(fields, paymentorder.FieldPayURL)
@@ -32997,6 +33218,12 @@ func (m *PaymentOrderMutation) ClearField(name string) error {
 	switch name {
 	case paymentorder.FieldUserNotes:
 		m.ClearUserNotes()
+		return nil
+	case paymentorder.FieldDiscountCodeID:
+		m.ClearDiscountCodeID()
+		return nil
+	case paymentorder.FieldDiscountSnapshot:
+		m.ClearDiscountSnapshot()
 		return nil
 	case paymentorder.FieldPayURL:
 		m.ClearPayURL()
@@ -33083,6 +33310,15 @@ func (m *PaymentOrderMutation) ResetField(name string) error {
 		return nil
 	case paymentorder.FieldFeeRate:
 		m.ResetFeeRate()
+		return nil
+	case paymentorder.FieldDiscountCodeID:
+		m.ResetDiscountCodeID()
+		return nil
+	case paymentorder.FieldDiscountState:
+		m.ResetDiscountState()
+		return nil
+	case paymentorder.FieldDiscountSnapshot:
+		m.ResetDiscountSnapshot()
 		return nil
 	case paymentorder.FieldRechargeCode:
 		m.ResetRechargeCode()
@@ -40954,6 +41190,958 @@ func (m *SettingMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *SettingMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown Setting edge %s", name)
+}
+
+// SubscriptionDiscountCodeMutation represents an operation that mutates the SubscriptionDiscountCode nodes in the graph.
+type SubscriptionDiscountCodeMutation struct {
+	config
+	op                Op
+	typ               string
+	id                *int64
+	code              *string
+	discount_type     *string
+	discount_value    *float64
+	adddiscount_value *float64
+	plan_ids          *[]int64
+	appendplan_ids    []int64
+	enabled           *bool
+	expires_at        *time.Time
+	max_uses          *int
+	addmax_uses       *int
+	per_user_limit    *int
+	addper_user_limit *int
+	created_at        *time.Time
+	updated_at        *time.Time
+	clearedFields     map[string]struct{}
+	done              bool
+	oldValue          func(context.Context) (*SubscriptionDiscountCode, error)
+	predicates        []predicate.SubscriptionDiscountCode
+}
+
+var _ ent.Mutation = (*SubscriptionDiscountCodeMutation)(nil)
+
+// subscriptiondiscountcodeOption allows management of the mutation configuration using functional options.
+type subscriptiondiscountcodeOption func(*SubscriptionDiscountCodeMutation)
+
+// newSubscriptionDiscountCodeMutation creates new mutation for the SubscriptionDiscountCode entity.
+func newSubscriptionDiscountCodeMutation(c config, op Op, opts ...subscriptiondiscountcodeOption) *SubscriptionDiscountCodeMutation {
+	m := &SubscriptionDiscountCodeMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSubscriptionDiscountCode,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSubscriptionDiscountCodeID sets the ID field of the mutation.
+func withSubscriptionDiscountCodeID(id int64) subscriptiondiscountcodeOption {
+	return func(m *SubscriptionDiscountCodeMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SubscriptionDiscountCode
+		)
+		m.oldValue = func(ctx context.Context) (*SubscriptionDiscountCode, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SubscriptionDiscountCode.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSubscriptionDiscountCode sets the old SubscriptionDiscountCode of the mutation.
+func withSubscriptionDiscountCode(node *SubscriptionDiscountCode) subscriptiondiscountcodeOption {
+	return func(m *SubscriptionDiscountCodeMutation) {
+		m.oldValue = func(context.Context) (*SubscriptionDiscountCode, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SubscriptionDiscountCodeMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SubscriptionDiscountCodeMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SubscriptionDiscountCodeMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SubscriptionDiscountCodeMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SubscriptionDiscountCode.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCode sets the "code" field.
+func (m *SubscriptionDiscountCodeMutation) SetCode(s string) {
+	m.code = &s
+}
+
+// Code returns the value of the "code" field in the mutation.
+func (m *SubscriptionDiscountCodeMutation) Code() (r string, exists bool) {
+	v := m.code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCode returns the old "code" field's value of the SubscriptionDiscountCode entity.
+// If the SubscriptionDiscountCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionDiscountCodeMutation) OldCode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCode: %w", err)
+	}
+	return oldValue.Code, nil
+}
+
+// ResetCode resets all changes to the "code" field.
+func (m *SubscriptionDiscountCodeMutation) ResetCode() {
+	m.code = nil
+}
+
+// SetDiscountType sets the "discount_type" field.
+func (m *SubscriptionDiscountCodeMutation) SetDiscountType(s string) {
+	m.discount_type = &s
+}
+
+// DiscountType returns the value of the "discount_type" field in the mutation.
+func (m *SubscriptionDiscountCodeMutation) DiscountType() (r string, exists bool) {
+	v := m.discount_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDiscountType returns the old "discount_type" field's value of the SubscriptionDiscountCode entity.
+// If the SubscriptionDiscountCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionDiscountCodeMutation) OldDiscountType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDiscountType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDiscountType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDiscountType: %w", err)
+	}
+	return oldValue.DiscountType, nil
+}
+
+// ResetDiscountType resets all changes to the "discount_type" field.
+func (m *SubscriptionDiscountCodeMutation) ResetDiscountType() {
+	m.discount_type = nil
+}
+
+// SetDiscountValue sets the "discount_value" field.
+func (m *SubscriptionDiscountCodeMutation) SetDiscountValue(f float64) {
+	m.discount_value = &f
+	m.adddiscount_value = nil
+}
+
+// DiscountValue returns the value of the "discount_value" field in the mutation.
+func (m *SubscriptionDiscountCodeMutation) DiscountValue() (r float64, exists bool) {
+	v := m.discount_value
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDiscountValue returns the old "discount_value" field's value of the SubscriptionDiscountCode entity.
+// If the SubscriptionDiscountCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionDiscountCodeMutation) OldDiscountValue(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDiscountValue is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDiscountValue requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDiscountValue: %w", err)
+	}
+	return oldValue.DiscountValue, nil
+}
+
+// AddDiscountValue adds f to the "discount_value" field.
+func (m *SubscriptionDiscountCodeMutation) AddDiscountValue(f float64) {
+	if m.adddiscount_value != nil {
+		*m.adddiscount_value += f
+	} else {
+		m.adddiscount_value = &f
+	}
+}
+
+// AddedDiscountValue returns the value that was added to the "discount_value" field in this mutation.
+func (m *SubscriptionDiscountCodeMutation) AddedDiscountValue() (r float64, exists bool) {
+	v := m.adddiscount_value
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetDiscountValue resets all changes to the "discount_value" field.
+func (m *SubscriptionDiscountCodeMutation) ResetDiscountValue() {
+	m.discount_value = nil
+	m.adddiscount_value = nil
+}
+
+// SetPlanIds sets the "plan_ids" field.
+func (m *SubscriptionDiscountCodeMutation) SetPlanIds(i []int64) {
+	m.plan_ids = &i
+	m.appendplan_ids = nil
+}
+
+// PlanIds returns the value of the "plan_ids" field in the mutation.
+func (m *SubscriptionDiscountCodeMutation) PlanIds() (r []int64, exists bool) {
+	v := m.plan_ids
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPlanIds returns the old "plan_ids" field's value of the SubscriptionDiscountCode entity.
+// If the SubscriptionDiscountCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionDiscountCodeMutation) OldPlanIds(ctx context.Context) (v []int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPlanIds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPlanIds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPlanIds: %w", err)
+	}
+	return oldValue.PlanIds, nil
+}
+
+// AppendPlanIds adds i to the "plan_ids" field.
+func (m *SubscriptionDiscountCodeMutation) AppendPlanIds(i []int64) {
+	m.appendplan_ids = append(m.appendplan_ids, i...)
+}
+
+// AppendedPlanIds returns the list of values that were appended to the "plan_ids" field in this mutation.
+func (m *SubscriptionDiscountCodeMutation) AppendedPlanIds() ([]int64, bool) {
+	if len(m.appendplan_ids) == 0 {
+		return nil, false
+	}
+	return m.appendplan_ids, true
+}
+
+// ResetPlanIds resets all changes to the "plan_ids" field.
+func (m *SubscriptionDiscountCodeMutation) ResetPlanIds() {
+	m.plan_ids = nil
+	m.appendplan_ids = nil
+}
+
+// SetEnabled sets the "enabled" field.
+func (m *SubscriptionDiscountCodeMutation) SetEnabled(b bool) {
+	m.enabled = &b
+}
+
+// Enabled returns the value of the "enabled" field in the mutation.
+func (m *SubscriptionDiscountCodeMutation) Enabled() (r bool, exists bool) {
+	v := m.enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEnabled returns the old "enabled" field's value of the SubscriptionDiscountCode entity.
+// If the SubscriptionDiscountCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionDiscountCodeMutation) OldEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEnabled: %w", err)
+	}
+	return oldValue.Enabled, nil
+}
+
+// ResetEnabled resets all changes to the "enabled" field.
+func (m *SubscriptionDiscountCodeMutation) ResetEnabled() {
+	m.enabled = nil
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (m *SubscriptionDiscountCodeMutation) SetExpiresAt(t time.Time) {
+	m.expires_at = &t
+}
+
+// ExpiresAt returns the value of the "expires_at" field in the mutation.
+func (m *SubscriptionDiscountCodeMutation) ExpiresAt() (r time.Time, exists bool) {
+	v := m.expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldExpiresAt returns the old "expires_at" field's value of the SubscriptionDiscountCode entity.
+// If the SubscriptionDiscountCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionDiscountCodeMutation) OldExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldExpiresAt: %w", err)
+	}
+	return oldValue.ExpiresAt, nil
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (m *SubscriptionDiscountCodeMutation) ClearExpiresAt() {
+	m.expires_at = nil
+	m.clearedFields[subscriptiondiscountcode.FieldExpiresAt] = struct{}{}
+}
+
+// ExpiresAtCleared returns if the "expires_at" field was cleared in this mutation.
+func (m *SubscriptionDiscountCodeMutation) ExpiresAtCleared() bool {
+	_, ok := m.clearedFields[subscriptiondiscountcode.FieldExpiresAt]
+	return ok
+}
+
+// ResetExpiresAt resets all changes to the "expires_at" field.
+func (m *SubscriptionDiscountCodeMutation) ResetExpiresAt() {
+	m.expires_at = nil
+	delete(m.clearedFields, subscriptiondiscountcode.FieldExpiresAt)
+}
+
+// SetMaxUses sets the "max_uses" field.
+func (m *SubscriptionDiscountCodeMutation) SetMaxUses(i int) {
+	m.max_uses = &i
+	m.addmax_uses = nil
+}
+
+// MaxUses returns the value of the "max_uses" field in the mutation.
+func (m *SubscriptionDiscountCodeMutation) MaxUses() (r int, exists bool) {
+	v := m.max_uses
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMaxUses returns the old "max_uses" field's value of the SubscriptionDiscountCode entity.
+// If the SubscriptionDiscountCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionDiscountCodeMutation) OldMaxUses(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMaxUses is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMaxUses requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMaxUses: %w", err)
+	}
+	return oldValue.MaxUses, nil
+}
+
+// AddMaxUses adds i to the "max_uses" field.
+func (m *SubscriptionDiscountCodeMutation) AddMaxUses(i int) {
+	if m.addmax_uses != nil {
+		*m.addmax_uses += i
+	} else {
+		m.addmax_uses = &i
+	}
+}
+
+// AddedMaxUses returns the value that was added to the "max_uses" field in this mutation.
+func (m *SubscriptionDiscountCodeMutation) AddedMaxUses() (r int, exists bool) {
+	v := m.addmax_uses
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetMaxUses resets all changes to the "max_uses" field.
+func (m *SubscriptionDiscountCodeMutation) ResetMaxUses() {
+	m.max_uses = nil
+	m.addmax_uses = nil
+}
+
+// SetPerUserLimit sets the "per_user_limit" field.
+func (m *SubscriptionDiscountCodeMutation) SetPerUserLimit(i int) {
+	m.per_user_limit = &i
+	m.addper_user_limit = nil
+}
+
+// PerUserLimit returns the value of the "per_user_limit" field in the mutation.
+func (m *SubscriptionDiscountCodeMutation) PerUserLimit() (r int, exists bool) {
+	v := m.per_user_limit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPerUserLimit returns the old "per_user_limit" field's value of the SubscriptionDiscountCode entity.
+// If the SubscriptionDiscountCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionDiscountCodeMutation) OldPerUserLimit(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPerUserLimit is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPerUserLimit requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPerUserLimit: %w", err)
+	}
+	return oldValue.PerUserLimit, nil
+}
+
+// AddPerUserLimit adds i to the "per_user_limit" field.
+func (m *SubscriptionDiscountCodeMutation) AddPerUserLimit(i int) {
+	if m.addper_user_limit != nil {
+		*m.addper_user_limit += i
+	} else {
+		m.addper_user_limit = &i
+	}
+}
+
+// AddedPerUserLimit returns the value that was added to the "per_user_limit" field in this mutation.
+func (m *SubscriptionDiscountCodeMutation) AddedPerUserLimit() (r int, exists bool) {
+	v := m.addper_user_limit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPerUserLimit resets all changes to the "per_user_limit" field.
+func (m *SubscriptionDiscountCodeMutation) ResetPerUserLimit() {
+	m.per_user_limit = nil
+	m.addper_user_limit = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SubscriptionDiscountCodeMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SubscriptionDiscountCodeMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SubscriptionDiscountCode entity.
+// If the SubscriptionDiscountCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionDiscountCodeMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SubscriptionDiscountCodeMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *SubscriptionDiscountCodeMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *SubscriptionDiscountCodeMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the SubscriptionDiscountCode entity.
+// If the SubscriptionDiscountCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionDiscountCodeMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *SubscriptionDiscountCodeMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the SubscriptionDiscountCodeMutation builder.
+func (m *SubscriptionDiscountCodeMutation) Where(ps ...predicate.SubscriptionDiscountCode) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SubscriptionDiscountCodeMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SubscriptionDiscountCodeMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SubscriptionDiscountCode, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SubscriptionDiscountCodeMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SubscriptionDiscountCodeMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SubscriptionDiscountCode).
+func (m *SubscriptionDiscountCodeMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SubscriptionDiscountCodeMutation) Fields() []string {
+	fields := make([]string, 0, 10)
+	if m.code != nil {
+		fields = append(fields, subscriptiondiscountcode.FieldCode)
+	}
+	if m.discount_type != nil {
+		fields = append(fields, subscriptiondiscountcode.FieldDiscountType)
+	}
+	if m.discount_value != nil {
+		fields = append(fields, subscriptiondiscountcode.FieldDiscountValue)
+	}
+	if m.plan_ids != nil {
+		fields = append(fields, subscriptiondiscountcode.FieldPlanIds)
+	}
+	if m.enabled != nil {
+		fields = append(fields, subscriptiondiscountcode.FieldEnabled)
+	}
+	if m.expires_at != nil {
+		fields = append(fields, subscriptiondiscountcode.FieldExpiresAt)
+	}
+	if m.max_uses != nil {
+		fields = append(fields, subscriptiondiscountcode.FieldMaxUses)
+	}
+	if m.per_user_limit != nil {
+		fields = append(fields, subscriptiondiscountcode.FieldPerUserLimit)
+	}
+	if m.created_at != nil {
+		fields = append(fields, subscriptiondiscountcode.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, subscriptiondiscountcode.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SubscriptionDiscountCodeMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case subscriptiondiscountcode.FieldCode:
+		return m.Code()
+	case subscriptiondiscountcode.FieldDiscountType:
+		return m.DiscountType()
+	case subscriptiondiscountcode.FieldDiscountValue:
+		return m.DiscountValue()
+	case subscriptiondiscountcode.FieldPlanIds:
+		return m.PlanIds()
+	case subscriptiondiscountcode.FieldEnabled:
+		return m.Enabled()
+	case subscriptiondiscountcode.FieldExpiresAt:
+		return m.ExpiresAt()
+	case subscriptiondiscountcode.FieldMaxUses:
+		return m.MaxUses()
+	case subscriptiondiscountcode.FieldPerUserLimit:
+		return m.PerUserLimit()
+	case subscriptiondiscountcode.FieldCreatedAt:
+		return m.CreatedAt()
+	case subscriptiondiscountcode.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SubscriptionDiscountCodeMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case subscriptiondiscountcode.FieldCode:
+		return m.OldCode(ctx)
+	case subscriptiondiscountcode.FieldDiscountType:
+		return m.OldDiscountType(ctx)
+	case subscriptiondiscountcode.FieldDiscountValue:
+		return m.OldDiscountValue(ctx)
+	case subscriptiondiscountcode.FieldPlanIds:
+		return m.OldPlanIds(ctx)
+	case subscriptiondiscountcode.FieldEnabled:
+		return m.OldEnabled(ctx)
+	case subscriptiondiscountcode.FieldExpiresAt:
+		return m.OldExpiresAt(ctx)
+	case subscriptiondiscountcode.FieldMaxUses:
+		return m.OldMaxUses(ctx)
+	case subscriptiondiscountcode.FieldPerUserLimit:
+		return m.OldPerUserLimit(ctx)
+	case subscriptiondiscountcode.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case subscriptiondiscountcode.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SubscriptionDiscountCode field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SubscriptionDiscountCodeMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case subscriptiondiscountcode.FieldCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCode(v)
+		return nil
+	case subscriptiondiscountcode.FieldDiscountType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDiscountType(v)
+		return nil
+	case subscriptiondiscountcode.FieldDiscountValue:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDiscountValue(v)
+		return nil
+	case subscriptiondiscountcode.FieldPlanIds:
+		v, ok := value.([]int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPlanIds(v)
+		return nil
+	case subscriptiondiscountcode.FieldEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEnabled(v)
+		return nil
+	case subscriptiondiscountcode.FieldExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetExpiresAt(v)
+		return nil
+	case subscriptiondiscountcode.FieldMaxUses:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMaxUses(v)
+		return nil
+	case subscriptiondiscountcode.FieldPerUserLimit:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPerUserLimit(v)
+		return nil
+	case subscriptiondiscountcode.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case subscriptiondiscountcode.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SubscriptionDiscountCode field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SubscriptionDiscountCodeMutation) AddedFields() []string {
+	var fields []string
+	if m.adddiscount_value != nil {
+		fields = append(fields, subscriptiondiscountcode.FieldDiscountValue)
+	}
+	if m.addmax_uses != nil {
+		fields = append(fields, subscriptiondiscountcode.FieldMaxUses)
+	}
+	if m.addper_user_limit != nil {
+		fields = append(fields, subscriptiondiscountcode.FieldPerUserLimit)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SubscriptionDiscountCodeMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case subscriptiondiscountcode.FieldDiscountValue:
+		return m.AddedDiscountValue()
+	case subscriptiondiscountcode.FieldMaxUses:
+		return m.AddedMaxUses()
+	case subscriptiondiscountcode.FieldPerUserLimit:
+		return m.AddedPerUserLimit()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SubscriptionDiscountCodeMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case subscriptiondiscountcode.FieldDiscountValue:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddDiscountValue(v)
+		return nil
+	case subscriptiondiscountcode.FieldMaxUses:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMaxUses(v)
+		return nil
+	case subscriptiondiscountcode.FieldPerUserLimit:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPerUserLimit(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SubscriptionDiscountCode numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SubscriptionDiscountCodeMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(subscriptiondiscountcode.FieldExpiresAt) {
+		fields = append(fields, subscriptiondiscountcode.FieldExpiresAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SubscriptionDiscountCodeMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SubscriptionDiscountCodeMutation) ClearField(name string) error {
+	switch name {
+	case subscriptiondiscountcode.FieldExpiresAt:
+		m.ClearExpiresAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SubscriptionDiscountCode nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SubscriptionDiscountCodeMutation) ResetField(name string) error {
+	switch name {
+	case subscriptiondiscountcode.FieldCode:
+		m.ResetCode()
+		return nil
+	case subscriptiondiscountcode.FieldDiscountType:
+		m.ResetDiscountType()
+		return nil
+	case subscriptiondiscountcode.FieldDiscountValue:
+		m.ResetDiscountValue()
+		return nil
+	case subscriptiondiscountcode.FieldPlanIds:
+		m.ResetPlanIds()
+		return nil
+	case subscriptiondiscountcode.FieldEnabled:
+		m.ResetEnabled()
+		return nil
+	case subscriptiondiscountcode.FieldExpiresAt:
+		m.ResetExpiresAt()
+		return nil
+	case subscriptiondiscountcode.FieldMaxUses:
+		m.ResetMaxUses()
+		return nil
+	case subscriptiondiscountcode.FieldPerUserLimit:
+		m.ResetPerUserLimit()
+		return nil
+	case subscriptiondiscountcode.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case subscriptiondiscountcode.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SubscriptionDiscountCode field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SubscriptionDiscountCodeMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SubscriptionDiscountCodeMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SubscriptionDiscountCodeMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SubscriptionDiscountCodeMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SubscriptionDiscountCodeMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SubscriptionDiscountCodeMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SubscriptionDiscountCodeMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown SubscriptionDiscountCode unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SubscriptionDiscountCodeMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown SubscriptionDiscountCode edge %s", name)
 }
 
 // SubscriptionPlanMutation represents an operation that mutates the SubscriptionPlan nodes in the graph.

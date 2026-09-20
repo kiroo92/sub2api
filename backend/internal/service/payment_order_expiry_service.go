@@ -116,4 +116,7 @@ func (s *PaymentOrderExpiryService) runOnce() {
 	if expired > 0 {
 		slog.Info("[PaymentOrderExpiry] expired timed-out orders", "count", expired)
 	}
+	if err := s.paymentSvc.ReconcileDiscountOrders(expireCtx); err != nil {
+		slog.Warn("[PaymentOrderExpiry] discount reconciliation failed", "error", err)
+	}
 }

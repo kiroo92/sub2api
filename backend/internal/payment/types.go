@@ -160,6 +160,7 @@ type CreatePaymentResponse struct {
 
 // QueryOrderResponse describes the payment status from the upstream provider.
 type QueryOrderResponse struct {
+	Closed   bool // Authoritative terminal closure, not a failed attempt or a missing order.
 	TradeNo  string
 	Status   string  // "pending", "paid", "failed", "refunded"
 	Amount   float64 // 按服务商返回币种解释的金额

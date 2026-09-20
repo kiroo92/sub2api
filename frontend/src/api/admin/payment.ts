@@ -9,7 +9,9 @@ import type {
   PaymentOrder,
   PaymentChannel,
   SubscriptionPlan,
-  ProviderInstance
+  ProviderInstance,
+  DiscountCode,
+  DiscountCodeInput
 } from '@/types/payment'
 import type { BasePaginationResponse } from '@/types'
 
@@ -62,6 +64,15 @@ export interface RefundResult {
 }
 
 export const adminPaymentAPI = {
+  getDiscountCodes(params: { page: number; page_size: number; search?: string }) {
+    return apiClient.get<BasePaginationResponse<DiscountCode>>('/admin/payment/discount-codes', { params })
+  },
+  createDiscountCode(data: DiscountCodeInput) {
+    return apiClient.post<DiscountCode>('/admin/payment/discount-codes', data)
+  },
+  updateDiscountCode(id: number, data: DiscountCodeInput) {
+    return apiClient.put<DiscountCode>(`/admin/payment/discount-codes/${id}`, data)
+  },
   // ==================== Config ====================
 
   /** Get payment configuration (admin view) */
@@ -87,6 +98,7 @@ export const adminPaymentAPI = {
 
   /** Get all orders (paginated, with filters) */
   getOrders(params?: {
+    discount_code_id?: number
     page?: number
     page_size?: number
     status?: string

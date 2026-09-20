@@ -11,7 +11,8 @@ import type {
   CheckoutInfoResponse,
   CreateOrderRequest,
   CreateOrderResult,
-  PaymentOrder
+  PaymentOrder,
+  SubscriptionQuote
 } from '@/types/payment'
 import type { BasePaginationResponse } from '@/types'
 
@@ -24,6 +25,9 @@ export interface PublicOrderVerifyResult {
 }
 
 export const paymentAPI = {
+  quoteSubscription(data: { plan_id: number; payment_type: string; coupon_code?: string }) {
+    return apiClient.post<SubscriptionQuote>('/payment/subscription-quote', data)
+  },
   /** Get payment configuration (enabled types, limits, etc.) */
   getConfig() {
     return apiClient.get<PaymentConfig>('/payment/config')

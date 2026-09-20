@@ -33,6 +33,7 @@ func RegisterPaymentRoutes(
 		authenticated.GET("/checkout-info", paymentHandler.GetCheckoutInfo)
 		authenticated.GET("/plans", paymentHandler.GetPlans)
 		authenticated.GET("/limits", paymentHandler.GetLimits)
+		authenticated.POST("/subscription-quote", paymentHandler.QuoteSubscription)
 
 		orders := authenticated.Group("/orders")
 		{
@@ -80,6 +81,9 @@ func RegisterPaymentRoutes(
 		// Config
 		adminGroup.GET("/config", adminPaymentHandler.GetConfig)
 		adminGroup.PUT("/config", adminPaymentHandler.UpdateConfig)
+		adminGroup.GET("/discount-codes", adminPaymentHandler.ListDiscountCodes)
+		adminGroup.POST("/discount-codes", adminPaymentHandler.CreateDiscountCode)
+		adminGroup.PUT("/discount-codes/:id", adminPaymentHandler.UpdateDiscountCode)
 
 		// Orders
 		adminOrders := adminGroup.Group("/orders")

@@ -314,6 +314,16 @@ export default {
 
   // Payment System
   payment: {
+    coupon: {
+      priceChanged: '优惠金额已变化，请核对后再次确认支付。',
+      label: '订阅优惠码', placeholder: '输入优惠码，如 VIP80', apply: '应用', remove: '移除', applyFirst: '请应用优惠码后再支付。', invalid: '优惠码不可用，请检查后重试。',
+      original: '优惠前售价', discount: '优惠金额', subtotal: '折后金额', management: '订阅优惠码', create: '创建优惠码', edit: '编辑优惠码',
+      type: '优惠方式', percentage: '打折', fixed: '固定减额', fold: '折数（8 表示八折）', amount: '减免金额', valueHint: '优惠按套餐售价计算，再换算支付币种及计算手续费。折后金额须大于 0。',
+      scope: '适用套餐', scopeHint: '不勾选表示适用全部订阅套餐。', allPlans: '全部订阅套餐', maxUses: '总次数（0 不限）', perUser: '每人次数（0 不限）', expiry: '有效期至（留空不过期）',
+      enabled: '启用', disabled: '停用', usage: '使用次数', usageSummary: '已用 {used}，占用 {reserved} / {max}', perUserSummary: '每人 {max} 次', orders: '关联订单', empty: '尚无订阅优惠码', previous: '上一页', next: '下一页',
+      percentSummary: '支付售价的 {value}%', fixedSummary: '减 {value}', priceUnits: '（套餐计价单位）', refundHint: '退款按折后订单金额计算，已使用的优惠次数不返还。',
+      adminHint: '仅用于订阅购买。下单占用次数，付款后计为已使用。取消或超时后需渠道确认关闭才返还；状态不明时保留占用，可查看关联订单。'
+    },
     title: '充值/订阅',
     amountLabel: '充值金额',
     paymentAmount: '支付金额',

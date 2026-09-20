@@ -154,6 +154,59 @@ func (_u *PaymentOrderUpdate) AddFeeRate(v float64) *PaymentOrderUpdate {
 	return _u
 }
 
+// SetDiscountCodeID sets the "discount_code_id" field.
+func (_u *PaymentOrderUpdate) SetDiscountCodeID(v int64) *PaymentOrderUpdate {
+	_u.mutation.ResetDiscountCodeID()
+	_u.mutation.SetDiscountCodeID(v)
+	return _u
+}
+
+// SetNillableDiscountCodeID sets the "discount_code_id" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillableDiscountCodeID(v *int64) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetDiscountCodeID(*v)
+	}
+	return _u
+}
+
+// AddDiscountCodeID adds value to the "discount_code_id" field.
+func (_u *PaymentOrderUpdate) AddDiscountCodeID(v int64) *PaymentOrderUpdate {
+	_u.mutation.AddDiscountCodeID(v)
+	return _u
+}
+
+// ClearDiscountCodeID clears the value of the "discount_code_id" field.
+func (_u *PaymentOrderUpdate) ClearDiscountCodeID() *PaymentOrderUpdate {
+	_u.mutation.ClearDiscountCodeID()
+	return _u
+}
+
+// SetDiscountState sets the "discount_state" field.
+func (_u *PaymentOrderUpdate) SetDiscountState(v string) *PaymentOrderUpdate {
+	_u.mutation.SetDiscountState(v)
+	return _u
+}
+
+// SetNillableDiscountState sets the "discount_state" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillableDiscountState(v *string) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetDiscountState(*v)
+	}
+	return _u
+}
+
+// SetDiscountSnapshot sets the "discount_snapshot" field.
+func (_u *PaymentOrderUpdate) SetDiscountSnapshot(v map[string]interface{}) *PaymentOrderUpdate {
+	_u.mutation.SetDiscountSnapshot(v)
+	return _u
+}
+
+// ClearDiscountSnapshot clears the value of the "discount_snapshot" field.
+func (_u *PaymentOrderUpdate) ClearDiscountSnapshot() *PaymentOrderUpdate {
+	_u.mutation.ClearDiscountSnapshot()
+	return _u
+}
+
 // SetRechargeCode sets the "recharge_code" field.
 func (_u *PaymentOrderUpdate) SetRechargeCode(v string) *PaymentOrderUpdate {
 	_u.mutation.SetRechargeCode(v)
@@ -778,6 +831,11 @@ func (_u *PaymentOrderUpdate) check() error {
 			return &ValidationError{Name: "user_name", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.user_name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.DiscountState(); ok {
+		if err := paymentorder.DiscountStateValidator(v); err != nil {
+			return &ValidationError{Name: "discount_state", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.discount_state": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.RechargeCode(); ok {
 		if err := paymentorder.RechargeCodeValidator(v); err != nil {
 			return &ValidationError{Name: "recharge_code", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.recharge_code": %w`, err)}
@@ -880,6 +938,24 @@ func (_u *PaymentOrderUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if value, ok := _u.mutation.AddedFeeRate(); ok {
 		_spec.AddField(paymentorder.FieldFeeRate, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.DiscountCodeID(); ok {
+		_spec.SetField(paymentorder.FieldDiscountCodeID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedDiscountCodeID(); ok {
+		_spec.AddField(paymentorder.FieldDiscountCodeID, field.TypeInt64, value)
+	}
+	if _u.mutation.DiscountCodeIDCleared() {
+		_spec.ClearField(paymentorder.FieldDiscountCodeID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.DiscountState(); ok {
+		_spec.SetField(paymentorder.FieldDiscountState, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DiscountSnapshot(); ok {
+		_spec.SetField(paymentorder.FieldDiscountSnapshot, field.TypeJSON, value)
+	}
+	if _u.mutation.DiscountSnapshotCleared() {
+		_spec.ClearField(paymentorder.FieldDiscountSnapshot, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.RechargeCode(); ok {
 		_spec.SetField(paymentorder.FieldRechargeCode, field.TypeString, value)
@@ -1214,6 +1290,59 @@ func (_u *PaymentOrderUpdateOne) SetNillableFeeRate(v *float64) *PaymentOrderUpd
 // AddFeeRate adds value to the "fee_rate" field.
 func (_u *PaymentOrderUpdateOne) AddFeeRate(v float64) *PaymentOrderUpdateOne {
 	_u.mutation.AddFeeRate(v)
+	return _u
+}
+
+// SetDiscountCodeID sets the "discount_code_id" field.
+func (_u *PaymentOrderUpdateOne) SetDiscountCodeID(v int64) *PaymentOrderUpdateOne {
+	_u.mutation.ResetDiscountCodeID()
+	_u.mutation.SetDiscountCodeID(v)
+	return _u
+}
+
+// SetNillableDiscountCodeID sets the "discount_code_id" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillableDiscountCodeID(v *int64) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetDiscountCodeID(*v)
+	}
+	return _u
+}
+
+// AddDiscountCodeID adds value to the "discount_code_id" field.
+func (_u *PaymentOrderUpdateOne) AddDiscountCodeID(v int64) *PaymentOrderUpdateOne {
+	_u.mutation.AddDiscountCodeID(v)
+	return _u
+}
+
+// ClearDiscountCodeID clears the value of the "discount_code_id" field.
+func (_u *PaymentOrderUpdateOne) ClearDiscountCodeID() *PaymentOrderUpdateOne {
+	_u.mutation.ClearDiscountCodeID()
+	return _u
+}
+
+// SetDiscountState sets the "discount_state" field.
+func (_u *PaymentOrderUpdateOne) SetDiscountState(v string) *PaymentOrderUpdateOne {
+	_u.mutation.SetDiscountState(v)
+	return _u
+}
+
+// SetNillableDiscountState sets the "discount_state" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillableDiscountState(v *string) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetDiscountState(*v)
+	}
+	return _u
+}
+
+// SetDiscountSnapshot sets the "discount_snapshot" field.
+func (_u *PaymentOrderUpdateOne) SetDiscountSnapshot(v map[string]interface{}) *PaymentOrderUpdateOne {
+	_u.mutation.SetDiscountSnapshot(v)
+	return _u
+}
+
+// ClearDiscountSnapshot clears the value of the "discount_snapshot" field.
+func (_u *PaymentOrderUpdateOne) ClearDiscountSnapshot() *PaymentOrderUpdateOne {
+	_u.mutation.ClearDiscountSnapshot()
 	return _u
 }
 
@@ -1854,6 +1983,11 @@ func (_u *PaymentOrderUpdateOne) check() error {
 			return &ValidationError{Name: "user_name", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.user_name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.DiscountState(); ok {
+		if err := paymentorder.DiscountStateValidator(v); err != nil {
+			return &ValidationError{Name: "discount_state", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.discount_state": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.RechargeCode(); ok {
 		if err := paymentorder.RechargeCodeValidator(v); err != nil {
 			return &ValidationError{Name: "recharge_code", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.recharge_code": %w`, err)}
@@ -1973,6 +2107,24 @@ func (_u *PaymentOrderUpdateOne) sqlSave(ctx context.Context) (_node *PaymentOrd
 	}
 	if value, ok := _u.mutation.AddedFeeRate(); ok {
 		_spec.AddField(paymentorder.FieldFeeRate, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.DiscountCodeID(); ok {
+		_spec.SetField(paymentorder.FieldDiscountCodeID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedDiscountCodeID(); ok {
+		_spec.AddField(paymentorder.FieldDiscountCodeID, field.TypeInt64, value)
+	}
+	if _u.mutation.DiscountCodeIDCleared() {
+		_spec.ClearField(paymentorder.FieldDiscountCodeID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.DiscountState(); ok {
+		_spec.SetField(paymentorder.FieldDiscountState, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DiscountSnapshot(); ok {
+		_spec.SetField(paymentorder.FieldDiscountSnapshot, field.TypeJSON, value)
+	}
+	if _u.mutation.DiscountSnapshotCleared() {
+		_spec.ClearField(paymentorder.FieldDiscountSnapshot, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.RechargeCode(); ok {
 		_spec.SetField(paymentorder.FieldRechargeCode, field.TypeString, value)

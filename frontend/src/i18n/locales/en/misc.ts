@@ -290,6 +290,16 @@ export default {
 
   // Payment System
   payment: {
+    coupon: {
+      priceChanged: 'The discounted price changed. Review it before confirming payment again.',
+      label: 'Subscription discount code', placeholder: 'Enter a code, e.g. VIP80', apply: 'Apply', remove: 'Remove', applyFirst: 'Apply the discount code before paying.', invalid: 'This discount code is unavailable. Check it and try again.',
+      original: 'Original price', discount: 'Discount', subtotal: 'Discounted amount', management: 'Subscription discounts', create: 'Create discount code', edit: 'Edit discount code',
+      type: 'Discount type', percentage: 'Percentage', fixed: 'Fixed amount off', fold: 'Price factor out of 10 (8 = pay 80%)', amount: 'Amount off', valueHint: 'Discount applies to the plan price before currency conversion and fees. The discounted amount must remain positive.',
+      scope: 'Eligible plans', scopeHint: 'Select no plans to allow all subscription plans.', allPlans: 'All subscription plans', maxUses: 'Total uses (0 = unlimited)', perUser: 'Uses per user (0 = unlimited)', expiry: 'Valid until (blank = no expiry)',
+      enabled: 'Enabled', disabled: 'Disabled', usage: 'Usage', usageSummary: 'Used {used}, reserved {reserved} / {max}', perUserSummary: '{max} per user', orders: 'Orders', empty: 'No subscription discount codes yet', previous: 'Previous', next: 'Next',
+      percentSummary: 'Pay {value}% of the price', fixedSummary: '{value} off', priceUnits: '(plan price units)', refundHint: 'Refunds use the discounted order amount. Used discounts are not restored.',
+      adminHint: 'Subscription purchases only. Checkout reserves a use; payment consumes it. Cancelled or expired orders release uses only after the provider confirms closure. Uncertain payments remain reserved; see linked orders.'
+    },
     title: 'Recharge / Subscription',
     amountLabel: 'Amount',
     paymentAmount: 'Payment Amount',

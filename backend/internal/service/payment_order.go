@@ -11,8 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent/dialect"
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/Wei-Shaw/sub2api/internal/payment/provider"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -23,6 +25,10 @@ import (
 // --- Order Creation ---
 
 func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest) (*CreateOrderResponse, error) {
+	req.CouponCode = strings.ToUpper(strings.TrimSpace(req.CouponCode))
+	if req.CouponCode != "" && req.OrderType != payment.OrderTypeSubscription {
+		return nil, infraerrors.BadRequest("COUPON_SUBSCRIPTION_ONLY", "discount codes apply only to subscription purchases")
+	}
 	if req.OrderType == "" {
 		req.OrderType = payment.OrderTypeBalance
 	}
@@ -58,6 +64,14 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if plan != nil {
 		orderAmount = plan.Price
 		limitAmount = plan.Price
+		if req.CouponCode != "" {
+			req.discount, err = subscriptionDiscount(ctx, s.entClient, req.UserID, plan, req.CouponCode, false)
+			if err != nil {
+				return nil, err
+			}
+			req.discount.USDToCNYRate = cfg.SubscriptionUSDToCNYRate
+			orderAmount, limitAmount = req.discount.Amount, req.discount.Amount
+		}
 	} else if req.OrderType == payment.OrderTypeBalance {
 		orderAmount = calculateCreditedBalance(req.Amount, cfg.BalanceRechargeMultiplier)
 	}
@@ -93,6 +107,11 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if err := validateSelectedCreateOrderAmountCurrency(payAmountStr, sel); err != nil {
 		return nil, err
 	}
+	if req.discount != nil {
+		if err := discountExpectedAmount(req.ExpectedPayAmount, payAmount); err != nil {
+			return nil, err
+		}
+	}
 	oauthResp, err := s.maybeBuildWeChatOAuthRequiredResponseForSelection(ctx, req, limitAmount, payAmount, feeRate, sel)
 	if err != nil {
 		return nil, err
@@ -106,7 +125,7 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	}
 	resp, err := s.invokeProvider(ctx, order, req, cfg, limitAmount, payAmountStr, payAmount, plan, sel)
 	if err != nil {
-		_, _ = s.entClient.PaymentOrder.UpdateOneID(order.ID).
+		_, _ = s.entClient.PaymentOrder.Update().Where(paymentorder.IDEQ(order.ID), paymentorder.StatusEQ(OrderStatusPending)).
 			SetStatus(OrderStatusFailed).
 			Save(ctx)
 		return nil, err
@@ -155,6 +174,26 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if req.discount != nil {
+		q := tx.SubscriptionPlan.Query().Where(subscriptionplan.IDEQ(plan.ID))
+		if paymentAuditDialect(tx.Client()) == dialect.Postgres {
+			q.ForUpdate()
+		}
+		fresh, err := q.Only(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !fresh.ForSale || !fresh.UpdatedAt.Equal(plan.UpdatedAt) {
+			return nil, infraerrors.Conflict("CHECKOUT_PRICE_CHANGED", "subscription plan changed; review checkout again")
+		}
+		locked, err := subscriptionDiscount(ctx, tx.Client(), req.UserID, fresh, req.CouponCode, true)
+		if err != nil {
+			return nil, err
+		}
+		if locked.Amount != orderAmount || locked.OriginalAmount != req.discount.OriginalAmount || locked.Value != req.discount.Value || locked.Type != req.discount.Type {
+			return nil, infraerrors.Conflict("CHECKOUT_PRICE_CHANGED", "discount changed; review checkout again")
+		}
+	}
 	if err := s.checkPendingLimit(ctx, tx, req.UserID, cfg.MaxPendingOrders); err != nil {
 		return nil, err
 	}
@@ -208,6 +247,9 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	}
 	if plan != nil {
 		b.SetPlanID(plan.ID).SetSubscriptionGroupID(plan.GroupID).SetSubscriptionDays(psComputeValidityDays(plan.ValidityDays, plan.ValidityUnit))
+	}
+	if req.discount != nil {
+		b.SetDiscountCodeID(req.discount.CodeID).SetDiscountState(discountCreating).SetDiscountSnapshot(req.discount.snapshot())
 	}
 	order, err := b.Save(ctx)
 	if err != nil {
@@ -398,6 +440,16 @@ func (s *PaymentService) usesOfficialWxpayVisibleMethod(ctx context.Context) boo
 }
 
 func (s *PaymentService) invokeProvider(ctx context.Context, order *dbent.PaymentOrder, req CreateOrderRequest, cfg *PaymentConfig, limitAmount float64, payAmountStr string, payAmount float64, plan *dbent.SubscriptionPlan, sel *payment.InstanceSelection) (*CreateOrderResponse, error) {
+	providerCalled := false
+	defer func() {
+		if order.DiscountCodeID != nil && !providerCalled {
+			releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			if err := s.releasePaymentDiscount(releaseCtx, order); err != nil {
+				slog.Error("release unsubmitted discount", "orderID", order.ID, "error", err)
+			}
+		}
+	}()
 	prov, err := provider.CreateProvider(sel.ProviderKey, sel.InstanceID, sel.Config)
 	if err != nil {
 		slog.Error("[PaymentService] CreateProvider failed", "provider", sel.ProviderKey, "instance", sel.InstanceID, "error", err)
@@ -448,6 +500,7 @@ func (s *PaymentService) invokeProvider(ctx context.Context, order *dbent.Paymen
 	}, sel, outTradeNo, payAmountStr, subject)
 	providerReq.AlipayMobilePrecreate = shouldUseAlipayMobilePrecreate(req, cfg, sel)
 	finishProviderCall := servertiming.ObserveDependency(ctx, "payment")
+	providerCalled = true
 	pr, err := prov.CreatePayment(ctx, providerReq)
 	finishProviderCall()
 	if err != nil {
@@ -467,6 +520,11 @@ func (s *PaymentService) invokeProvider(ctx context.Context, order *dbent.Paymen
 		Save(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("update order with payment details: %w", err)
+	}
+	if order.DiscountCodeID != nil {
+		if _, err := s.entClient.PaymentOrder.Update().Where(paymentorder.IDEQ(order.ID), paymentorder.DiscountStateEQ(discountCreating)).SetDiscountState(discountReserved).Save(ctx); err != nil {
+			return nil, err
+		}
 	}
 	s.writeAuditLog(ctx, order.ID, "ORDER_CREATED", fmt.Sprintf("user:%d", req.UserID), map[string]any{
 		"paymentAmount":  req.Amount,
@@ -597,6 +655,7 @@ func (s *PaymentService) buildWeChatOAuthRequiredResponse(ctx context.Context, r
 	}
 
 	return &CreateOrderResponse{
+		Discount:    req.discount,
 		Amount:      amount,
 		PayAmount:   payAmount,
 		FeeRate:     feeRate,
@@ -731,6 +790,7 @@ func classifyCreatePaymentError(req CreateOrderRequest, providerKey string, err 
 
 func buildCreateOrderResponse(order *dbent.PaymentOrder, req CreateOrderRequest, payAmount float64, sel *payment.InstanceSelection, pr *payment.CreatePaymentResponse, resultType payment.CreatePaymentResultType) *CreateOrderResponse {
 	return &CreateOrderResponse{
+		Discount:     PaymentOrderDiscount(order),
 		OrderID:      order.ID,
 		Amount:       order.Amount,
 		PayAmount:    payAmount,
@@ -769,6 +829,12 @@ func buildWeChatPaymentOAuthStartURL(req CreateOrderRequest, scope string) (stri
 	}
 	if req.PlanID > 0 {
 		q.Set("plan_id", strconv.FormatInt(req.PlanID, 10))
+	}
+	if req.CouponCode != "" {
+		q.Set("coupon_code", req.CouponCode)
+		if req.ExpectedPayAmount != nil {
+			q.Set("expected_pay_amount", strconv.FormatFloat(*req.ExpectedPayAmount, 'f', -1, 64))
+		}
 	}
 	if scope = strings.TrimSpace(scope); scope != "" {
 		q.Set("scope", scope)
@@ -866,6 +932,9 @@ func (s *PaymentService) GetUserOrders(ctx context.Context, userID int64, p Orde
 // AdminListOrders returns a paginated list of orders. If userID > 0, filters by user.
 func (s *PaymentService) AdminListOrders(ctx context.Context, userID int64, p OrderListParams) ([]*dbent.PaymentOrder, int, error) {
 	q := s.entClient.PaymentOrder.Query()
+	if p.DiscountCodeID > 0 {
+		q.Where(paymentorder.DiscountCodeIDEQ(p.DiscountCodeID))
+	}
 	if userID > 0 {
 		q = q.Where(paymentorder.UserIDEQ(userID))
 	}

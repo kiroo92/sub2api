@@ -138,6 +138,11 @@ func (s *PaymentService) cancelCore(ctx context.Context, o *dbent.PaymentOrder, 
 		}
 		s.writeAuditLog(ctx, o.ID, auditAction, op, map[string]any{"detail": ad})
 	}
+	if o.DiscountCodeID != nil {
+		if err := s.reconcileDiscountOrder(ctx, o); err != nil {
+			slog.Warn("cancelled discount still reserved", "orderID", o.ID, "error", err)
+		}
+	}
 	return checkPaidResultCancelled, nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
@@ -71,23 +72,27 @@ func generateRandomString(n int) string {
 }
 
 type CreateOrderRequest struct {
-	UserID          int64
-	Amount          float64
-	PaymentType     string
-	OpenID          string
-	ClientIP        string
-	IsMobile        bool
-	IsWeChatBrowser bool
-	SrcHost         string
-	SrcURL          string
-	ReturnURL       string
-	PaymentSource   string
-	OrderType       string
-	PlanID          int64
-	Locale          string
+	UserID            int64
+	Amount            float64
+	PaymentType       string
+	OpenID            string
+	ClientIP          string
+	IsMobile          bool
+	IsWeChatBrowser   bool
+	SrcHost           string
+	SrcURL            string
+	ReturnURL         string
+	PaymentSource     string
+	OrderType         string
+	PlanID            int64
+	Locale            string
+	CouponCode        string
+	ExpectedPayAmount *float64
+	discount          *PaymentDiscount
 }
 
 type CreateOrderResponse struct {
+	Discount                      *PaymentDiscount                `json:"discount,omitempty"`
 	OrderID                       int64                           `json:"order_id"`
 	Amount                        float64                         `json:"amount"`
 	PayAmount                     float64                         `json:"pay_amount"`
@@ -113,12 +118,13 @@ type CreateOrderResponse struct {
 }
 
 type OrderListParams struct {
-	Page        int
-	PageSize    int
-	Status      string
-	OrderType   string
-	PaymentType string
-	Keyword     string
+	DiscountCodeID int64
+	Page           int
+	PageSize       int
+	Status         string
+	OrderType      string
+	PaymentType    string
+	Keyword        string
 }
 
 type RefundPlan struct {
@@ -187,6 +193,7 @@ type TopUsersByCurrency map[string][]TopUserStat
 // --- Service ---
 
 type PaymentService struct {
+	discountReconcileCursor  atomic.Int64
 	providerMu               sync.Mutex
 	providersLoaded          bool
 	entClient                *dbent.Client

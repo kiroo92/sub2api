@@ -272,6 +272,7 @@ func (a *Alipay) QueryOrder(ctx context.Context, tradeNo string) (*payment.Query
 
 	return &payment.QueryOrderResponse{
 		TradeNo:  result.TradeNo,
+		Closed:   result.TradeStatus == alipay.TradeStatusClosed,
 		Status:   status,
 		Amount:   amount,
 		PaidAt:   result.SendPayDate,

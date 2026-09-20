@@ -212,6 +212,7 @@ func (a *Airwallex) QueryOrder(ctx context.Context, tradeNo string) (*payment.Qu
 		return nil, fmt.Errorf("airwallex query order: %w", err)
 	}
 	return &payment.QueryOrderResponse{
+		Closed:   strings.EqualFold(strings.TrimSpace(intent.Status), airwallexPaymentStatusCancelled),
 		TradeNo:  intent.ID,
 		Status:   airwallexProviderStatus(intent.Status),
 		Amount:   intent.Amount.InexactFloat64(),

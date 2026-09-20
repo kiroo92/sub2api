@@ -6,6 +6,9 @@
     @close="emit('close')"
   >
     <div v-if="order" class="space-y-4">
+      <p v-if="order.discount" class="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-900/20">
+        {{ order.discount.code }} · {{ t('payment.coupon.original') }} {{ order.discount.original_amount.toFixed(2) }} − {{ t('payment.coupon.discount') }} {{ order.discount.discount_amount.toFixed(2) }} = {{ order.discount.amount.toFixed(2) }} {{ t('payment.coupon.priceUnits') }}
+      </p>
       <div class="grid grid-cols-2 gap-4">
         <div>
           <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('payment.orders.orderId') }}</p>
