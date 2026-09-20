@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { completeBulkSubscriptionOperation, prepareBulkSubscriptionOperation } from '../bulkSubscriptionOperation'
+import { completeBulkSubscriptionOperation, prepareBulkSubscriptionOperation, prepareSubscriptionAssignment } from '../bulkSubscriptionOperation'
 
 let adminId = 1000
 
@@ -9,6 +9,16 @@ beforeEach(() => {
 })
 
 describe('bulk subscription operation identity', () => {
+  it('replays uncertain assignments and creates a new identity after successful allocation', () => {
+    const request = { user_id: 12, group_id: 5, validity_days: 30 }
+    const first = prepareSubscriptionAssignment(request)
+    expect(prepareSubscriptionAssignment(request).key).toBe(first.key)
+    completeBulkSubscriptionOperation(first)
+    expect(prepareSubscriptionAssignment(request).key).not.toBe(first.key)
+    const batch = prepareSubscriptionAssignment({ user_ids: [2, 1, 2], group_id: 5, validity_days: 30 })
+    expect(batch.request.user_ids).toEqual([1, 2])
+    expect(prepareSubscriptionAssignment({ user_ids: [1, 2], group_id: 5, validity_days: 30 }).key).toBe(batch.key)
+  })
   it('canonicalizes duplicate and reordered IDs for storage and the sent request', () => {
     const first = prepareBulkSubscriptionOperation({ action: 'extend', subscription_ids: [3, 1, 3], days: 7 })
     const retry = prepareBulkSubscriptionOperation({ subscription_ids: [1, 3], days: 7, action: 'extend' })

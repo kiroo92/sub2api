@@ -144,6 +144,7 @@ docs/*
 !docs/team-api.md
 !docs/team-billing.md
 !docs/subscription-discounts.md
+!docs/subscription-freeze.md
 !docs/team-implementation.md
 !docs/COMPOSITE_GROUPS.md
 !docs/PLUGIN_DEVELOPMENT.md

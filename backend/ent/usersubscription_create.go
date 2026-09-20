@@ -245,6 +245,62 @@ func (_c *UserSubscriptionCreate) SetNillableSortOrder(v *int) *UserSubscription
 	return _c
 }
 
+// SetFrozenAt sets the "frozen_at" field.
+func (_c *UserSubscriptionCreate) SetFrozenAt(v time.Time) *UserSubscriptionCreate {
+	_c.mutation.SetFrozenAt(v)
+	return _c
+}
+
+// SetNillableFrozenAt sets the "frozen_at" field if the given value is not nil.
+func (_c *UserSubscriptionCreate) SetNillableFrozenAt(v *time.Time) *UserSubscriptionCreate {
+	if v != nil {
+		_c.SetFrozenAt(*v)
+	}
+	return _c
+}
+
+// SetFrozenDurationUs sets the "frozen_duration_us" field.
+func (_c *UserSubscriptionCreate) SetFrozenDurationUs(v int64) *UserSubscriptionCreate {
+	_c.mutation.SetFrozenDurationUs(v)
+	return _c
+}
+
+// SetNillableFrozenDurationUs sets the "frozen_duration_us" field if the given value is not nil.
+func (_c *UserSubscriptionCreate) SetNillableFrozenDurationUs(v *int64) *UserSubscriptionCreate {
+	if v != nil {
+		_c.SetFrozenDurationUs(*v)
+	}
+	return _c
+}
+
+// SetAdminAssignmentKey sets the "admin_assignment_key" field.
+func (_c *UserSubscriptionCreate) SetAdminAssignmentKey(v string) *UserSubscriptionCreate {
+	_c.mutation.SetAdminAssignmentKey(v)
+	return _c
+}
+
+// SetNillableAdminAssignmentKey sets the "admin_assignment_key" field if the given value is not nil.
+func (_c *UserSubscriptionCreate) SetNillableAdminAssignmentKey(v *string) *UserSubscriptionCreate {
+	if v != nil {
+		_c.SetAdminAssignmentKey(*v)
+	}
+	return _c
+}
+
+// SetAdminAssignmentFingerprint sets the "admin_assignment_fingerprint" field.
+func (_c *UserSubscriptionCreate) SetAdminAssignmentFingerprint(v string) *UserSubscriptionCreate {
+	_c.mutation.SetAdminAssignmentFingerprint(v)
+	return _c
+}
+
+// SetNillableAdminAssignmentFingerprint sets the "admin_assignment_fingerprint" field if the given value is not nil.
+func (_c *UserSubscriptionCreate) SetNillableAdminAssignmentFingerprint(v *string) *UserSubscriptionCreate {
+	if v != nil {
+		_c.SetAdminAssignmentFingerprint(*v)
+	}
+	return _c
+}
+
 // SetUser sets the "user" edge to the User entity.
 func (_c *UserSubscriptionCreate) SetUser(v *User) *UserSubscriptionCreate {
 	return _c.SetUserID(v.ID)
@@ -367,6 +423,10 @@ func (_c *UserSubscriptionCreate) defaults() error {
 		v := usersubscription.DefaultSortOrder
 		_c.mutation.SetSortOrder(v)
 	}
+	if _, ok := _c.mutation.FrozenDurationUs(); !ok {
+		v := usersubscription.DefaultFrozenDurationUs
+		_c.mutation.SetFrozenDurationUs(v)
+	}
 	return nil
 }
 
@@ -412,6 +472,24 @@ func (_c *UserSubscriptionCreate) check() error {
 	}
 	if _, ok := _c.mutation.SortOrder(); !ok {
 		return &ValidationError{Name: "sort_order", err: errors.New(`ent: missing required field "UserSubscription.sort_order"`)}
+	}
+	if _, ok := _c.mutation.FrozenDurationUs(); !ok {
+		return &ValidationError{Name: "frozen_duration_us", err: errors.New(`ent: missing required field "UserSubscription.frozen_duration_us"`)}
+	}
+	if v, ok := _c.mutation.FrozenDurationUs(); ok {
+		if err := usersubscription.FrozenDurationUsValidator(v); err != nil {
+			return &ValidationError{Name: "frozen_duration_us", err: fmt.Errorf(`ent: validator failed for field "UserSubscription.frozen_duration_us": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.AdminAssignmentKey(); ok {
+		if err := usersubscription.AdminAssignmentKeyValidator(v); err != nil {
+			return &ValidationError{Name: "admin_assignment_key", err: fmt.Errorf(`ent: validator failed for field "UserSubscription.admin_assignment_key": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.AdminAssignmentFingerprint(); ok {
+		if err := usersubscription.AdminAssignmentFingerprintValidator(v); err != nil {
+			return &ValidationError{Name: "admin_assignment_fingerprint", err: fmt.Errorf(`ent: validator failed for field "UserSubscription.admin_assignment_fingerprint": %w`, err)}
+		}
 	}
 	if len(_c.mutation.UserIDs()) == 0 {
 		return &ValidationError{Name: "user", err: errors.New(`ent: missing required edge "UserSubscription.user"`)}
@@ -505,6 +583,22 @@ func (_c *UserSubscriptionCreate) createSpec() (*UserSubscription, *sqlgraph.Cre
 	if value, ok := _c.mutation.SortOrder(); ok {
 		_spec.SetField(usersubscription.FieldSortOrder, field.TypeInt, value)
 		_node.SortOrder = value
+	}
+	if value, ok := _c.mutation.FrozenAt(); ok {
+		_spec.SetField(usersubscription.FieldFrozenAt, field.TypeTime, value)
+		_node.FrozenAt = &value
+	}
+	if value, ok := _c.mutation.FrozenDurationUs(); ok {
+		_spec.SetField(usersubscription.FieldFrozenDurationUs, field.TypeInt64, value)
+		_node.FrozenDurationUs = value
+	}
+	if value, ok := _c.mutation.AdminAssignmentKey(); ok {
+		_spec.SetField(usersubscription.FieldAdminAssignmentKey, field.TypeString, value)
+		_node.AdminAssignmentKey = &value
+	}
+	if value, ok := _c.mutation.AdminAssignmentFingerprint(); ok {
+		_spec.SetField(usersubscription.FieldAdminAssignmentFingerprint, field.TypeString, value)
+		_node.AdminAssignmentFingerprint = &value
 	}
 	if nodes := _c.mutation.UserIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -889,6 +983,42 @@ func (u *UserSubscriptionUpsert) AddSortOrder(v int) *UserSubscriptionUpsert {
 	return u
 }
 
+// SetFrozenAt sets the "frozen_at" field.
+func (u *UserSubscriptionUpsert) SetFrozenAt(v time.Time) *UserSubscriptionUpsert {
+	u.Set(usersubscription.FieldFrozenAt, v)
+	return u
+}
+
+// UpdateFrozenAt sets the "frozen_at" field to the value that was provided on create.
+func (u *UserSubscriptionUpsert) UpdateFrozenAt() *UserSubscriptionUpsert {
+	u.SetExcluded(usersubscription.FieldFrozenAt)
+	return u
+}
+
+// ClearFrozenAt clears the value of the "frozen_at" field.
+func (u *UserSubscriptionUpsert) ClearFrozenAt() *UserSubscriptionUpsert {
+	u.SetNull(usersubscription.FieldFrozenAt)
+	return u
+}
+
+// SetFrozenDurationUs sets the "frozen_duration_us" field.
+func (u *UserSubscriptionUpsert) SetFrozenDurationUs(v int64) *UserSubscriptionUpsert {
+	u.Set(usersubscription.FieldFrozenDurationUs, v)
+	return u
+}
+
+// UpdateFrozenDurationUs sets the "frozen_duration_us" field to the value that was provided on create.
+func (u *UserSubscriptionUpsert) UpdateFrozenDurationUs() *UserSubscriptionUpsert {
+	u.SetExcluded(usersubscription.FieldFrozenDurationUs)
+	return u
+}
+
+// AddFrozenDurationUs adds v to the "frozen_duration_us" field.
+func (u *UserSubscriptionUpsert) AddFrozenDurationUs(v int64) *UserSubscriptionUpsert {
+	u.Add(usersubscription.FieldFrozenDurationUs, v)
+	return u
+}
+
 // UpdateNewValues updates the mutable fields using the new values that were set on create.
 // Using this option is equivalent to using:
 //
@@ -902,6 +1032,12 @@ func (u *UserSubscriptionUpsertOne) UpdateNewValues() *UserSubscriptionUpsertOne
 	u.create.conflict = append(u.create.conflict, sql.ResolveWith(func(s *sql.UpdateSet) {
 		if _, exists := u.create.mutation.CreatedAt(); exists {
 			s.SetIgnore(usersubscription.FieldCreatedAt)
+		}
+		if _, exists := u.create.mutation.AdminAssignmentKey(); exists {
+			s.SetIgnore(usersubscription.FieldAdminAssignmentKey)
+		}
+		if _, exists := u.create.mutation.AdminAssignmentFingerprint(); exists {
+			s.SetIgnore(usersubscription.FieldAdminAssignmentFingerprint)
 		}
 	}))
 	return u
@@ -1242,6 +1378,48 @@ func (u *UserSubscriptionUpsertOne) UpdateSortOrder() *UserSubscriptionUpsertOne
 	})
 }
 
+// SetFrozenAt sets the "frozen_at" field.
+func (u *UserSubscriptionUpsertOne) SetFrozenAt(v time.Time) *UserSubscriptionUpsertOne {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.SetFrozenAt(v)
+	})
+}
+
+// UpdateFrozenAt sets the "frozen_at" field to the value that was provided on create.
+func (u *UserSubscriptionUpsertOne) UpdateFrozenAt() *UserSubscriptionUpsertOne {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.UpdateFrozenAt()
+	})
+}
+
+// ClearFrozenAt clears the value of the "frozen_at" field.
+func (u *UserSubscriptionUpsertOne) ClearFrozenAt() *UserSubscriptionUpsertOne {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.ClearFrozenAt()
+	})
+}
+
+// SetFrozenDurationUs sets the "frozen_duration_us" field.
+func (u *UserSubscriptionUpsertOne) SetFrozenDurationUs(v int64) *UserSubscriptionUpsertOne {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.SetFrozenDurationUs(v)
+	})
+}
+
+// AddFrozenDurationUs adds v to the "frozen_duration_us" field.
+func (u *UserSubscriptionUpsertOne) AddFrozenDurationUs(v int64) *UserSubscriptionUpsertOne {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.AddFrozenDurationUs(v)
+	})
+}
+
+// UpdateFrozenDurationUs sets the "frozen_duration_us" field to the value that was provided on create.
+func (u *UserSubscriptionUpsertOne) UpdateFrozenDurationUs() *UserSubscriptionUpsertOne {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.UpdateFrozenDurationUs()
+	})
+}
+
 // Exec executes the query.
 func (u *UserSubscriptionUpsertOne) Exec(ctx context.Context) error {
 	if len(u.create.conflict) == 0 {
@@ -1420,6 +1598,12 @@ func (u *UserSubscriptionUpsertBulk) UpdateNewValues() *UserSubscriptionUpsertBu
 		for _, b := range u.create.builders {
 			if _, exists := b.mutation.CreatedAt(); exists {
 				s.SetIgnore(usersubscription.FieldCreatedAt)
+			}
+			if _, exists := b.mutation.AdminAssignmentKey(); exists {
+				s.SetIgnore(usersubscription.FieldAdminAssignmentKey)
+			}
+			if _, exists := b.mutation.AdminAssignmentFingerprint(); exists {
+				s.SetIgnore(usersubscription.FieldAdminAssignmentFingerprint)
 			}
 		}
 	}))
@@ -1758,6 +1942,48 @@ func (u *UserSubscriptionUpsertBulk) AddSortOrder(v int) *UserSubscriptionUpsert
 func (u *UserSubscriptionUpsertBulk) UpdateSortOrder() *UserSubscriptionUpsertBulk {
 	return u.Update(func(s *UserSubscriptionUpsert) {
 		s.UpdateSortOrder()
+	})
+}
+
+// SetFrozenAt sets the "frozen_at" field.
+func (u *UserSubscriptionUpsertBulk) SetFrozenAt(v time.Time) *UserSubscriptionUpsertBulk {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.SetFrozenAt(v)
+	})
+}
+
+// UpdateFrozenAt sets the "frozen_at" field to the value that was provided on create.
+func (u *UserSubscriptionUpsertBulk) UpdateFrozenAt() *UserSubscriptionUpsertBulk {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.UpdateFrozenAt()
+	})
+}
+
+// ClearFrozenAt clears the value of the "frozen_at" field.
+func (u *UserSubscriptionUpsertBulk) ClearFrozenAt() *UserSubscriptionUpsertBulk {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.ClearFrozenAt()
+	})
+}
+
+// SetFrozenDurationUs sets the "frozen_duration_us" field.
+func (u *UserSubscriptionUpsertBulk) SetFrozenDurationUs(v int64) *UserSubscriptionUpsertBulk {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.SetFrozenDurationUs(v)
+	})
+}
+
+// AddFrozenDurationUs adds v to the "frozen_duration_us" field.
+func (u *UserSubscriptionUpsertBulk) AddFrozenDurationUs(v int64) *UserSubscriptionUpsertBulk {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.AddFrozenDurationUs(v)
+	})
+}
+
+// UpdateFrozenDurationUs sets the "frozen_duration_us" field to the value that was provided on create.
+func (u *UserSubscriptionUpsertBulk) UpdateFrozenDurationUs() *UserSubscriptionUpsertBulk {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.UpdateFrozenDurationUs()
 	})
 }
 

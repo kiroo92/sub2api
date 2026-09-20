@@ -43,6 +43,14 @@ export async function reorderSubscriptions(subscriptionIds: number[]): Promise<v
   await apiClient.put('/subscriptions/order', { subscription_ids: subscriptionIds })
 }
 
+export async function freezeSubscription(id: number): Promise<UserSubscription> {
+  return (await apiClient.post<UserSubscription>(`/subscriptions/${id}/freeze`)).data
+}
+
+export async function unfreezeSubscription(id: number): Promise<UserSubscription> {
+  return (await apiClient.post<UserSubscription>(`/subscriptions/${id}/unfreeze`)).data
+}
+
 /**
  * Get progress for all user's active subscriptions
  */
@@ -72,6 +80,8 @@ export async function getSubscriptionProgress(
 }
 
 export default {
+  freezeSubscription,
+  unfreezeSubscription,
   getMySubscriptions,
   getActiveSubscriptions,
   reorderSubscriptions,

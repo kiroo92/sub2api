@@ -7316,6 +7316,10 @@
                 />
               </div>
             </div>
+            <div class="flex items-center justify-between gap-4 border-t border-gray-100 pt-4 dark:border-dark-700">
+              <div><label for="subscription-freeze-enabled" class="font-medium text-gray-900 dark:text-white">{{ t('userSubscriptions.freezeSetting') }}</label><p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('userSubscriptions.freezeSettingHint') }}</p></div>
+              <Toggle id="subscription-freeze-enabled" v-model="form.subscription_freeze_enabled" />
+            </div>
           </div>
         </div>
 
@@ -9920,6 +9924,7 @@ const form = reactive<SettingsForm>({
   available_channels_enabled: false,
   // Subscription feature switch (user sidebar "My Subscriptions" entry)
   subscription_enabled: true,
+  subscription_freeze_enabled: false,
   // Model Plaza feature switches + description
   model_plaza_enabled: false,
   model_plaza_require_auth: false,
@@ -11608,6 +11613,7 @@ async function saveSettings() {
       available_channels_enabled: form.available_channels_enabled,
       // Subscription feature switch
       subscription_enabled: form.subscription_enabled,
+      subscription_freeze_enabled: form.subscription_freeze_enabled,
       // Model Plaza feature switches + description
       model_plaza_enabled: form.model_plaza_enabled,
       model_plaza_require_auth: form.model_plaza_require_auth,

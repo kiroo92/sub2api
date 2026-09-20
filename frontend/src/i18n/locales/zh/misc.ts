@@ -111,6 +111,15 @@ export default {
 
   // User Subscriptions Page
   userSubscriptions: {
+    quotaEndsAfterThaw: '解冻后 {time} 额度到期',
+    adminAssignHint: '每次新的分配都会新增一份独立订阅，已有订阅不延期、不重置；调整已有时长请使用“调整”。同一次失败请求重试不会重复发放。',
+    overview: '订阅权益', counts: '可用 {active} 份 · 冻结 {frozen} 份',
+    orderTitle: '使用顺序', orderHint: '全部订阅 Key 会从上到下优先尝试可用订阅；冻结、到期或额度不足的会跳过。固定分组 Key 不受此顺序影响。',
+    orderAutoSave: '点击上移或下移后自动保存。', orderNumber: '使用顺序 {number}', savingOrder: '正在保存顺序…', orderSaved: '顺序已保存', orderRolledBack: '保存失败，已恢复原顺序',
+    history: '历史及其他订阅', remainingTime: '剩余有效期', preservedTime: '保留有效期', durationDays: '{days} 天 {hours} 小时', durationHours: '{hours} 小时 {minutes} 分钟',
+    frozen: '已冻结', frozenHint: '计时已暂停 · 使用时自动跳过', resetAfterThaw: '解冻后 {time} 刷新', noQuotaLimit: '此周期不限额',
+    freeze: '冻结', unfreeze: '解冻', freezeConfirm: '冻结后将暂停使用，有效期和日、周、月额度倒计时一起暂停。已用额度会保留，进行中的请求仍正常结算。', unfreezeConfirm: '解冻后从暂停处继续计时，已用额度不清零，并按保存的顺序参与使用。', freezeFailed: '操作未完成，请刷新订阅后重试；后台可能已关闭冻结。',
+    freezeSetting: '允许用户冻结订阅', freezeSettingHint: '开启后用户可以暂停订阅有效期和额度周期。关闭仅禁止新冻结，已冻结的仍可解冻。',
     moveUp: '上移',
     moveDown: '下移',
     failedToReorder: '保存订阅顺序失败',
@@ -122,7 +131,8 @@ export default {
     status: {
       active: '有效',
       expired: '已过期',
-      revoked: '已撤销'
+      revoked: '已撤销',
+      suspended: '已停用'
     },
     usage: '用量',
     expires: '到期时间',

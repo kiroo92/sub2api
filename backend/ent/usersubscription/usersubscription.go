@@ -51,6 +51,14 @@ const (
 	FieldNotes = "notes"
 	// FieldSortOrder holds the string denoting the sort_order field in the database.
 	FieldSortOrder = "sort_order"
+	// FieldFrozenAt holds the string denoting the frozen_at field in the database.
+	FieldFrozenAt = "frozen_at"
+	// FieldFrozenDurationUs holds the string denoting the frozen_duration_us field in the database.
+	FieldFrozenDurationUs = "frozen_duration_us"
+	// FieldAdminAssignmentKey holds the string denoting the admin_assignment_key field in the database.
+	FieldAdminAssignmentKey = "admin_assignment_key"
+	// FieldAdminAssignmentFingerprint holds the string denoting the admin_assignment_fingerprint field in the database.
+	FieldAdminAssignmentFingerprint = "admin_assignment_fingerprint"
 	// EdgeUser holds the string denoting the user edge name in mutations.
 	EdgeUser = "user"
 	// EdgeGroup holds the string denoting the group edge name in mutations.
@@ -112,6 +120,10 @@ var Columns = []string{
 	FieldAssignedAt,
 	FieldNotes,
 	FieldSortOrder,
+	FieldFrozenAt,
+	FieldFrozenDurationUs,
+	FieldAdminAssignmentKey,
+	FieldAdminAssignmentFingerprint,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -152,6 +164,14 @@ var (
 	DefaultAssignedAt func() time.Time
 	// DefaultSortOrder holds the default value on creation for the "sort_order" field.
 	DefaultSortOrder int
+	// DefaultFrozenDurationUs holds the default value on creation for the "frozen_duration_us" field.
+	DefaultFrozenDurationUs int64
+	// FrozenDurationUsValidator is a validator for the "frozen_duration_us" field. It is called by the builders before save.
+	FrozenDurationUsValidator func(int64) error
+	// AdminAssignmentKeyValidator is a validator for the "admin_assignment_key" field. It is called by the builders before save.
+	AdminAssignmentKeyValidator func(string) error
+	// AdminAssignmentFingerprintValidator is a validator for the "admin_assignment_fingerprint" field. It is called by the builders before save.
+	AdminAssignmentFingerprintValidator func(string) error
 )
 
 // OrderOption defines the ordering options for the UserSubscription queries.
@@ -250,6 +270,26 @@ func ByNotes(opts ...sql.OrderTermOption) OrderOption {
 // BySortOrder orders the results by the sort_order field.
 func BySortOrder(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSortOrder, opts...).ToFunc()
+}
+
+// ByFrozenAt orders the results by the frozen_at field.
+func ByFrozenAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFrozenAt, opts...).ToFunc()
+}
+
+// ByFrozenDurationUs orders the results by the frozen_duration_us field.
+func ByFrozenDurationUs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFrozenDurationUs, opts...).ToFunc()
+}
+
+// ByAdminAssignmentKey orders the results by the admin_assignment_key field.
+func ByAdminAssignmentKey(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAdminAssignmentKey, opts...).ToFunc()
+}
+
+// ByAdminAssignmentFingerprint orders the results by the admin_assignment_fingerprint field.
+func ByAdminAssignmentFingerprint(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAdminAssignmentFingerprint, opts...).ToFunc()
 }
 
 // ByUserField orders the results by user field.

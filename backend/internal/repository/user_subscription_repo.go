@@ -49,6 +49,22 @@ func (r *userSubscriptionRepository) Create(ctx context.Context, sub *service.Us
 	if _, err := ownerQuery.Only(ctx); err != nil {
 		return err
 	}
+	if sub.AdminAssignmentKey != "" {
+		existing, err := client.UserSubscription.Query().Where(usersubscription.AdminAssignmentKeyEQ(sub.AdminAssignmentKey)).Only(mixins.SkipSoftDelete(ctx))
+		if err == nil {
+			if derefString(existing.AdminAssignmentFingerprint) != sub.AdminAssignmentFingerprint {
+				return service.ErrIdempotencyKeyConflict
+			}
+			*sub = *userSubscriptionEntityToService(existing)
+			if ownTx != nil {
+				return ownTx.Commit()
+			}
+			return nil
+		}
+		if !dbent.IsNotFound(err) {
+			return err
+		}
+	}
 	last, err := client.UserSubscription.Query().Where(usersubscription.UserIDEQ(sub.UserID)).
 		Order(dbent.Desc(usersubscription.FieldSortOrder)).First(ctx)
 	if err != nil && !dbent.IsNotFound(err) {
@@ -70,6 +86,10 @@ func (r *userSubscriptionRepository) Create(ctx context.Context, sub *service.Us
 		SetMonthlyUsageUsd(sub.MonthlyUsageUSD).
 		SetNillableAssignedBy(sub.AssignedBy)
 	builder.SetSortOrder(sub.SortOrder)
+	if sub.AdminAssignmentKey != "" {
+		builder.SetAdminAssignmentKey(sub.AdminAssignmentKey).SetAdminAssignmentFingerprint(sub.AdminAssignmentFingerprint)
+	}
+	builder.SetNillableFrozenAt(sub.FrozenAt).SetFrozenDurationUs(sub.FrozenDurationUS)
 
 	if sub.StartsAt.IsZero() {
 		builder.SetStartsAt(time.Now())
@@ -156,6 +176,7 @@ func (r *userSubscriptionRepository) GetActiveByUserIDAndGroupID(ctx context.Con
 			usersubscription.UserIDEQ(userID),
 			usersubscription.GroupIDEQ(groupID),
 			usersubscription.StatusEQ(service.SubscriptionStatusActive),
+			usersubscription.FrozenAtIsNil(),
 			usersubscription.ExpiresAtGT(time.Now()),
 		).
 		WithGroup().
@@ -179,6 +200,7 @@ func (r *userSubscriptionRepository) Update(ctx context.Context, sub *service.Us
 		SetStartsAt(sub.StartsAt).
 		SetExpiresAt(sub.ExpiresAt).
 		SetStatus(sub.Status).
+		SetFrozenDurationUs(sub.FrozenDurationUS).
 		SetNillableDailyWindowStart(sub.DailyWindowStart).
 		SetNillableWeeklyWindowStart(sub.WeeklyWindowStart).
 		SetNillableMonthlyWindowStart(sub.MonthlyWindowStart).
@@ -188,6 +210,20 @@ func (r *userSubscriptionRepository) Update(ctx context.Context, sub *service.Us
 		SetNillableAssignedBy(sub.AssignedBy).
 		SetAssignedAt(sub.AssignedAt).
 		SetNotes(sub.Notes)
+	if sub.FrozenAt == nil {
+		builder.ClearFrozenAt()
+	} else {
+		builder.SetFrozenAt(*sub.FrozenAt)
+	}
+	if sub.DailyWindowStart == nil {
+		builder.ClearDailyWindowStart()
+	}
+	if sub.WeeklyWindowStart == nil {
+		builder.ClearWeeklyWindowStart()
+	}
+	if sub.MonthlyWindowStart == nil {
+		builder.ClearMonthlyWindowStart()
+	}
 
 	updated, err := builder.Save(ctx)
 	if err == nil {
@@ -237,6 +273,7 @@ func (r *userSubscriptionRepository) ListActiveByUserID(ctx context.Context, use
 		Where(
 			usersubscription.UserIDEQ(userID),
 			usersubscription.StatusEQ(service.SubscriptionStatusActive),
+			usersubscription.FrozenAtIsNil(),
 			usersubscription.ExpiresAtGT(time.Now()),
 		).
 		WithGroup().
@@ -263,13 +300,41 @@ func (r *userSubscriptionRepository) ReorderActive(ctx context.Context, userID i
 		return err
 	}
 
-	active, err := tx.UserSubscription.Query().Where(
+	rows, err := tx.UserSubscription.Query().Where(
 		usersubscription.UserIDEQ(userID),
 		usersubscription.StatusEQ(service.SubscriptionStatusActive),
-		usersubscription.ExpiresAtGT(time.Now()),
-	).IDs(ctx)
+		usersubscription.Or(usersubscription.FrozenAtNotNil(), usersubscription.ExpiresAtGT(time.Now())),
+	).Order(dbent.Asc(usersubscription.FieldSortOrder), dbent.Asc(usersubscription.FieldID)).All(ctx)
 	if err != nil {
 		return err
+	}
+	active := make([]int64, 0, len(rows))
+	available := make(map[int64]bool)
+	for _, sub := range rows {
+		active = append(active, sub.ID)
+		if sub.FrozenAt == nil {
+			available[sub.ID] = true
+		}
+	}
+	// Older clients submit only usable IDs. Keep frozen slots instead of
+	// colliding their sort_order with the rewritten active positions.
+	if len(subscriptionIDs) != len(active) && len(subscriptionIDs) == len(available) {
+		seen := make(map[int64]bool)
+		for _, id := range subscriptionIDs {
+			if !available[id] || seen[id] {
+				return service.ErrSubscriptionOrderConflict
+			}
+			seen[id] = true
+		}
+		merged := append([]int64(nil), active...)
+		next := 0
+		for i, id := range active {
+			if available[id] {
+				merged[i] = subscriptionIDs[next]
+				next++
+			}
+		}
+		subscriptionIDs = merged
 	}
 	if len(active) != len(subscriptionIDs) {
 		return service.ErrSubscriptionOrderConflict
@@ -341,6 +406,7 @@ func (r *userSubscriptionRepository) List(ctx context.Context, params pagination
 		// Active: status is active AND not yet expired
 		q = q.Where(
 			usersubscription.StatusEQ(service.SubscriptionStatusActive),
+			usersubscription.FrozenAtIsNil(),
 			usersubscription.ExpiresAtGT(now),
 		)
 	case service.SubscriptionStatusExpired:
@@ -350,6 +416,7 @@ func (r *userSubscriptionRepository) List(ctx context.Context, params pagination
 				usersubscription.StatusEQ(service.SubscriptionStatusExpired),
 				usersubscription.And(
 					usersubscription.StatusEQ(service.SubscriptionStatusActive),
+					usersubscription.FrozenAtIsNil(),
 					usersubscription.ExpiresAtLTE(now),
 				),
 			),
@@ -357,6 +424,8 @@ func (r *userSubscriptionRepository) List(ctx context.Context, params pagination
 	case service.SubscriptionStatusRevoked:
 		// Revoked is a DTO/API display state backed by user_subscriptions.deleted_at.
 		q = q.Where(usersubscription.DeletedAtNotNil())
+	case "frozen":
+		q = q.Where(usersubscription.FrozenAtNotNil(), usersubscription.StatusEQ(service.SubscriptionStatusActive))
 	case "":
 		// No filter. Use SkipSoftDelete below so admin "all status" includes revoked history.
 	default:
@@ -454,6 +523,7 @@ func (r *userSubscriptionRepository) ActivateWindows(ctx context.Context, id int
 	n, err := client.UserSubscription.Update().
 		Where(
 			usersubscription.IDEQ(id),
+			usersubscription.FrozenAtIsNil(),
 			usersubscription.DailyWindowStartIsNil(),
 			usersubscription.WeeklyWindowStartIsNil(),
 			usersubscription.MonthlyWindowStartIsNil(),
@@ -483,7 +553,7 @@ func (r *userSubscriptionRepository) ResetUsageWindows(ctx context.Context, id i
 
 func (r *userSubscriptionRepository) ResetDailyUsage(ctx context.Context, id int64, expectedWindowStart *time.Time, newWindowStart time.Time) error {
 	client := clientFromContext(ctx, r.client)
-	query := client.UserSubscription.Update().Where(usersubscription.IDEQ(id))
+	query := client.UserSubscription.Update().Where(usersubscription.IDEQ(id), usersubscription.FrozenAtIsNil())
 	if expectedWindowStart == nil {
 		query = query.Where(usersubscription.DailyWindowStartIsNil())
 	} else {
@@ -498,7 +568,7 @@ func (r *userSubscriptionRepository) ResetDailyUsage(ctx context.Context, id int
 
 func (r *userSubscriptionRepository) ResetWeeklyUsage(ctx context.Context, id int64, expectedWindowStart *time.Time, newWindowStart time.Time) error {
 	client := clientFromContext(ctx, r.client)
-	query := client.UserSubscription.Update().Where(usersubscription.IDEQ(id))
+	query := client.UserSubscription.Update().Where(usersubscription.IDEQ(id), usersubscription.FrozenAtIsNil())
 	if expectedWindowStart == nil {
 		query = query.Where(usersubscription.WeeklyWindowStartIsNil())
 	} else {
@@ -513,7 +583,7 @@ func (r *userSubscriptionRepository) ResetWeeklyUsage(ctx context.Context, id in
 
 func (r *userSubscriptionRepository) ResetMonthlyUsage(ctx context.Context, id int64, expectedWindowStart *time.Time, newWindowStart time.Time) error {
 	client := clientFromContext(ctx, r.client)
-	query := client.UserSubscription.Update().Where(usersubscription.IDEQ(id))
+	query := client.UserSubscription.Update().Where(usersubscription.IDEQ(id), usersubscription.FrozenAtIsNil())
 	if expectedWindowStart == nil {
 		query = query.Where(usersubscription.MonthlyWindowStartIsNil())
 	} else {
@@ -588,6 +658,7 @@ func (r *userSubscriptionRepository) BatchUpdateExpiredStatus(ctx context.Contex
 	n, err := client.UserSubscription.Update().
 		Where(
 			usersubscription.StatusEQ(service.SubscriptionStatusActive),
+			usersubscription.FrozenAtIsNil(),
 			usersubscription.ExpiresAtLTE(time.Now()),
 		).
 		SetStatus(service.SubscriptionStatusExpired).
@@ -602,6 +673,7 @@ func (r *userSubscriptionRepository) ListExpired(ctx context.Context) ([]service
 	subs, err := client.UserSubscription.Query().
 		Where(
 			usersubscription.StatusEQ(service.SubscriptionStatusActive),
+			usersubscription.FrozenAtIsNil(),
 			usersubscription.ExpiresAtLTE(time.Now()),
 		).
 		All(ctx)
@@ -623,6 +695,7 @@ func (r *userSubscriptionRepository) CountActiveByGroupID(ctx context.Context, g
 		Where(
 			usersubscription.GroupIDEQ(groupID),
 			usersubscription.StatusEQ(service.SubscriptionStatusActive),
+			usersubscription.FrozenAtIsNil(),
 			usersubscription.ExpiresAtGT(time.Now()),
 		).
 		Count(ctx)
@@ -722,25 +795,29 @@ func userSubscriptionEntityToServiceWithStatusMapping(m *dbent.UserSubscription,
 		status = service.SubscriptionStatusRevoked
 	}
 	out := &service.UserSubscription{
-		ID:                 m.ID,
-		UserID:             m.UserID,
-		GroupID:            m.GroupID,
-		StartsAt:           m.StartsAt,
-		ExpiresAt:          m.ExpiresAt,
-		Status:             status,
-		DailyWindowStart:   m.DailyWindowStart,
-		WeeklyWindowStart:  m.WeeklyWindowStart,
-		MonthlyWindowStart: m.MonthlyWindowStart,
-		DailyUsageUSD:      m.DailyUsageUsd,
-		WeeklyUsageUSD:     m.WeeklyUsageUsd,
-		MonthlyUsageUSD:    m.MonthlyUsageUsd,
-		AssignedBy:         m.AssignedBy,
-		AssignedAt:         m.AssignedAt,
-		Notes:              derefString(m.Notes),
-		SortOrder:          m.SortOrder,
-		CreatedAt:          m.CreatedAt,
-		UpdatedAt:          m.UpdatedAt,
-		DeletedAt:          m.DeletedAt,
+		ID:                         m.ID,
+		UserID:                     m.UserID,
+		GroupID:                    m.GroupID,
+		StartsAt:                   m.StartsAt,
+		ExpiresAt:                  m.ExpiresAt,
+		Status:                     status,
+		DailyWindowStart:           m.DailyWindowStart,
+		WeeklyWindowStart:          m.WeeklyWindowStart,
+		MonthlyWindowStart:         m.MonthlyWindowStart,
+		DailyUsageUSD:              m.DailyUsageUsd,
+		WeeklyUsageUSD:             m.WeeklyUsageUsd,
+		MonthlyUsageUSD:            m.MonthlyUsageUsd,
+		AssignedBy:                 m.AssignedBy,
+		AssignedAt:                 m.AssignedAt,
+		Notes:                      derefString(m.Notes),
+		SortOrder:                  m.SortOrder,
+		FrozenAt:                   m.FrozenAt,
+		FrozenDurationUS:           m.FrozenDurationUs,
+		AdminAssignmentKey:         derefString(m.AdminAssignmentKey),
+		AdminAssignmentFingerprint: derefString(m.AdminAssignmentFingerprint),
+		CreatedAt:                  m.CreatedAt,
+		UpdatedAt:                  m.UpdatedAt,
+		DeletedAt:                  m.DeletedAt,
 	}
 	if m.Edges.User != nil {
 		out.User = userEntityToService(m.Edges.User)

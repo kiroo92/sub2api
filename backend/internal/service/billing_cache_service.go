@@ -733,6 +733,9 @@ func (s *BillingCacheService) IncrementUserPlatformQuotaUsage(userID int64, plat
 // 订阅模式：检查缓存用量未超过限额（Group限额从参数传入）
 // platform 为请求的目标平台（如 "anthropic"），传空串 "" 时跳过 user × platform quota 检查。
 func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user *User, apiKey *APIKey, group *Group, subscription *UserSubscription, platform string) error {
+	if subscription != nil && subscription.FrozenAt != nil {
+		return ErrSubscriptionFrozen
+	}
 	if apiKey.UsesAllSubscriptions() && (user == nil || subscription == nil || group == nil || subscription.UserID != user.ID || subscription.GroupID != group.ID || !group.IsSubscriptionType()) {
 		return ErrSubscriptionInvalid
 	}
@@ -790,6 +793,9 @@ func (s *BillingCacheService) CheckBillingEligibility(ctx context.Context, user 
 }
 
 func checkSelectedSubscription(sub *UserSubscription, userID int64, group *Group, now time.Time) error {
+	if sub != nil && sub.FrozenAt != nil {
+		return ErrSubscriptionFrozen
+	}
 	if sub == nil || group == nil || sub.UserID != userID || sub.GroupID != group.ID || sub.DeletedAt != nil || sub.Status != SubscriptionStatusActive || !sub.ExpiresAt.After(now) || sub.StartsAt.After(now) {
 		return ErrSubscriptionInvalid
 	}

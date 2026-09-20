@@ -25,10 +25,14 @@ type UserSubscription struct {
 	WeeklyUsageUSD  float64
 	MonthlyUsageUSD float64
 
-	AssignedBy *int64
-	AssignedAt time.Time
-	Notes      string
-	SortOrder  int
+	AssignedBy                 *int64
+	AssignedAt                 time.Time
+	Notes                      string
+	SortOrder                  int
+	FrozenAt                   *time.Time
+	FrozenDurationUS           int64
+	AdminAssignmentKey         string
+	AdminAssignmentFingerprint string
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -40,11 +44,32 @@ type UserSubscription struct {
 }
 
 func (s *UserSubscription) IsActive() bool {
-	return s.Status == SubscriptionStatusActive && time.Now().Before(s.ExpiresAt)
+	return s.FrozenAt == nil && s.Status == SubscriptionStatusActive && time.Now().Before(s.ExpiresAt)
 }
 
 func (s *UserSubscription) IsExpired() bool {
-	return time.Now().After(s.ExpiresAt)
+	return !s.ExpiresAt.After(s.ClockNow(time.Now()))
+}
+
+// ClockNow stops lifetime and quota countdowns while frozen. Actual usage can
+// still arrive from requests admitted before the freeze and must not be erased.
+func (s *UserSubscription) ClockNow(now time.Time) time.Time {
+	if s.FrozenAt != nil {
+		return *s.FrozenAt
+	}
+	return now
+}
+
+func (s *UserSubscription) PausedDuration() time.Duration {
+	return time.Duration(s.FrozenDurationUS) * time.Microsecond
+}
+
+func (s *UserSubscription) RemainingSecondsAt(now time.Time) int64 {
+	remaining := s.ExpiresAt.Sub(s.ClockNow(now))
+	if remaining <= 0 {
+		return 0
+	}
+	return int64((remaining + time.Second - 1) / time.Second)
 }
 
 func (s *UserSubscription) DaysRemaining() int {
@@ -52,7 +77,7 @@ func (s *UserSubscription) DaysRemaining() int {
 }
 
 func (s *UserSubscription) daysRemainingAt(now time.Time) int {
-	remaining := s.ExpiresAt.Sub(now)
+	remaining := s.ExpiresAt.Sub(s.ClockNow(now))
 	if remaining <= 0 {
 		return 0
 	}
@@ -72,7 +97,7 @@ func (s *UserSubscription) HasOneTimeDailyQuota() bool {
 	if s == nil || s.StartsAt.IsZero() || s.ExpiresAt.IsZero() {
 		return false
 	}
-	return !s.ExpiresAt.After(s.StartsAt.AddDate(0, 0, 1))
+	return !s.ExpiresAt.Add(-s.PausedDuration()).After(s.StartsAt.AddDate(0, 0, 1))
 }
 
 func (s *UserSubscription) NeedsDailyReset() bool {
@@ -89,7 +114,7 @@ func (s *UserSubscription) NeedsWeeklyReset() bool {
 }
 
 func (s *UserSubscription) NeedsWeeklyResetAt(now time.Time) bool {
-	if s.WeeklyWindowStart == nil {
+	if s.FrozenAt != nil || s.WeeklyWindowStart == nil {
 		return false
 	}
 	return !now.Before(s.WeeklyWindowStart.Add(7 * 24 * time.Hour))
@@ -100,7 +125,7 @@ func (s *UserSubscription) NeedsMonthlyReset() bool {
 }
 
 func (s *UserSubscription) NeedsMonthlyResetAt(now time.Time) bool {
-	if s.MonthlyWindowStart == nil {
+	if s.FrozenAt != nil || s.MonthlyWindowStart == nil {
 		return false
 	}
 	return !now.Before(s.MonthlyWindowStart.Add(30 * 24 * time.Hour))
@@ -116,14 +141,15 @@ func (s *UserSubscription) canAutomaticallyResetDailyAt(now time.Time) bool {
 // 的窗口起点落在更早的日历日，就允许推进到今天 0 点。手动重置、激活等写入的任何
 // 非 0 点锚点都会在下一个 0 点被拉回日历日边界，不会永久漂移刷新时刻。
 func (s *UserSubscription) automaticDailyWindowStartAt(now time.Time) (time.Time, bool) {
-	if s.DailyWindowStart == nil {
+	if s.FrozenAt != nil || s.DailyWindowStart == nil {
 		return time.Time{}, false
 	}
 	if s.HasOneTimeDailyQuota() {
 		return time.Time{}, false
 	}
-	today := timezone.StartOfDay(now)
-	if !today.After(timezone.StartOfDay(*s.DailyWindowStart)) {
+	pause := s.PausedDuration()
+	today := timezone.StartOfDay(now.Add(-pause)).Add(pause)
+	if !today.After(timezone.StartOfDay(s.DailyWindowStart.Add(-pause)).Add(pause)) {
 		return time.Time{}, false
 	}
 	return today, true
@@ -147,9 +173,10 @@ func (s *UserSubscription) canAutomaticallyResetMonthlyAt(now time.Time) bool {
 // 滚动的时间。
 // 日窗口按日历日对齐（automaticDailyWindowStartAt），不走这里。
 func (s *UserSubscription) windowResetAnchor(previous time.Time) time.Time {
-	legacyAnchor := startOfDay(s.StartsAt)
-	if legacyAnchor.Before(s.StartsAt) && previous.Equal(legacyAnchor) {
-		return s.StartsAt
+	startsAt := s.StartsAt.Add(s.PausedDuration())
+	legacyAnchor := startOfDay(s.StartsAt).Add(s.PausedDuration())
+	if legacyAnchor.Before(startsAt) && previous.Equal(legacyAnchor) {
+		return startsAt
 	}
 	return previous
 }
@@ -158,7 +185,7 @@ func (s *UserSubscription) windowResetAnchor(previous time.Time) time.Time {
 // 窗口从锚点按整数个 period 步进，且不越过订阅到期时间，避免最后一个不完整
 // 周期重复发放额度（issue #5051）。日窗口不走此函数，见 automaticDailyWindowStartAt。
 func (s *UserSubscription) automaticWindowStartAt(previous *time.Time, period time.Duration, now time.Time) (time.Time, bool) {
-	if previous == nil {
+	if s.FrozenAt != nil || previous == nil {
 		return time.Time{}, false
 	}
 
@@ -185,7 +212,8 @@ func (s *UserSubscription) DailyResetTime() *time.Time {
 		return &t
 	}
 	// 日窗口按日历日对齐：下次刷新固定在窗口起点所在日的次日 0 点。
-	t := timezone.StartOfDay(*s.DailyWindowStart).AddDate(0, 0, 1)
+	pause := s.PausedDuration()
+	t := timezone.StartOfDay(s.DailyWindowStart.Add(-pause)).AddDate(0, 0, 1).Add(pause)
 	return &t
 }
 

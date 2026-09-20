@@ -158,6 +158,8 @@ func RegisterUserRoutes(
 			subscriptions.GET("/progress", h.Subscription.GetProgress)
 			subscriptions.GET("/summary", h.Subscription.GetSummary)
 			subscriptions.PUT("/order", h.Subscription.Reorder)
+			subscriptions.POST("/:id/freeze", h.Subscription.Freeze)
+			subscriptions.POST("/:id/unfreeze", h.Subscription.Unfreeze)
 		}
 
 		// 渠道监控（用户只读）

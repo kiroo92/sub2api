@@ -734,6 +734,7 @@ export interface SystemSettings {
 
   // Subscription feature switch (user sidebar "My Subscriptions" entry)
   subscription_enabled: boolean;
+  subscription_freeze_enabled: boolean;
 
   // Model Plaza feature switches + description
   model_plaza_enabled: boolean;
@@ -1041,6 +1042,7 @@ export interface UpdateSettingsRequest {
 
   // Subscription feature switch
   subscription_enabled?: boolean;
+  subscription_freeze_enabled?: boolean;
 
   // Model Plaza feature switches + description
   model_plaza_enabled?: boolean;

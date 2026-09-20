@@ -1,4 +1,5 @@
 import type { SubscriptionBulkActionRequest } from '@/api/admin/subscriptions'
+import type { AssignSubscriptionRequest, BulkAssignSubscriptionRequest } from '@/types'
 
 export interface BulkSubscriptionOperation {
   request: SubscriptionBulkActionRequest
@@ -64,8 +65,19 @@ export function prepareBulkSubscriptionOperation(input: SubscriptionBulkActionRe
   return { request, key, storageKey, outcomeUncertain }
 }
 
-export function completeBulkSubscriptionOperation(operation: BulkSubscriptionOperation) {
+export function completeBulkSubscriptionOperation(operation: Pick<BulkSubscriptionOperation, 'storageKey'>) {
   if (!operation.storageKey) return
   pendingKeys.delete(operation.storageKey)
   storeKey(operation.storageKey, null)
+}
+
+// Preserve an uncertain grant across dialog/page reopen; success allows a new grant.
+export function prepareSubscriptionAssignment<T extends AssignSubscriptionRequest | BulkAssignSubscriptionRequest>(input: T) {
+  const request = { ...input, ...('user_ids' in input ? { user_ids: [...new Set(input.user_ids)].sort((a, b) => a - b) } : {}) }
+  const adminId = currentAdminId()
+  const storageKey = adminId ? `sub2api:admin:subscription-assign:${adminId}:${JSON.stringify(request)}` : null
+  let key = storageKey ? pendingKeys.get(storageKey) ?? readStoredKey(storageKey) : null
+  if (!key) key = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  if (storageKey) { pendingKeys.set(storageKey, key); storeKey(storageKey, key) }
+  return { request, key, storageKey }
 }

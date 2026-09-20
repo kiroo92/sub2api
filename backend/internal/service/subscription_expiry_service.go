@@ -189,7 +189,7 @@ func (s *SubscriptionExpiryService) smtpConfigured(ctx context.Context) bool {
 }
 
 func (s *SubscriptionExpiryService) sendExpiryReminderIfDue(ctx context.Context, sub *UserSubscription) {
-	if sub == nil || sub.User == nil || sub.Group == nil || sub.User.Email == "" {
+	if sub == nil || sub.FrozenAt != nil || sub.User == nil || sub.Group == nil || sub.User.Email == "" {
 		return
 	}
 	daysRemaining := sub.DaysRemaining()

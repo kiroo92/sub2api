@@ -5,9 +5,32 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
+
+func (h *SubscriptionHandler) Freeze(c *gin.Context)   { h.setFrozen(c, true) }
+func (h *SubscriptionHandler) Unfreeze(c *gin.Context) { h.setFrozen(c, false) }
+
+func (h *SubscriptionHandler) setFrozen(c *gin.Context, frozen bool) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not found in context")
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "Invalid subscription ID")
+		return
+	}
+	sub, err := h.subscriptionService.SetUserSubscriptionFrozen(c.Request.Context(), subject.UserID, id, frozen)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.UserSubscriptionFromService(sub))
+}
 
 // SubscriptionSummaryItem represents a subscription item in summary
 type SubscriptionSummaryItem struct {

@@ -56661,41 +56661,46 @@ func (m *UserPlatformQuotaMutation) ResetEdge(name string) error {
 // UserSubscriptionMutation represents an operation that mutates the UserSubscription nodes in the graph.
 type UserSubscriptionMutation struct {
 	config
-	op                      Op
-	typ                     string
-	id                      *int64
-	created_at              *time.Time
-	updated_at              *time.Time
-	deleted_at              *time.Time
-	starts_at               *time.Time
-	expires_at              *time.Time
-	status                  *string
-	daily_window_start      *time.Time
-	weekly_window_start     *time.Time
-	monthly_window_start    *time.Time
-	daily_usage_usd         *float64
-	adddaily_usage_usd      *float64
-	weekly_usage_usd        *float64
-	addweekly_usage_usd     *float64
-	monthly_usage_usd       *float64
-	addmonthly_usage_usd    *float64
-	assigned_at             *time.Time
-	notes                   *string
-	sort_order              *int
-	addsort_order           *int
-	clearedFields           map[string]struct{}
-	user                    *int64
-	cleareduser             bool
-	group                   *int64
-	clearedgroup            bool
-	assigned_by_user        *int64
-	clearedassigned_by_user bool
-	usage_logs              map[int64]struct{}
-	removedusage_logs       map[int64]struct{}
-	clearedusage_logs       bool
-	done                    bool
-	oldValue                func(context.Context) (*UserSubscription, error)
-	predicates              []predicate.UserSubscription
+	op                           Op
+	typ                          string
+	id                           *int64
+	created_at                   *time.Time
+	updated_at                   *time.Time
+	deleted_at                   *time.Time
+	starts_at                    *time.Time
+	expires_at                   *time.Time
+	status                       *string
+	daily_window_start           *time.Time
+	weekly_window_start          *time.Time
+	monthly_window_start         *time.Time
+	daily_usage_usd              *float64
+	adddaily_usage_usd           *float64
+	weekly_usage_usd             *float64
+	addweekly_usage_usd          *float64
+	monthly_usage_usd            *float64
+	addmonthly_usage_usd         *float64
+	assigned_at                  *time.Time
+	notes                        *string
+	sort_order                   *int
+	addsort_order                *int
+	frozen_at                    *time.Time
+	frozen_duration_us           *int64
+	addfrozen_duration_us        *int64
+	admin_assignment_key         *string
+	admin_assignment_fingerprint *string
+	clearedFields                map[string]struct{}
+	user                         *int64
+	cleareduser                  bool
+	group                        *int64
+	clearedgroup                 bool
+	assigned_by_user             *int64
+	clearedassigned_by_user      bool
+	usage_logs                   map[int64]struct{}
+	removedusage_logs            map[int64]struct{}
+	clearedusage_logs            bool
+	done                         bool
+	oldValue                     func(context.Context) (*UserSubscription, error)
+	predicates                   []predicate.UserSubscription
 }
 
 var _ ent.Mutation = (*UserSubscriptionMutation)(nil)
@@ -57602,6 +57607,209 @@ func (m *UserSubscriptionMutation) ResetSortOrder() {
 	m.addsort_order = nil
 }
 
+// SetFrozenAt sets the "frozen_at" field.
+func (m *UserSubscriptionMutation) SetFrozenAt(t time.Time) {
+	m.frozen_at = &t
+}
+
+// FrozenAt returns the value of the "frozen_at" field in the mutation.
+func (m *UserSubscriptionMutation) FrozenAt() (r time.Time, exists bool) {
+	v := m.frozen_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFrozenAt returns the old "frozen_at" field's value of the UserSubscription entity.
+// If the UserSubscription object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSubscriptionMutation) OldFrozenAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFrozenAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFrozenAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFrozenAt: %w", err)
+	}
+	return oldValue.FrozenAt, nil
+}
+
+// ClearFrozenAt clears the value of the "frozen_at" field.
+func (m *UserSubscriptionMutation) ClearFrozenAt() {
+	m.frozen_at = nil
+	m.clearedFields[usersubscription.FieldFrozenAt] = struct{}{}
+}
+
+// FrozenAtCleared returns if the "frozen_at" field was cleared in this mutation.
+func (m *UserSubscriptionMutation) FrozenAtCleared() bool {
+	_, ok := m.clearedFields[usersubscription.FieldFrozenAt]
+	return ok
+}
+
+// ResetFrozenAt resets all changes to the "frozen_at" field.
+func (m *UserSubscriptionMutation) ResetFrozenAt() {
+	m.frozen_at = nil
+	delete(m.clearedFields, usersubscription.FieldFrozenAt)
+}
+
+// SetFrozenDurationUs sets the "frozen_duration_us" field.
+func (m *UserSubscriptionMutation) SetFrozenDurationUs(i int64) {
+	m.frozen_duration_us = &i
+	m.addfrozen_duration_us = nil
+}
+
+// FrozenDurationUs returns the value of the "frozen_duration_us" field in the mutation.
+func (m *UserSubscriptionMutation) FrozenDurationUs() (r int64, exists bool) {
+	v := m.frozen_duration_us
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFrozenDurationUs returns the old "frozen_duration_us" field's value of the UserSubscription entity.
+// If the UserSubscription object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSubscriptionMutation) OldFrozenDurationUs(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFrozenDurationUs is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFrozenDurationUs requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFrozenDurationUs: %w", err)
+	}
+	return oldValue.FrozenDurationUs, nil
+}
+
+// AddFrozenDurationUs adds i to the "frozen_duration_us" field.
+func (m *UserSubscriptionMutation) AddFrozenDurationUs(i int64) {
+	if m.addfrozen_duration_us != nil {
+		*m.addfrozen_duration_us += i
+	} else {
+		m.addfrozen_duration_us = &i
+	}
+}
+
+// AddedFrozenDurationUs returns the value that was added to the "frozen_duration_us" field in this mutation.
+func (m *UserSubscriptionMutation) AddedFrozenDurationUs() (r int64, exists bool) {
+	v := m.addfrozen_duration_us
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFrozenDurationUs resets all changes to the "frozen_duration_us" field.
+func (m *UserSubscriptionMutation) ResetFrozenDurationUs() {
+	m.frozen_duration_us = nil
+	m.addfrozen_duration_us = nil
+}
+
+// SetAdminAssignmentKey sets the "admin_assignment_key" field.
+func (m *UserSubscriptionMutation) SetAdminAssignmentKey(s string) {
+	m.admin_assignment_key = &s
+}
+
+// AdminAssignmentKey returns the value of the "admin_assignment_key" field in the mutation.
+func (m *UserSubscriptionMutation) AdminAssignmentKey() (r string, exists bool) {
+	v := m.admin_assignment_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAdminAssignmentKey returns the old "admin_assignment_key" field's value of the UserSubscription entity.
+// If the UserSubscription object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSubscriptionMutation) OldAdminAssignmentKey(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAdminAssignmentKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAdminAssignmentKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAdminAssignmentKey: %w", err)
+	}
+	return oldValue.AdminAssignmentKey, nil
+}
+
+// ClearAdminAssignmentKey clears the value of the "admin_assignment_key" field.
+func (m *UserSubscriptionMutation) ClearAdminAssignmentKey() {
+	m.admin_assignment_key = nil
+	m.clearedFields[usersubscription.FieldAdminAssignmentKey] = struct{}{}
+}
+
+// AdminAssignmentKeyCleared returns if the "admin_assignment_key" field was cleared in this mutation.
+func (m *UserSubscriptionMutation) AdminAssignmentKeyCleared() bool {
+	_, ok := m.clearedFields[usersubscription.FieldAdminAssignmentKey]
+	return ok
+}
+
+// ResetAdminAssignmentKey resets all changes to the "admin_assignment_key" field.
+func (m *UserSubscriptionMutation) ResetAdminAssignmentKey() {
+	m.admin_assignment_key = nil
+	delete(m.clearedFields, usersubscription.FieldAdminAssignmentKey)
+}
+
+// SetAdminAssignmentFingerprint sets the "admin_assignment_fingerprint" field.
+func (m *UserSubscriptionMutation) SetAdminAssignmentFingerprint(s string) {
+	m.admin_assignment_fingerprint = &s
+}
+
+// AdminAssignmentFingerprint returns the value of the "admin_assignment_fingerprint" field in the mutation.
+func (m *UserSubscriptionMutation) AdminAssignmentFingerprint() (r string, exists bool) {
+	v := m.admin_assignment_fingerprint
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAdminAssignmentFingerprint returns the old "admin_assignment_fingerprint" field's value of the UserSubscription entity.
+// If the UserSubscription object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSubscriptionMutation) OldAdminAssignmentFingerprint(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAdminAssignmentFingerprint is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAdminAssignmentFingerprint requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAdminAssignmentFingerprint: %w", err)
+	}
+	return oldValue.AdminAssignmentFingerprint, nil
+}
+
+// ClearAdminAssignmentFingerprint clears the value of the "admin_assignment_fingerprint" field.
+func (m *UserSubscriptionMutation) ClearAdminAssignmentFingerprint() {
+	m.admin_assignment_fingerprint = nil
+	m.clearedFields[usersubscription.FieldAdminAssignmentFingerprint] = struct{}{}
+}
+
+// AdminAssignmentFingerprintCleared returns if the "admin_assignment_fingerprint" field was cleared in this mutation.
+func (m *UserSubscriptionMutation) AdminAssignmentFingerprintCleared() bool {
+	_, ok := m.clearedFields[usersubscription.FieldAdminAssignmentFingerprint]
+	return ok
+}
+
+// ResetAdminAssignmentFingerprint resets all changes to the "admin_assignment_fingerprint" field.
+func (m *UserSubscriptionMutation) ResetAdminAssignmentFingerprint() {
+	m.admin_assignment_fingerprint = nil
+	delete(m.clearedFields, usersubscription.FieldAdminAssignmentFingerprint)
+}
+
 // ClearUser clears the "user" edge to the User entity.
 func (m *UserSubscriptionMutation) ClearUser() {
 	m.cleareduser = true
@@ -57784,7 +57992,7 @@ func (m *UserSubscriptionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserSubscriptionMutation) Fields() []string {
-	fields := make([]string, 0, 18)
+	fields := make([]string, 0, 22)
 	if m.created_at != nil {
 		fields = append(fields, usersubscription.FieldCreatedAt)
 	}
@@ -57839,6 +58047,18 @@ func (m *UserSubscriptionMutation) Fields() []string {
 	if m.sort_order != nil {
 		fields = append(fields, usersubscription.FieldSortOrder)
 	}
+	if m.frozen_at != nil {
+		fields = append(fields, usersubscription.FieldFrozenAt)
+	}
+	if m.frozen_duration_us != nil {
+		fields = append(fields, usersubscription.FieldFrozenDurationUs)
+	}
+	if m.admin_assignment_key != nil {
+		fields = append(fields, usersubscription.FieldAdminAssignmentKey)
+	}
+	if m.admin_assignment_fingerprint != nil {
+		fields = append(fields, usersubscription.FieldAdminAssignmentFingerprint)
+	}
 	return fields
 }
 
@@ -57883,6 +58103,14 @@ func (m *UserSubscriptionMutation) Field(name string) (ent.Value, bool) {
 		return m.Notes()
 	case usersubscription.FieldSortOrder:
 		return m.SortOrder()
+	case usersubscription.FieldFrozenAt:
+		return m.FrozenAt()
+	case usersubscription.FieldFrozenDurationUs:
+		return m.FrozenDurationUs()
+	case usersubscription.FieldAdminAssignmentKey:
+		return m.AdminAssignmentKey()
+	case usersubscription.FieldAdminAssignmentFingerprint:
+		return m.AdminAssignmentFingerprint()
 	}
 	return nil, false
 }
@@ -57928,6 +58156,14 @@ func (m *UserSubscriptionMutation) OldField(ctx context.Context, name string) (e
 		return m.OldNotes(ctx)
 	case usersubscription.FieldSortOrder:
 		return m.OldSortOrder(ctx)
+	case usersubscription.FieldFrozenAt:
+		return m.OldFrozenAt(ctx)
+	case usersubscription.FieldFrozenDurationUs:
+		return m.OldFrozenDurationUs(ctx)
+	case usersubscription.FieldAdminAssignmentKey:
+		return m.OldAdminAssignmentKey(ctx)
+	case usersubscription.FieldAdminAssignmentFingerprint:
+		return m.OldAdminAssignmentFingerprint(ctx)
 	}
 	return nil, fmt.Errorf("unknown UserSubscription field %s", name)
 }
@@ -58063,6 +58299,34 @@ func (m *UserSubscriptionMutation) SetField(name string, value ent.Value) error 
 		}
 		m.SetSortOrder(v)
 		return nil
+	case usersubscription.FieldFrozenAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFrozenAt(v)
+		return nil
+	case usersubscription.FieldFrozenDurationUs:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFrozenDurationUs(v)
+		return nil
+	case usersubscription.FieldAdminAssignmentKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAdminAssignmentKey(v)
+		return nil
+	case usersubscription.FieldAdminAssignmentFingerprint:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAdminAssignmentFingerprint(v)
+		return nil
 	}
 	return fmt.Errorf("unknown UserSubscription field %s", name)
 }
@@ -58083,6 +58347,9 @@ func (m *UserSubscriptionMutation) AddedFields() []string {
 	if m.addsort_order != nil {
 		fields = append(fields, usersubscription.FieldSortOrder)
 	}
+	if m.addfrozen_duration_us != nil {
+		fields = append(fields, usersubscription.FieldFrozenDurationUs)
+	}
 	return fields
 }
 
@@ -58099,6 +58366,8 @@ func (m *UserSubscriptionMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedMonthlyUsageUsd()
 	case usersubscription.FieldSortOrder:
 		return m.AddedSortOrder()
+	case usersubscription.FieldFrozenDurationUs:
+		return m.AddedFrozenDurationUs()
 	}
 	return nil, false
 }
@@ -58136,6 +58405,13 @@ func (m *UserSubscriptionMutation) AddField(name string, value ent.Value) error 
 		}
 		m.AddSortOrder(v)
 		return nil
+	case usersubscription.FieldFrozenDurationUs:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFrozenDurationUs(v)
+		return nil
 	}
 	return fmt.Errorf("unknown UserSubscription numeric field %s", name)
 }
@@ -58161,6 +58437,15 @@ func (m *UserSubscriptionMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(usersubscription.FieldNotes) {
 		fields = append(fields, usersubscription.FieldNotes)
+	}
+	if m.FieldCleared(usersubscription.FieldFrozenAt) {
+		fields = append(fields, usersubscription.FieldFrozenAt)
+	}
+	if m.FieldCleared(usersubscription.FieldAdminAssignmentKey) {
+		fields = append(fields, usersubscription.FieldAdminAssignmentKey)
+	}
+	if m.FieldCleared(usersubscription.FieldAdminAssignmentFingerprint) {
+		fields = append(fields, usersubscription.FieldAdminAssignmentFingerprint)
 	}
 	return fields
 }
@@ -58193,6 +58478,15 @@ func (m *UserSubscriptionMutation) ClearField(name string) error {
 		return nil
 	case usersubscription.FieldNotes:
 		m.ClearNotes()
+		return nil
+	case usersubscription.FieldFrozenAt:
+		m.ClearFrozenAt()
+		return nil
+	case usersubscription.FieldAdminAssignmentKey:
+		m.ClearAdminAssignmentKey()
+		return nil
+	case usersubscription.FieldAdminAssignmentFingerprint:
+		m.ClearAdminAssignmentFingerprint()
 		return nil
 	}
 	return fmt.Errorf("unknown UserSubscription nullable field %s", name)
@@ -58255,6 +58549,18 @@ func (m *UserSubscriptionMutation) ResetField(name string) error {
 		return nil
 	case usersubscription.FieldSortOrder:
 		m.ResetSortOrder()
+		return nil
+	case usersubscription.FieldFrozenAt:
+		m.ResetFrozenAt()
+		return nil
+	case usersubscription.FieldFrozenDurationUs:
+		m.ResetFrozenDurationUs()
+		return nil
+	case usersubscription.FieldAdminAssignmentKey:
+		m.ResetAdminAssignmentKey()
+		return nil
+	case usersubscription.FieldAdminAssignmentFingerprint:
+		m.ResetAdminAssignmentFingerprint()
 		return nil
 	}
 	return fmt.Errorf("unknown UserSubscription field %s", name)

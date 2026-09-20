@@ -2553,6 +2553,20 @@ func init() {
 	usersubscriptionDescSortOrder := usersubscriptionFields[14].Descriptor()
 	// usersubscription.DefaultSortOrder holds the default value on creation for the sort_order field.
 	usersubscription.DefaultSortOrder = usersubscriptionDescSortOrder.Default.(int)
+	// usersubscriptionDescFrozenDurationUs is the schema descriptor for frozen_duration_us field.
+	usersubscriptionDescFrozenDurationUs := usersubscriptionFields[16].Descriptor()
+	// usersubscription.DefaultFrozenDurationUs holds the default value on creation for the frozen_duration_us field.
+	usersubscription.DefaultFrozenDurationUs = usersubscriptionDescFrozenDurationUs.Default.(int64)
+	// usersubscription.FrozenDurationUsValidator is a validator for the "frozen_duration_us" field. It is called by the builders before save.
+	usersubscription.FrozenDurationUsValidator = usersubscriptionDescFrozenDurationUs.Validators[0].(func(int64) error)
+	// usersubscriptionDescAdminAssignmentKey is the schema descriptor for admin_assignment_key field.
+	usersubscriptionDescAdminAssignmentKey := usersubscriptionFields[17].Descriptor()
+	// usersubscription.AdminAssignmentKeyValidator is a validator for the "admin_assignment_key" field. It is called by the builders before save.
+	usersubscription.AdminAssignmentKeyValidator = usersubscriptionDescAdminAssignmentKey.Validators[0].(func(string) error)
+	// usersubscriptionDescAdminAssignmentFingerprint is the schema descriptor for admin_assignment_fingerprint field.
+	usersubscriptionDescAdminAssignmentFingerprint := usersubscriptionFields[18].Descriptor()
+	// usersubscription.AdminAssignmentFingerprintValidator is a validator for the "admin_assignment_fingerprint" field. It is called by the builders before save.
+	usersubscription.AdminAssignmentFingerprintValidator = usersubscriptionDescAdminAssignmentFingerprint.Validators[0].(func(string) error)
 }
 
 const (

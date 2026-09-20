@@ -113,6 +113,15 @@ export default {
 
   // User Subscriptions Page
   userSubscriptions: {
+    quotaEndsAfterThaw: 'Quota ends {time} after unfreezing',
+    adminAssignHint: 'Each new assignment creates an independent subscription. Existing terms and usage stay unchanged; use Adjust to change an existing term. Retrying the same request does not issue it twice.',
+    overview: 'Subscription benefits', counts: '{active} available · {frozen} frozen',
+    orderTitle: 'Usage order', orderHint: 'All-subscriptions keys try eligible subscriptions from top to bottom, skipping frozen, expired or exhausted ones. Fixed-group keys do not follow this order.',
+    orderAutoSave: 'Moving up or down saves automatically.', orderNumber: 'Usage order {number}', savingOrder: 'Saving order…', orderSaved: 'Order saved', orderRolledBack: 'Save failed. Previous order restored.',
+    history: 'Past and other subscriptions', remainingTime: 'Time remaining', preservedTime: 'Time preserved', durationDays: '{days}d {hours}h', durationHours: '{hours}h {minutes}m',
+    frozen: 'Frozen', frozenHint: 'Clock paused · Skipped during use', resetAfterThaw: 'Resets {time} after unfreezing', noQuotaLimit: 'No quota limit for this period',
+    freeze: 'Freeze', unfreeze: 'Unfreeze', freezeConfirm: 'Pause use, validity and all daily, weekly and monthly quota clocks. Existing usage stays recorded; requests already in progress are still billed.', unfreezeConfirm: 'Resume the saved countdowns and usage order. Used quota will not be reset.', freezeFailed: 'Could not complete the operation. Refresh subscriptions and try again; freezing may have been disabled.',
+    freezeSetting: 'Allow subscription freezing', freezeSettingHint: 'Users can pause subscription validity and quota clocks. Turning this off prevents new freezes; existing frozen subscriptions can still be unfrozen.',
     moveUp: 'Move up',
     moveDown: 'Move down',
     failedToReorder: 'Failed to save subscription order',
@@ -125,7 +134,8 @@ export default {
     status: {
       active: 'Active',
       expired: 'Expired',
-      revoked: 'Revoked'
+      revoked: 'Revoked',
+      suspended: 'Suspended'
     },
     usage: 'Usage',
     expires: 'Expires',

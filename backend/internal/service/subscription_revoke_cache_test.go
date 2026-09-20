@@ -150,7 +150,7 @@ func TestRestoreSubscription_NotRevokedReturnsConflict(t *testing.T) {
 	require.Zero(t, repo.restoreCalls)
 }
 
-func TestRestoreSubscription_LiveSubscriptionConflict(t *testing.T) {
+func TestRestoreSubscription_AllowsOtherIndependentSubscription(t *testing.T) {
 	deletedAt := time.Now().Add(-time.Hour)
 	repo := &restoreUserSubRepoStub{
 		existsActive: true,
@@ -166,7 +166,9 @@ func TestRestoreSubscription_LiveSubscriptionConflict(t *testing.T) {
 	svc := NewSubscriptionService(groupRepoNoop{}, repo, nil, nil, nil)
 	t.Cleanup(svc.Stop)
 
-	_, err := svc.RestoreSubscription(context.Background(), 1)
-	require.ErrorIs(t, err, ErrSubscriptionRestoreConflict)
-	require.Zero(t, repo.restoreCalls)
+	restored, err := svc.RestoreSubscription(context.Background(), 1)
+	require.NoError(t, err)
+	require.Equal(t, 1, repo.restoreCalls)
+	require.Equal(t, int64(1), restored.ID)
+	require.Equal(t, SubscriptionStatusExpired, restored.Status)
 }

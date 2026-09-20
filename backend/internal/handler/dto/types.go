@@ -750,9 +750,16 @@ type Setting struct {
 }
 
 type UserSubscription struct {
-	ID      int64 `json:"id"`
-	UserID  int64 `json:"user_id"`
-	GroupID int64 `json:"group_id"`
+	FrozenAt            *time.Time `json:"frozen_at,omitempty"`
+	FrozenDurationUS    int64      `json:"frozen_duration_us,omitempty"`
+	RemainingSeconds    int64      `json:"remaining_seconds"`
+	DailyResetsAt       *time.Time `json:"daily_resets_at,omitempty"`
+	WeeklyResetsAt      *time.Time `json:"weekly_resets_at,omitempty"`
+	MonthlyResetsAt     *time.Time `json:"monthly_resets_at,omitempty"`
+	IsOneTimeDailyQuota bool       `json:"is_one_time_daily_quota"`
+	ID                  int64      `json:"id"`
+	UserID              int64      `json:"user_id"`
+	GroupID             int64      `json:"group_id"`
 
 	StartsAt  time.Time `json:"starts_at"`
 	ExpiresAt time.Time `json:"expires_at"`

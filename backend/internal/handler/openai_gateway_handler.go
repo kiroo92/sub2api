@@ -2857,6 +2857,22 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					if err := h.billingCacheService.CheckBillingEligibility(ctx, apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(ctx, apiKey)); err != nil {
 						return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
 					}
+				} else if subscription != nil && h.subscriptionService != nil {
+					// Fixed-group WebSockets also admit each new turn against live
+					// subscription state; a frozen old row cannot keep a session usable.
+					current, err := h.subscriptionService.GetActiveSubscription(ctx, apiKey.User.ID, apiKey.Group.ID)
+					if err != nil {
+						return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
+					}
+					current, err = h.subscriptionService.EnsureWindowMaintenance(ctx, current)
+					if err != nil {
+						return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
+					}
+					if _, err = h.subscriptionService.ValidateAndCheckLimits(current, apiKey.Group); err != nil {
+						return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
+					}
+					subscription = current
+					c.Set(string(middleware2.ContextKeySubscription), current)
 				}
 				if blocked := blockedModelAllowlistCandidate(apiKey.Group, candidates); blocked != "" {
 					service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalModelConfiguration)

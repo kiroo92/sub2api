@@ -80,6 +80,10 @@ func (UserSubscription) Fields() []ent.Field {
 			Nillable().
 			SchemaType(map[string]string{dialect.Postgres: "text"}),
 		field.Int("sort_order").Default(0),
+		field.Time("frozen_at").Optional().Nillable().SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
+		field.Int64("frozen_duration_us").Default(0).NonNegative(),
+		field.String("admin_assignment_key").MaxLen(64).Optional().Nillable().Unique().Immutable(),
+		field.String("admin_assignment_fingerprint").MaxLen(64).Optional().Nillable().Immutable(),
 	}
 }
 

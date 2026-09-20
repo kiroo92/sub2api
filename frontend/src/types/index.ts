@@ -280,6 +280,7 @@ export interface PublicSettings {
   available_channels_enabled: boolean
   /** When false, the whole user-facing subscription surface is hidden. Default true. */
   subscription_enabled: boolean
+  subscription_freeze_enabled?: boolean
   /** Mirrors payment config BALANCE_PAYMENT_DISABLED; true = balance top-up closed (subscription-only site). */
   payment_balance_disabled: boolean
   model_plaza_enabled: boolean
@@ -2063,6 +2064,13 @@ export interface ChangePasswordRequest {
 // ==================== User Subscription Types ====================
 
 export interface UserSubscription {
+  frozen_at?: string | null
+  frozen_duration_us?: number
+  remaining_seconds?: number
+  daily_resets_at?: string | null
+  weekly_resets_at?: string | null
+  monthly_resets_at?: string | null
+  is_one_time_daily_quota?: boolean
   id: number
   user_id: number
   group_id: number

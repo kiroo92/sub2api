@@ -720,6 +720,16 @@ describe("admin SettingsView payment visible method controls", () => {
     adminSettingsFetch.mockResolvedValue(undefined);
   });
 
+  it("saves the independent subscription freeze permission", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper.get("#subscription-freeze-enabled").setValue(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+    expect(updateSettings.mock.calls[0]?.[0].subscription_freeze_enabled).toBe(true);
+    wrapper.unmount();
+  });
+
   it("submits the Codex ticket harvest toggle", async () => {
     getSettings.mockResolvedValueOnce({
       ...baseSettingsResponse,

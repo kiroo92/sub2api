@@ -317,7 +317,7 @@
                       d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  <span>{{ formatResetTime(row.weekly_window_start, 'weekly') }}</span>
+                  <span>{{ formatResetTime(row.weekly_window_start, 'weekly', row) }}</span>
                 </div>
               </div>
 
@@ -354,7 +354,7 @@
                       d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  <span>{{ formatResetTime(row.monthly_window_start, 'monthly') }}</span>
+                  <span>{{ formatResetTime(row.monthly_window_start, 'monthly', row) }}</span>
                 </div>
               </div>
 
@@ -375,8 +375,9 @@
             </div>
           </template>
 
-          <template #cell-expires_at="{ value }">
-            <div v-if="value">
+          <template #cell-expires_at="{ value, row }">
+            <div v-if="row.frozen_at" class="text-sm text-sky-600"><div>{{ t('userSubscriptions.frozen') }}</div><span class="text-xs">{{ t('userSubscriptions.preservedTime') }} · {{ formatRemainingExpiry(value, row.frozen_at) }}</span></div>
+            <div v-else-if="value">
               <span
                 class="text-sm"
                 :class="
@@ -401,7 +402,8 @@
             }}</span>
           </template>
 
-          <template #cell-status="{ value }">
+          <template #cell-status="{ value, row }">
+            <span v-if="row.frozen_at" class="mr-1 rounded px-2 py-0.5 text-xs text-sky-700 bg-sky-50 dark:bg-sky-900/30">{{ t('userSubscriptions.frozen') }}</span>
             <span
               :class="[
                 'badge',
@@ -505,6 +507,7 @@
           <input v-model="batchAssignEnabled" type="checkbox" :disabled="submitting" @change="resetAssignUsers" />
           {{ t('admin.subscriptions.batchAssign.enable') }}
         </label>
+        <p class="input-hint">{{ t('userSubscriptions.adminAssignHint') }}</p>
         <p v-if="batchAssignEnabled" class="input-hint">{{ t('admin.subscriptions.batchAssign.hint') }}</p>
         <div>
           <label class="input-label">{{ t('admin.subscriptions.form.user') }}</label>
@@ -841,6 +844,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { prepareSubscriptionAssignment, completeBulkSubscriptionOperation } from '@/components/admin/subscription/bulkSubscriptionOperation'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
@@ -1358,11 +1362,14 @@ const handleAssignSubscription = async () => {
   submitting.value = true
   try {
     if (batchAssignEnabled.value) {
-      batchAssignResult.value = await adminAPI.subscriptions.bulkAssign({
+      const payload = {
         user_ids: assignUsers.value.map((user) => user.id),
         group_id: assignForm.group_id,
         validity_days: assignForm.validity_days
-      })
+      }
+      const operation = prepareSubscriptionAssignment(payload)
+      batchAssignResult.value = await adminAPI.subscriptions.bulkAssign(operation.request, operation.key)
+      completeBulkSubscriptionOperation(operation)
       const result = batchAssignResult.value
       const successIds = new Set(result.subscriptions.map((subscription) => subscription.user_id))
       assignUsers.value = assignUsers.value.filter((user) => !successIds.has(user.id))
@@ -1372,11 +1379,14 @@ const handleAssignSubscription = async () => {
       }
       return
     }
-    await adminAPI.subscriptions.assign({
+    const payload = {
       user_id: assignForm.user_id!,
       group_id: assignForm.group_id,
       validity_days: assignForm.validity_days
-    })
+    }
+    const operation = prepareSubscriptionAssignment(payload)
+    await adminAPI.subscriptions.assign(operation.request, operation.key)
+    completeBulkSubscriptionOperation(operation)
     appStore.showSuccess(t('admin.subscriptions.subscriptionAssigned'))
     submitting.value = false
     closeAssignModal()
@@ -1407,7 +1417,7 @@ const handleExtendSubscription = async () => {
   if (extendingSubscription.value.expires_at) {
     const expiresAt = new Date(extendingSubscription.value.expires_at)
     const newExpiresAt = new Date(expiresAt.getTime() + extendForm.days * 24 * 60 * 60 * 1000)
-    if (newExpiresAt <= new Date()) {
+    if (newExpiresAt <= new Date(extendingSubscription.value.frozen_at || Date.now())) {
       appStore.showError(t('admin.subscriptions.adjustWouldExpire'))
       return
     }
@@ -1501,8 +1511,8 @@ const getDaysRemaining = (expiresAt: string): number | null => {
   return Math.ceil(diff / (1000 * 60 * 60 * 24))
 }
 
-const formatRemainingExpiry = (expiresAt: string): string | null => {
-  const duration = getRemainingExpiryDuration(expiresAt)
+const formatRemainingExpiry = (expiresAt: string, frozenAt?: string): string | null => {
+  const duration = getRemainingExpiryDuration(expiresAt, frozenAt ? new Date(frozenAt) : new Date())
   if (!duration) return null
   if (duration.unit === 'days') {
     return t('admin.subscriptions.daysRemaining', { days: duration.days })
@@ -1562,20 +1572,21 @@ const formatQuotaEndDuration = (parts: RemainingDurationParts): string => {
 }
 
 const formatDailyUsageWindow = (subscription: UserSubscription): string => {
-  if (isOneTimeDailyQuota(subscription) && subscription.expires_at) {
-    const parts = getRemainingDurationParts(subscription.expires_at)
-    return parts ? formatQuotaEndDuration(parts) : t('admin.subscriptions.windowNotActive')
+  const at = subscription.daily_resets_at || (isOneTimeDailyQuota(subscription) ? subscription.expires_at : null)
+  if (at) {
+    const parts = getRemainingDurationParts(at, new Date(subscription.frozen_at || Date.now()))
+    const result = parts ? (isOneTimeDailyQuota(subscription) ? formatQuotaEndDuration(parts) : formatResetDuration(parts)) : t('admin.subscriptions.windowNotActive')
+    return subscription.frozen_at ? t('userSubscriptions.frozen') + ' · ' + result : result
   }
-
-  return formatResetTime(subscription.daily_window_start, 'daily')
+  return formatResetTime(subscription.daily_window_start, 'daily', subscription)
 }
 
 // Format reset time based on window start and period type
-const formatResetTime = (windowStart: string | null, period: 'daily' | 'weekly' | 'monthly'): string => {
+const formatResetTime = (windowStart: string | null, period: 'daily' | 'weekly' | 'monthly', subscription?: UserSubscription): string => {
   if (!windowStart) return t('admin.subscriptions.windowNotActive')
 
   const start = new Date(windowStart)
-  const now = new Date()
+  const now = new Date(subscription?.frozen_at || Date.now())
 
   // Calculate reset time based on period
   let resetTime: Date
@@ -1591,9 +1602,11 @@ const formatResetTime = (windowStart: string | null, period: 'daily' | 'weekly' 
       break
   }
 
-  const parts = getRemainingDurationParts(resetTime, now)
+  const authoritative = subscription?.[`${period}_resets_at`]
+  const parts = getRemainingDurationParts(authoritative || resetTime, now)
 
-  return parts ? formatResetDuration(parts) : t('admin.subscriptions.windowNotActive')
+  const label = parts ? formatResetDuration(parts) : t('admin.subscriptions.windowNotActive')
+  return subscription?.frozen_at ? t('userSubscriptions.frozen') + ' · ' + label : label
 }
 
 // Handle click outside to close dropdowns

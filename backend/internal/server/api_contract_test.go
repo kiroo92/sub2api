@@ -5,6 +5,7 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"math"
@@ -438,6 +439,7 @@ func TestAPIContracts(t *testing.T) {
 					{
 						"id": 501,
 						"sort_order": 0,
+						"is_one_time_daily_quota": false,
 						"user_id": 1,
 						"group_id": 10,
 						"starts_at": "2025-01-02T03:04:05Z",
@@ -1003,6 +1005,7 @@ func TestAPIContracts(t *testing.T) {
 					"channel_monitor_default_interval_seconds": 60,
 					"available_channels_enabled": false,
 					"subscription_enabled": true,
+					"subscription_freeze_enabled": false,
 					"model_plaza_enabled": false,
 					"model_plaza_require_auth": false,
 					"model_plaza_description": "",
@@ -1321,6 +1324,7 @@ func TestAPIContracts(t *testing.T) {
 					"channel_monitor_default_interval_seconds": 60,
 					"available_channels_enabled": false,
 					"subscription_enabled": true,
+					"subscription_freeze_enabled": false,
 					"model_plaza_enabled": false,
 					"model_plaza_require_auth": false,
 					"model_plaza_description": "",
@@ -1420,6 +1424,27 @@ func TestAPIContracts(t *testing.T) {
 
 			status, body := doRequest(t, deps.router, tt.method, tt.path, tt.body, tt.headers)
 			require.Equal(t, tt.wantStatus, status)
+			if tt.path == "/api/v1/subscriptions" {
+				var result map[string]any
+				require.NoError(t, json.Unmarshal([]byte(body), &result))
+				items, ok := result["data"].([]any)
+				require.True(t, ok)
+				for _, item := range items {
+					row, ok := item.(map[string]any)
+					require.True(t, ok)
+					remaining, ok := row["remaining_seconds"].(float64)
+					require.True(t, ok)
+					expiryText, ok := row["expires_at"].(string)
+					require.True(t, ok)
+					expiry, err := time.Parse(time.RFC3339, expiryText)
+					require.NoError(t, err)
+					require.InDelta(t, time.Until(expiry).Seconds(), remaining, 2)
+					delete(row, "remaining_seconds") // Time-dependent field asserted above.
+				}
+				normalized, err := json.Marshal(result)
+				require.NoError(t, err)
+				body = string(normalized)
+			}
 			require.JSONEq(t, tt.wantJSON, body)
 		})
 	}

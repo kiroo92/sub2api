@@ -57,7 +57,7 @@ func (s *SubscriptionService) selectSubscriptionsForRequest(ctx context.Context,
 		if groupID != nil && sub.GroupID != *groupID {
 			continue
 		}
-		if sub.UserID != key.User.ID || sub.Status != SubscriptionStatusActive || sub.DeletedAt != nil || !sub.ExpiresAt.After(now) || sub.StartsAt.After(now) || sub.Group == nil || !sub.Group.IsActive() || !sub.Group.IsSubscriptionType() {
+		if sub.UserID != key.User.ID || sub.FrozenAt != nil || sub.Status != SubscriptionStatusActive || sub.DeletedAt != nil || !sub.ExpiresAt.After(now) || sub.StartsAt.After(now) || sub.Group == nil || !sub.Group.IsActive() || !sub.Group.IsSubscriptionType() {
 			continue
 		}
 		if request.Discovery {

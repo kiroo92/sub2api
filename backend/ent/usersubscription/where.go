@@ -145,6 +145,26 @@ func SortOrder(v int) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldEQ(FieldSortOrder, v))
 }
 
+// FrozenAt applies equality check predicate on the "frozen_at" field. It's identical to FrozenAtEQ.
+func FrozenAt(v time.Time) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldFrozenAt, v))
+}
+
+// FrozenDurationUs applies equality check predicate on the "frozen_duration_us" field. It's identical to FrozenDurationUsEQ.
+func FrozenDurationUs(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldFrozenDurationUs, v))
+}
+
+// AdminAssignmentKey applies equality check predicate on the "admin_assignment_key" field. It's identical to AdminAssignmentKeyEQ.
+func AdminAssignmentKey(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldAdminAssignmentKey, v))
+}
+
+// AdminAssignmentFingerprint applies equality check predicate on the "admin_assignment_fingerprint" field. It's identical to AdminAssignmentFingerprintEQ.
+func AdminAssignmentFingerprint(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldAdminAssignmentFingerprint, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldEQ(FieldCreatedAt, v))
@@ -913,6 +933,246 @@ func SortOrderLT(v int) predicate.UserSubscription {
 // SortOrderLTE applies the LTE predicate on the "sort_order" field.
 func SortOrderLTE(v int) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldLTE(FieldSortOrder, v))
+}
+
+// FrozenAtEQ applies the EQ predicate on the "frozen_at" field.
+func FrozenAtEQ(v time.Time) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldFrozenAt, v))
+}
+
+// FrozenAtNEQ applies the NEQ predicate on the "frozen_at" field.
+func FrozenAtNEQ(v time.Time) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNEQ(FieldFrozenAt, v))
+}
+
+// FrozenAtIn applies the In predicate on the "frozen_at" field.
+func FrozenAtIn(vs ...time.Time) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIn(FieldFrozenAt, vs...))
+}
+
+// FrozenAtNotIn applies the NotIn predicate on the "frozen_at" field.
+func FrozenAtNotIn(vs ...time.Time) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotIn(FieldFrozenAt, vs...))
+}
+
+// FrozenAtGT applies the GT predicate on the "frozen_at" field.
+func FrozenAtGT(v time.Time) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGT(FieldFrozenAt, v))
+}
+
+// FrozenAtGTE applies the GTE predicate on the "frozen_at" field.
+func FrozenAtGTE(v time.Time) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGTE(FieldFrozenAt, v))
+}
+
+// FrozenAtLT applies the LT predicate on the "frozen_at" field.
+func FrozenAtLT(v time.Time) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLT(FieldFrozenAt, v))
+}
+
+// FrozenAtLTE applies the LTE predicate on the "frozen_at" field.
+func FrozenAtLTE(v time.Time) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLTE(FieldFrozenAt, v))
+}
+
+// FrozenAtIsNil applies the IsNil predicate on the "frozen_at" field.
+func FrozenAtIsNil() predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIsNull(FieldFrozenAt))
+}
+
+// FrozenAtNotNil applies the NotNil predicate on the "frozen_at" field.
+func FrozenAtNotNil() predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotNull(FieldFrozenAt))
+}
+
+// FrozenDurationUsEQ applies the EQ predicate on the "frozen_duration_us" field.
+func FrozenDurationUsEQ(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldFrozenDurationUs, v))
+}
+
+// FrozenDurationUsNEQ applies the NEQ predicate on the "frozen_duration_us" field.
+func FrozenDurationUsNEQ(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNEQ(FieldFrozenDurationUs, v))
+}
+
+// FrozenDurationUsIn applies the In predicate on the "frozen_duration_us" field.
+func FrozenDurationUsIn(vs ...int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIn(FieldFrozenDurationUs, vs...))
+}
+
+// FrozenDurationUsNotIn applies the NotIn predicate on the "frozen_duration_us" field.
+func FrozenDurationUsNotIn(vs ...int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotIn(FieldFrozenDurationUs, vs...))
+}
+
+// FrozenDurationUsGT applies the GT predicate on the "frozen_duration_us" field.
+func FrozenDurationUsGT(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGT(FieldFrozenDurationUs, v))
+}
+
+// FrozenDurationUsGTE applies the GTE predicate on the "frozen_duration_us" field.
+func FrozenDurationUsGTE(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGTE(FieldFrozenDurationUs, v))
+}
+
+// FrozenDurationUsLT applies the LT predicate on the "frozen_duration_us" field.
+func FrozenDurationUsLT(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLT(FieldFrozenDurationUs, v))
+}
+
+// FrozenDurationUsLTE applies the LTE predicate on the "frozen_duration_us" field.
+func FrozenDurationUsLTE(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLTE(FieldFrozenDurationUs, v))
+}
+
+// AdminAssignmentKeyEQ applies the EQ predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyEQ(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldAdminAssignmentKey, v))
+}
+
+// AdminAssignmentKeyNEQ applies the NEQ predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyNEQ(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNEQ(FieldAdminAssignmentKey, v))
+}
+
+// AdminAssignmentKeyIn applies the In predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyIn(vs ...string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIn(FieldAdminAssignmentKey, vs...))
+}
+
+// AdminAssignmentKeyNotIn applies the NotIn predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyNotIn(vs ...string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotIn(FieldAdminAssignmentKey, vs...))
+}
+
+// AdminAssignmentKeyGT applies the GT predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyGT(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGT(FieldAdminAssignmentKey, v))
+}
+
+// AdminAssignmentKeyGTE applies the GTE predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyGTE(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGTE(FieldAdminAssignmentKey, v))
+}
+
+// AdminAssignmentKeyLT applies the LT predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyLT(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLT(FieldAdminAssignmentKey, v))
+}
+
+// AdminAssignmentKeyLTE applies the LTE predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyLTE(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLTE(FieldAdminAssignmentKey, v))
+}
+
+// AdminAssignmentKeyContains applies the Contains predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyContains(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldContains(FieldAdminAssignmentKey, v))
+}
+
+// AdminAssignmentKeyHasPrefix applies the HasPrefix predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyHasPrefix(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldHasPrefix(FieldAdminAssignmentKey, v))
+}
+
+// AdminAssignmentKeyHasSuffix applies the HasSuffix predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyHasSuffix(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldHasSuffix(FieldAdminAssignmentKey, v))
+}
+
+// AdminAssignmentKeyIsNil applies the IsNil predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyIsNil() predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIsNull(FieldAdminAssignmentKey))
+}
+
+// AdminAssignmentKeyNotNil applies the NotNil predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyNotNil() predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotNull(FieldAdminAssignmentKey))
+}
+
+// AdminAssignmentKeyEqualFold applies the EqualFold predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyEqualFold(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEqualFold(FieldAdminAssignmentKey, v))
+}
+
+// AdminAssignmentKeyContainsFold applies the ContainsFold predicate on the "admin_assignment_key" field.
+func AdminAssignmentKeyContainsFold(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldContainsFold(FieldAdminAssignmentKey, v))
+}
+
+// AdminAssignmentFingerprintEQ applies the EQ predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintEQ(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldAdminAssignmentFingerprint, v))
+}
+
+// AdminAssignmentFingerprintNEQ applies the NEQ predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintNEQ(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNEQ(FieldAdminAssignmentFingerprint, v))
+}
+
+// AdminAssignmentFingerprintIn applies the In predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintIn(vs ...string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIn(FieldAdminAssignmentFingerprint, vs...))
+}
+
+// AdminAssignmentFingerprintNotIn applies the NotIn predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintNotIn(vs ...string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotIn(FieldAdminAssignmentFingerprint, vs...))
+}
+
+// AdminAssignmentFingerprintGT applies the GT predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintGT(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGT(FieldAdminAssignmentFingerprint, v))
+}
+
+// AdminAssignmentFingerprintGTE applies the GTE predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintGTE(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGTE(FieldAdminAssignmentFingerprint, v))
+}
+
+// AdminAssignmentFingerprintLT applies the LT predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintLT(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLT(FieldAdminAssignmentFingerprint, v))
+}
+
+// AdminAssignmentFingerprintLTE applies the LTE predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintLTE(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLTE(FieldAdminAssignmentFingerprint, v))
+}
+
+// AdminAssignmentFingerprintContains applies the Contains predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintContains(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldContains(FieldAdminAssignmentFingerprint, v))
+}
+
+// AdminAssignmentFingerprintHasPrefix applies the HasPrefix predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintHasPrefix(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldHasPrefix(FieldAdminAssignmentFingerprint, v))
+}
+
+// AdminAssignmentFingerprintHasSuffix applies the HasSuffix predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintHasSuffix(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldHasSuffix(FieldAdminAssignmentFingerprint, v))
+}
+
+// AdminAssignmentFingerprintIsNil applies the IsNil predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintIsNil() predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIsNull(FieldAdminAssignmentFingerprint))
+}
+
+// AdminAssignmentFingerprintNotNil applies the NotNil predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintNotNil() predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotNull(FieldAdminAssignmentFingerprint))
+}
+
+// AdminAssignmentFingerprintEqualFold applies the EqualFold predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintEqualFold(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEqualFold(FieldAdminAssignmentFingerprint, v))
+}
+
+// AdminAssignmentFingerprintContainsFold applies the ContainsFold predicate on the "admin_assignment_fingerprint" field.
+func AdminAssignmentFingerprintContainsFold(v string) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldContainsFold(FieldAdminAssignmentFingerprint, v))
 }
 
 // HasUser applies the HasEdge predicate on the "user" edge.

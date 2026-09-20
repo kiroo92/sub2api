@@ -15,8 +15,9 @@ export interface RemainingDurationParts {
 }
 
 export function isOneTimeDailyQuota(
-  subscription: Pick<UserSubscription, 'starts_at' | 'expires_at'>
+  subscription: Pick<UserSubscription, 'starts_at' | 'expires_at' | 'frozen_duration_us' | 'is_one_time_daily_quota'>
 ): boolean {
+  if (subscription.is_one_time_daily_quota != null) return subscription.is_one_time_daily_quota
   if (!subscription.starts_at || !subscription.expires_at) return false
 
   const startsAt = new Date(subscription.starts_at).getTime()
@@ -24,7 +25,7 @@ export function isOneTimeDailyQuota(
 
   if (!Number.isFinite(startsAt) || !Number.isFinite(expiresAt)) return false
 
-  return expiresAt <= startsAt + ONE_DAY_MS
+  return expiresAt - (subscription.frozen_duration_us || 0) / 1000 <= startsAt + ONE_DAY_MS
 }
 
 export function getRemainingDurationParts(

@@ -55,6 +55,14 @@ type UserSubscription struct {
 	Notes *string `json:"notes,omitempty"`
 	// SortOrder holds the value of the "sort_order" field.
 	SortOrder int `json:"sort_order,omitempty"`
+	// FrozenAt holds the value of the "frozen_at" field.
+	FrozenAt *time.Time `json:"frozen_at,omitempty"`
+	// FrozenDurationUs holds the value of the "frozen_duration_us" field.
+	FrozenDurationUs int64 `json:"frozen_duration_us,omitempty"`
+	// AdminAssignmentKey holds the value of the "admin_assignment_key" field.
+	AdminAssignmentKey *string `json:"admin_assignment_key,omitempty"`
+	// AdminAssignmentFingerprint holds the value of the "admin_assignment_fingerprint" field.
+	AdminAssignmentFingerprint *string `json:"admin_assignment_fingerprint,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the UserSubscriptionQuery when eager-loading is set.
 	Edges        UserSubscriptionEdges `json:"edges"`
@@ -125,11 +133,11 @@ func (*UserSubscription) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case usersubscription.FieldDailyUsageUsd, usersubscription.FieldWeeklyUsageUsd, usersubscription.FieldMonthlyUsageUsd:
 			values[i] = new(sql.NullFloat64)
-		case usersubscription.FieldID, usersubscription.FieldUserID, usersubscription.FieldGroupID, usersubscription.FieldAssignedBy, usersubscription.FieldSortOrder:
+		case usersubscription.FieldID, usersubscription.FieldUserID, usersubscription.FieldGroupID, usersubscription.FieldAssignedBy, usersubscription.FieldSortOrder, usersubscription.FieldFrozenDurationUs:
 			values[i] = new(sql.NullInt64)
-		case usersubscription.FieldStatus, usersubscription.FieldNotes:
+		case usersubscription.FieldStatus, usersubscription.FieldNotes, usersubscription.FieldAdminAssignmentKey, usersubscription.FieldAdminAssignmentFingerprint:
 			values[i] = new(sql.NullString)
-		case usersubscription.FieldCreatedAt, usersubscription.FieldUpdatedAt, usersubscription.FieldDeletedAt, usersubscription.FieldStartsAt, usersubscription.FieldExpiresAt, usersubscription.FieldDailyWindowStart, usersubscription.FieldWeeklyWindowStart, usersubscription.FieldMonthlyWindowStart, usersubscription.FieldAssignedAt:
+		case usersubscription.FieldCreatedAt, usersubscription.FieldUpdatedAt, usersubscription.FieldDeletedAt, usersubscription.FieldStartsAt, usersubscription.FieldExpiresAt, usersubscription.FieldDailyWindowStart, usersubscription.FieldWeeklyWindowStart, usersubscription.FieldMonthlyWindowStart, usersubscription.FieldAssignedAt, usersubscription.FieldFrozenAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -266,6 +274,33 @@ func (_m *UserSubscription) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.SortOrder = int(value.Int64)
 			}
+		case usersubscription.FieldFrozenAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field frozen_at", values[i])
+			} else if value.Valid {
+				_m.FrozenAt = new(time.Time)
+				*_m.FrozenAt = value.Time
+			}
+		case usersubscription.FieldFrozenDurationUs:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field frozen_duration_us", values[i])
+			} else if value.Valid {
+				_m.FrozenDurationUs = value.Int64
+			}
+		case usersubscription.FieldAdminAssignmentKey:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field admin_assignment_key", values[i])
+			} else if value.Valid {
+				_m.AdminAssignmentKey = new(string)
+				*_m.AdminAssignmentKey = value.String
+			}
+		case usersubscription.FieldAdminAssignmentFingerprint:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field admin_assignment_fingerprint", values[i])
+			} else if value.Valid {
+				_m.AdminAssignmentFingerprint = new(string)
+				*_m.AdminAssignmentFingerprint = value.String
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -387,6 +422,24 @@ func (_m *UserSubscription) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("sort_order=")
 	builder.WriteString(fmt.Sprintf("%v", _m.SortOrder))
+	builder.WriteString(", ")
+	if v := _m.FrozenAt; v != nil {
+		builder.WriteString("frozen_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("frozen_duration_us=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FrozenDurationUs))
+	builder.WriteString(", ")
+	if v := _m.AdminAssignmentKey; v != nil {
+		builder.WriteString("admin_assignment_key=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.AdminAssignmentFingerprint; v != nil {
+		builder.WriteString("admin_assignment_fingerprint=")
+		builder.WriteString(*v)
+	}
 	builder.WriteByte(')')
 	return builder.String()
 }

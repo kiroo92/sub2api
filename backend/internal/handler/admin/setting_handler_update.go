@@ -347,7 +347,8 @@ type UpdateSettingsRequest struct {
 	AvailableChannelsEnabled *bool `json:"available_channels_enabled"`
 
 	// Subscription feature switch (user-facing subscription surface; see SettingKeySubscriptionEnabled)
-	SubscriptionEnabled *bool `json:"subscription_enabled"`
+	SubscriptionEnabled       *bool `json:"subscription_enabled"`
+	SubscriptionFreezeEnabled *bool `json:"subscription_freeze_enabled"`
 
 	// Model Plaza feature switches + description
 	ModelPlazaEnabled     *bool   `json:"model_plaza_enabled"`
@@ -1960,10 +1961,17 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			return previousSettings.AvailableChannelsEnabled
 		}(),
 		SubscriptionEnabled: func() bool {
+			// Existing subscription surface switch is independent from freeze permission.
 			if req.SubscriptionEnabled != nil {
 				return *req.SubscriptionEnabled
 			}
 			return previousSettings.SubscriptionEnabled
+		}(),
+		SubscriptionFreezeEnabled: func() bool {
+			if req.SubscriptionFreezeEnabled != nil {
+				return *req.SubscriptionFreezeEnabled
+			}
+			return previousSettings.SubscriptionFreezeEnabled
 		}(),
 		ModelPlazaEnabled: func() bool {
 			if req.ModelPlazaEnabled != nil {
@@ -2410,8 +2418,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		GrokCrossClientModelMapEnabled: updatedSettings.GrokCrossClientModelMapEnabled,
 		GrokDefaultBaseURLMode:         updatedSettings.GrokDefaultBaseURLMode,
 
-		AvailableChannelsEnabled: updatedSettings.AvailableChannelsEnabled,
-		SubscriptionEnabled:      updatedSettings.SubscriptionEnabled,
+		AvailableChannelsEnabled:  updatedSettings.AvailableChannelsEnabled,
+		SubscriptionEnabled:       updatedSettings.SubscriptionEnabled,
+		SubscriptionFreezeEnabled: updatedSettings.SubscriptionFreezeEnabled,
 
 		ModelPlazaEnabled:       updatedSettings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:   updatedSettings.ModelPlazaRequireAuth,

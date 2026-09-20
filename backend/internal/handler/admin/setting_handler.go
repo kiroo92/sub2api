@@ -385,8 +385,9 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		GrokCrossClientModelMapEnabled: settings.GrokCrossClientModelMapEnabled,
 		GrokDefaultBaseURLMode:         settings.GrokDefaultBaseURLMode,
 
-		AvailableChannelsEnabled: settings.AvailableChannelsEnabled,
-		SubscriptionEnabled:      settings.SubscriptionEnabled,
+		AvailableChannelsEnabled:  settings.AvailableChannelsEnabled,
+		SubscriptionEnabled:       settings.SubscriptionEnabled,
+		SubscriptionFreezeEnabled: settings.SubscriptionFreezeEnabled,
 
 		ModelPlazaEnabled:       settings.ModelPlazaEnabled,
 		ModelPlazaRequireAuth:   settings.ModelPlazaRequireAuth,

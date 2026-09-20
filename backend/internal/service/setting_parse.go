@@ -203,7 +203,8 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyAvailableChannelsEnabled: "false",
 
 		// Subscription feature (default enabled; opt-out)
-		SettingKeySubscriptionEnabled: "true",
+		SettingKeySubscriptionEnabled:       "true",
+		SettingKeySubscriptionFreezeEnabled: "false",
 
 		// Model plaza feature (default disabled; opt-in, public unless require_auth)
 		SettingKeyModelPlazaEnabled:       "false",
@@ -826,6 +827,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// Subscription feature (default: enabled; only an explicit false disables)
 	result.SubscriptionEnabled = !isFalseSettingValue(settings[SettingKeySubscriptionEnabled])
+	result.SubscriptionFreezeEnabled = settings[SettingKeySubscriptionFreezeEnabled] == "true"
 
 	// Model plaza feature (default: disabled; strict true)
 	result.ModelPlazaEnabled = settings[SettingKeyModelPlazaEnabled] == "true"

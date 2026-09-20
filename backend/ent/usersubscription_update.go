@@ -325,6 +325,47 @@ func (_u *UserSubscriptionUpdate) AddSortOrder(v int) *UserSubscriptionUpdate {
 	return _u
 }
 
+// SetFrozenAt sets the "frozen_at" field.
+func (_u *UserSubscriptionUpdate) SetFrozenAt(v time.Time) *UserSubscriptionUpdate {
+	_u.mutation.SetFrozenAt(v)
+	return _u
+}
+
+// SetNillableFrozenAt sets the "frozen_at" field if the given value is not nil.
+func (_u *UserSubscriptionUpdate) SetNillableFrozenAt(v *time.Time) *UserSubscriptionUpdate {
+	if v != nil {
+		_u.SetFrozenAt(*v)
+	}
+	return _u
+}
+
+// ClearFrozenAt clears the value of the "frozen_at" field.
+func (_u *UserSubscriptionUpdate) ClearFrozenAt() *UserSubscriptionUpdate {
+	_u.mutation.ClearFrozenAt()
+	return _u
+}
+
+// SetFrozenDurationUs sets the "frozen_duration_us" field.
+func (_u *UserSubscriptionUpdate) SetFrozenDurationUs(v int64) *UserSubscriptionUpdate {
+	_u.mutation.ResetFrozenDurationUs()
+	_u.mutation.SetFrozenDurationUs(v)
+	return _u
+}
+
+// SetNillableFrozenDurationUs sets the "frozen_duration_us" field if the given value is not nil.
+func (_u *UserSubscriptionUpdate) SetNillableFrozenDurationUs(v *int64) *UserSubscriptionUpdate {
+	if v != nil {
+		_u.SetFrozenDurationUs(*v)
+	}
+	return _u
+}
+
+// AddFrozenDurationUs adds value to the "frozen_duration_us" field.
+func (_u *UserSubscriptionUpdate) AddFrozenDurationUs(v int64) *UserSubscriptionUpdate {
+	_u.mutation.AddFrozenDurationUs(v)
+	return _u
+}
+
 // SetUser sets the "user" edge to the User entity.
 func (_u *UserSubscriptionUpdate) SetUser(v *User) *UserSubscriptionUpdate {
 	return _u.SetUserID(v.ID)
@@ -462,6 +503,11 @@ func (_u *UserSubscriptionUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "UserSubscription.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.FrozenDurationUs(); ok {
+		if err := usersubscription.FrozenDurationUsValidator(v); err != nil {
+			return &ValidationError{Name: "frozen_duration_us", err: fmt.Errorf(`ent: validator failed for field "UserSubscription.frozen_duration_us": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "UserSubscription.user"`)
 	}
@@ -551,6 +597,24 @@ func (_u *UserSubscriptionUpdate) sqlSave(ctx context.Context) (_node int, err e
 	}
 	if value, ok := _u.mutation.AddedSortOrder(); ok {
 		_spec.AddField(usersubscription.FieldSortOrder, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.FrozenAt(); ok {
+		_spec.SetField(usersubscription.FieldFrozenAt, field.TypeTime, value)
+	}
+	if _u.mutation.FrozenAtCleared() {
+		_spec.ClearField(usersubscription.FieldFrozenAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.FrozenDurationUs(); ok {
+		_spec.SetField(usersubscription.FieldFrozenDurationUs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedFrozenDurationUs(); ok {
+		_spec.AddField(usersubscription.FieldFrozenDurationUs, field.TypeInt64, value)
+	}
+	if _u.mutation.AdminAssignmentKeyCleared() {
+		_spec.ClearField(usersubscription.FieldAdminAssignmentKey, field.TypeString)
+	}
+	if _u.mutation.AdminAssignmentFingerprintCleared() {
+		_spec.ClearField(usersubscription.FieldAdminAssignmentFingerprint, field.TypeString)
 	}
 	if _u.mutation.UserCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -998,6 +1062,47 @@ func (_u *UserSubscriptionUpdateOne) AddSortOrder(v int) *UserSubscriptionUpdate
 	return _u
 }
 
+// SetFrozenAt sets the "frozen_at" field.
+func (_u *UserSubscriptionUpdateOne) SetFrozenAt(v time.Time) *UserSubscriptionUpdateOne {
+	_u.mutation.SetFrozenAt(v)
+	return _u
+}
+
+// SetNillableFrozenAt sets the "frozen_at" field if the given value is not nil.
+func (_u *UserSubscriptionUpdateOne) SetNillableFrozenAt(v *time.Time) *UserSubscriptionUpdateOne {
+	if v != nil {
+		_u.SetFrozenAt(*v)
+	}
+	return _u
+}
+
+// ClearFrozenAt clears the value of the "frozen_at" field.
+func (_u *UserSubscriptionUpdateOne) ClearFrozenAt() *UserSubscriptionUpdateOne {
+	_u.mutation.ClearFrozenAt()
+	return _u
+}
+
+// SetFrozenDurationUs sets the "frozen_duration_us" field.
+func (_u *UserSubscriptionUpdateOne) SetFrozenDurationUs(v int64) *UserSubscriptionUpdateOne {
+	_u.mutation.ResetFrozenDurationUs()
+	_u.mutation.SetFrozenDurationUs(v)
+	return _u
+}
+
+// SetNillableFrozenDurationUs sets the "frozen_duration_us" field if the given value is not nil.
+func (_u *UserSubscriptionUpdateOne) SetNillableFrozenDurationUs(v *int64) *UserSubscriptionUpdateOne {
+	if v != nil {
+		_u.SetFrozenDurationUs(*v)
+	}
+	return _u
+}
+
+// AddFrozenDurationUs adds value to the "frozen_duration_us" field.
+func (_u *UserSubscriptionUpdateOne) AddFrozenDurationUs(v int64) *UserSubscriptionUpdateOne {
+	_u.mutation.AddFrozenDurationUs(v)
+	return _u
+}
+
 // SetUser sets the "user" edge to the User entity.
 func (_u *UserSubscriptionUpdateOne) SetUser(v *User) *UserSubscriptionUpdateOne {
 	return _u.SetUserID(v.ID)
@@ -1148,6 +1253,11 @@ func (_u *UserSubscriptionUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "UserSubscription.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.FrozenDurationUs(); ok {
+		if err := usersubscription.FrozenDurationUsValidator(v); err != nil {
+			return &ValidationError{Name: "frozen_duration_us", err: fmt.Errorf(`ent: validator failed for field "UserSubscription.frozen_duration_us": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "UserSubscription.user"`)
 	}
@@ -1254,6 +1364,24 @@ func (_u *UserSubscriptionUpdateOne) sqlSave(ctx context.Context) (_node *UserSu
 	}
 	if value, ok := _u.mutation.AddedSortOrder(); ok {
 		_spec.AddField(usersubscription.FieldSortOrder, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.FrozenAt(); ok {
+		_spec.SetField(usersubscription.FieldFrozenAt, field.TypeTime, value)
+	}
+	if _u.mutation.FrozenAtCleared() {
+		_spec.ClearField(usersubscription.FieldFrozenAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.FrozenDurationUs(); ok {
+		_spec.SetField(usersubscription.FieldFrozenDurationUs, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedFrozenDurationUs(); ok {
+		_spec.AddField(usersubscription.FieldFrozenDurationUs, field.TypeInt64, value)
+	}
+	if _u.mutation.AdminAssignmentKeyCleared() {
+		_spec.ClearField(usersubscription.FieldAdminAssignmentKey, field.TypeString)
+	}
+	if _u.mutation.AdminAssignmentFingerprintCleared() {
+		_spec.ClearField(usersubscription.FieldAdminAssignmentFingerprint, field.TypeString)
 	}
 	if _u.mutation.UserCleared() {
 		edge := &sqlgraph.EdgeSpec{
