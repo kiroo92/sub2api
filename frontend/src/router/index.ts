@@ -323,14 +323,13 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/subscriptions',
     name: 'Subscriptions',
-    component: () => import('@/views/user/SubscriptionsView.vue'),
+    redirect: { path: '/dashboard', hash: '#subscriptions' },
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
       title: 'My Subscriptions',
       titleKey: 'userSubscriptions.title',
-      descriptionKey: 'userSubscriptions.description',
-      requiresSubscription: true
+      descriptionKey: 'userSubscriptions.description'
     }
   },
   {
@@ -770,10 +769,15 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
-  scrollBehavior(_to, _from, savedPosition) {
+  scrollBehavior(to, _from, savedPosition) {
     // Scroll to saved position when using browser back/forward
     if (savedPosition) {
       return savedPosition
+    }
+    // The view handles the first scroll if settings have not mounted the section yet.
+    if (to.path === '/dashboard' && to.hash === '#subscriptions') {
+      const section = document.getElementById('subscriptions')
+      if (section) return { el: section, top: 96 }
     }
     // Scroll to top for new routes
     return { top: 0 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import SubscriptionsView from '../SubscriptionsView.vue'
+import DashboardSubscriptions from '../DashboardSubscriptions.vue'
 import type { UserSubscription } from '@/types'
 
 const { list, reorder, showError, freeze, unfreeze, invalidate, settings } = vi.hoisted(() => ({ list: vi.fn(), reorder: vi.fn(), showError: vi.fn(), freeze: vi.fn(), unfreeze: vi.fn(), invalidate: vi.fn(), settings: { subscription_freeze_enabled: false } }))
@@ -29,7 +29,7 @@ describe('subscription order', () => {
   })
 
   async function open() {
-    const wrapper = mount(SubscriptionsView, { global: { stubs: { AppLayout: { template: '<main><slot /></main>' }, Icon: true, BaseDialog: { props: ['show'], template: '<div v-if="show"><slot /><slot name="footer" /></div>' } } } })
+    const wrapper = mount(DashboardSubscriptions, { global: { stubs: { Icon: true, BaseDialog: { props: ['show'], template: '<div v-if="show"><slot /><slot name="footer" /></div>' } } } })
     await flushPromises()
     return wrapper
   }
@@ -41,7 +41,11 @@ describe('subscription order', () => {
     await wrapper.get('button[title="userSubscriptions.moveDown"]').trigger('click')
     await flushPromises()
     expect(reorder).toHaveBeenCalledWith([2, 1])
-    expect(wrapper.findAll('h3').map((node) => node.text())).toEqual(['Group #2', 'Group #1', 'Group #3'])
+    expect(wrapper.findAll('h3').map((node) => node.text())).toEqual(['Group #2', 'Group #1'])
+    expect(wrapper.findAll('[aria-label^="userSubscriptions.orderNumber"]').map(node => node.text())).toEqual(['01', '02'])
+    await wrapper.get('button[aria-controls="subscription-history"]').trigger('click')
+    expect(wrapper.get('#subscription-history').text()).toContain('Group #3')
+    expect(wrapper.get('#subscription-history').find('button').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -50,10 +54,10 @@ describe('subscription order', () => {
     reorder.mockImplementation(() => new Promise((_resolve, reject) => { fail = reject }))
     const wrapper = await open()
     await wrapper.get('button[title="userSubscriptions.moveDown"]').trigger('click')
-    expect(wrapper.findAll('button').every((node) => node.attributes('disabled') !== undefined)).toBe(true)
+    expect(wrapper.findAll('button[title], button.btn').every((node) => node.attributes('disabled') !== undefined)).toBe(true)
     fail(new Error('save failed'))
     await flushPromises()
-    expect(wrapper.findAll('h3').map((node) => node.text())).toEqual(['Group #1', 'Group #2', 'Group #3'])
+    expect(wrapper.findAll('h3').map((node) => node.text())).toEqual(['Group #1', 'Group #2'])
     expect(showError).toHaveBeenCalledWith('userSubscriptions.failedToReorder')
     wrapper.unmount()
   })
@@ -65,7 +69,7 @@ describe('subscription order', () => {
     const wrapper = await open()
     expect(wrapper.text()).toContain('userSubscriptions.orderHint')
     expect(wrapper.text()).toContain('userSubscriptions.frozenHint')
-    expect(wrapper.text()).toContain('$3.00 / $10.00')
+    expect(wrapper.text()).toContain('$7.00 / $10.00')
     expect(wrapper.findAll('button').some(button => button.text() === 'userSubscriptions.freeze')).toBe(false)
     await wrapper.findAll('button').find(button => button.text() === 'userSubscriptions.unfreeze')!.trigger('click')
     await wrapper.findAll('button').find(button => button.text() === 'common.confirm')!.trigger('click')

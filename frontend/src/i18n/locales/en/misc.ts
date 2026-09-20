@@ -113,10 +113,14 @@ export default {
 
   // User Subscriptions Page
   userSubscriptions: {
+    subscriptionId: 'Subscription #{id}',
+    acquiredAt: 'Acquired',
+    expiryBeforeFreeze: 'Expiry before freeze',
+    quotaRemaining: 'Remaining',
     quotaEndsAfterThaw: 'Quota ends {time} after unfreezing',
     adminAssignHint: 'Each new assignment creates an independent subscription. Existing terms and usage stay unchanged; use Adjust to change an existing term. Retrying the same request does not issue it twice.',
     overview: 'Subscription benefits', counts: '{active} available · {frozen} frozen',
-    orderTitle: 'Usage order', orderHint: 'All-subscriptions keys try eligible subscriptions from top to bottom, skipping frozen, expired or exhausted ones. Fixed-group keys do not follow this order.',
+    orderTitle: 'Usage order', orderHint: 'Follow the numbers from left to right, then top to bottom. All-subscriptions keys try earlier eligible subscriptions first, skipping frozen, expired or exhausted ones. Fixed-group keys do not follow this order.',
     orderAutoSave: 'Moving up or down saves automatically.', orderNumber: 'Usage order {number}', savingOrder: 'Saving order…', orderSaved: 'Order saved', orderRolledBack: 'Save failed. Previous order restored.',
     history: 'Past and other subscriptions', remainingTime: 'Time remaining', preservedTime: 'Time preserved', durationDays: '{days}d {hours}h', durationHours: '{hours}h {minutes}m',
     frozen: 'Frozen', frozenHint: 'Clock paused · Skipped during use', resetAfterThaw: 'Resets {time} after unfreezing', noQuotaLimit: 'No quota limit for this period',

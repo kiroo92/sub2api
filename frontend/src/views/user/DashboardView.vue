@@ -1,40 +1,115 @@
 <template>
   <AppLayout>
-    <div class="space-y-6">
-      <div v-if="loading" class="flex items-center justify-center py-12"><LoadingSpinner /></div>
-      <template v-else-if="stats">
-        <UserDashboardStats :stats="stats" :balance="user?.balance || 0" :is-simple="authStore.isSimpleMode" :platform-quotas="platformQuotas" />
-        <UserDashboardCharts v-model:startDate="startDate" v-model:endDate="endDate" v-model:granularity="granularity" :loading="loadingCharts" :trend="trendData" :models="modelStats" @dateRangeChange="loadCharts" @granularityChange="loadCharts" @refresh="refreshAll" />
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div class="lg:col-span-2"><UserDashboardRecentUsage :data="recentUsage" :loading="loadingUsage" /></div>
-          <div class="lg:col-span-1"><UserDashboardQuickActions /></div>
+    <div class="mx-auto max-w-screen-2xl space-y-6">
+      <header class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">{{ t('dashboard.title') }}</h1>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('dashboard.overviewHint') }}</p>
         </div>
-      </template>
+        <div class="flex items-center gap-2">
+          <router-link v-if="!authStore.isSimpleMode" to="/usage" class="btn btn-secondary btn-sm">{{ t('dashboard.viewUsage') }}</router-link>
+          <button class="btn btn-secondary btn-sm" :disabled="loading || balanceLoading || quotasLoading" @click="refreshSummary">{{ t('dashboard.refreshOverview') }}</button>
+        </div>
+      </header>
+      <UserDashboardStats
+        :stats="stats" :balance="balance" :is-simple="authStore.isSimpleMode"
+        :loading="loading" :stats-error="statsError" :balance-loading="balanceLoading" :balance-error="balanceError"
+        :can-recharge="canRecharge" :platform-quotas="platformQuotas" :quotas-loading="quotasLoading" :quotas-error="quotasError"
+        @retry-stats="loadStats" @retry-balance="loadBalance" @retry-quotas="loadPlatformQuotas"
+      >
+        <DashboardSubscriptions v-if="showSubscriptions" />
+      </UserDashboardStats>
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'; import { useAuthStore } from '@/stores/auth'; import { usageAPI, type UserDashboardStats as UserStatsType } from '@/api/usage'
-import AppLayout from '@/components/layout/AppLayout.vue'; import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
-import UserDashboardStats from '@/components/user/dashboard/UserDashboardStats.vue'; import UserDashboardCharts from '@/components/user/dashboard/UserDashboardCharts.vue'
-import UserDashboardRecentUsage from '@/components/user/dashboard/UserDashboardRecentUsage.vue'; import UserDashboardQuickActions from '@/components/user/dashboard/UserDashboardQuickActions.vue'
-import type { UsageLog, TrendDataPoint, ModelStat, PlatformQuotaItem } from '@/types'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { useAuthStore } from '@/stores/auth'
+import { useAppStore } from '@/stores/app'
+import { usePaymentStore } from '@/stores/payment'
+import { usageAPI, type UserDashboardStats as UserStatsType } from '@/api/usage'
 import { getMyPlatformQuotas } from '@/api/user'
-import { formatDateLocalInput } from '@/utils/format'
+import type { PlatformQuotaItem } from '@/types'
+import { FeatureFlags, resolveFeatureFlag } from '@/utils/featureFlags'
+import AppLayout from '@/components/layout/AppLayout.vue'
+import UserDashboardStats from '@/components/user/dashboard/UserDashboardStats.vue'
+import DashboardSubscriptions from '@/components/user/dashboard/DashboardSubscriptions.vue'
 
-const authStore = useAuthStore(); const user = computed(() => authStore.user)
-const stats = ref<UserStatsType | null>(null); const loading = ref(false); const loadingUsage = ref(false); const loadingCharts = ref(false)
-const trendData = ref<TrendDataPoint[]>([]); const modelStats = ref<ModelStat[]>([]); const recentUsage = ref<UsageLog[]>([])
+const { t } = useI18n()
+const route = useRoute()
+const authStore = useAuthStore()
+const appStore = useAppStore()
+const paymentStore = usePaymentStore()
+const stats = ref<UserStatsType | null>(null)
+const balance = ref<number | null>(null)
+const loading = ref(false)
+const balanceLoading = ref(false)
+const quotasLoading = ref(false)
+const statsError = ref(false)
+const balanceError = ref(false)
+const quotasError = ref(false)
 const platformQuotas = ref<PlatformQuotaItem[] | null>(null)
+const settingsReady = ref(false)
+const rechargeConfigured = ref(false)
+const showSubscriptions = computed(() => settingsReady.value && !authStore.isSimpleMode && resolveFeatureFlag(appStore.cachedPublicSettings, FeatureFlags.subscription))
+const showPayment = computed(() => settingsReady.value && !authStore.isSimpleMode && appStore.cachedPublicSettings?.payment_enabled === true)
+const canRecharge = computed(() => showPayment.value && rechargeConfigured.value)
 
-const startDate = ref(formatDateLocalInput(new Date(Date.now() - 6 * 86400000))); const endDate = ref(formatDateLocalInput(new Date())); const granularity = ref('day')
+async function loadStats() {
+  if (loading.value) return
+  loading.value = true
+  statsError.value = false
+  try { stats.value = await usageAPI.getDashboardStats() }
+  catch { stats.value = null; statsError.value = true }
+  finally { loading.value = false }
+}
 
-const loadStats = async () => { loading.value = true; try { await authStore.refreshUser(); stats.value = await usageAPI.getDashboardStats() } catch (error) { console.error('Failed to load dashboard stats:', error) } finally { loading.value = false } }
-const loadCharts = async () => { loadingCharts.value = true; try { const res = await Promise.all([usageAPI.getDashboardTrend({ start_date: startDate.value, end_date: endDate.value, granularity: granularity.value as any }), usageAPI.getDashboardModels({ start_date: startDate.value, end_date: endDate.value })]); trendData.value = res[0].trend || []; modelStats.value = res[1].models || [] } catch (error) { console.error('Failed to load charts:', error) } finally { loadingCharts.value = false } }
-const loadRecent = async () => { loadingUsage.value = true; try { const res = await usageAPI.getByDateRange(startDate.value, endDate.value); recentUsage.value = res.items.slice(0, 5) } catch (error) { console.error('Failed to load recent usage:', error) } finally { loadingUsage.value = false } }
-const loadPlatformQuotas = async () => { try { const data = await getMyPlatformQuotas(); platformQuotas.value = data.platform_quotas ?? [] } catch (error) { console.warn('Failed to load platform quotas:', error); platformQuotas.value = [] } }
-const refreshAll = () => { loadStats(); loadCharts(); loadRecent(); loadPlatformQuotas() }
+async function loadBalance() {
+  if (balanceLoading.value || authStore.isSimpleMode) return
+  balanceLoading.value = true
+  balanceError.value = false
+  try { balance.value = (await authStore.refreshUser()).balance }
+  catch { balance.value = null; balanceError.value = true }
+  finally { balanceLoading.value = false }
+}
 
-onMounted(() => { refreshAll() })
+async function loadPlatformQuotas() {
+  if (quotasLoading.value || authStore.isSimpleMode) return
+  quotasLoading.value = true
+  quotasError.value = false
+  try { platformQuotas.value = (await getMyPlatformQuotas()).platform_quotas ?? [] }
+  catch { platformQuotas.value = null; quotasError.value = true }
+  finally { quotasLoading.value = false }
+}
+
+async function loadRechargeConfig() {
+  rechargeConfigured.value = false
+  if (!showPayment.value) return
+  const config = await paymentStore.fetchConfig(true)
+  rechargeConfigured.value = config?.enabled === true && config.balance_disabled === false
+}
+
+function refreshSummary() {
+  void loadStats()
+  void loadBalance()
+  void loadPlatformQuotas()
+  void loadRechargeConfig()
+}
+
+watch(showPayment, () => { void loadRechargeConfig() })
+// The subscription anchor appears after settings load; also handle links on this page.
+watch([showSubscriptions, () => route.hash], async ([visible, hash]) => {
+  if (visible && hash === '#subscriptions') {
+    await nextTick()
+    document.getElementById('subscriptions')?.scrollIntoView({ block: 'start' })
+  }
+})
+onMounted(async () => {
+  refreshSummary()
+  await appStore.fetchPublicSettings()
+  settingsReady.value = true
+})
 </script>

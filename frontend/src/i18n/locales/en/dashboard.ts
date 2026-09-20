@@ -1,6 +1,16 @@
 export default {
   dashboard: {
     title: 'Dashboard',
+    overviewHint: 'View your usage and manage subscription benefits.',
+    refreshOverview: 'Refresh overview',
+    walletBalance: 'Wallet balance',
+    subscriptionCost: 'Subscription',
+    balanceCost: 'Balance',
+    actualCostHint: 'Based on actual charges',
+    unavailable: 'Unavailable',
+    statsLoadFailed: 'Could not load usage statistics. Please retry.',
+    balanceLoadFailed: 'Could not load balance',
+    quotasLoadFailed: 'Could not load platform quotas. Please retry.',
     welcomeMessage: "Welcome back! Here's an overview of your account.",
     balance: 'Balance',
     apiKeys: 'API Keys',

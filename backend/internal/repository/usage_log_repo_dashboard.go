@@ -443,7 +443,9 @@ func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID i
 			COALESCE(SUM(cache_creation_tokens), 0) as today_cache_creation_tokens,
 			COALESCE(SUM(cache_read_tokens), 0) as today_cache_read_tokens,
 			COALESCE(SUM(total_cost), 0) as today_cost,
-			COALESCE(SUM(actual_cost), 0) as today_actual_cost
+			COALESCE(SUM(actual_cost), 0) as today_actual_cost,
+			COALESCE(SUM(actual_cost) FILTER (WHERE billing_type = 1), 0) as today_subscription_cost,
+			COALESCE(SUM(actual_cost) FILTER (WHERE billing_type = 0), 0) as today_balance_cost
 		FROM usage_logs
 		WHERE user_id = $1 AND created_at >= $2
 	`
@@ -459,6 +461,8 @@ func (r *usageLogRepository) GetUserDashboardStats(ctx context.Context, userID i
 		&stats.TodayCacheReadTokens,
 		&stats.TodayCost,
 		&stats.TodayActualCost,
+		&stats.TodaySubscriptionCost,
+		&stats.TodayBalanceCost,
 	); err != nil {
 		return nil, err
 	}

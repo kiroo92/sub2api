@@ -4,7 +4,7 @@
 
 Original subscriptions on main. A user's pause is independent of the administrator status (`active`, `suspended`, revoked). Each subscription ID owns its validity, usage, position and freeze clock, including multiple subscriptions in the same group.
 
-The “My Subscriptions” page shows an ordered compact list, explicit up/down actions with save feedback, and a freeze/thaw action at each card's bottom. The administrator setting controls new freezes only. Freezing never erases charges for work admitted before the pause.
+The “My Subscriptions” section of the user dashboard shows an ordered compact grid, explicit up/down actions with save feedback, and a freeze/thaw action at each card's bottom. The administrator setting controls new freezes only. Freezing never erases charges for work admitted before the pause. Dashboard and compatibility-link contracts: [user-dashboard.md](user-dashboard.md).
 
 ## 2. API and storage
 
@@ -52,7 +52,7 @@ The “My Subscriptions” page shows an ordered compact list, explicit up/down 
 
 Run targeted Go unit tests for Freeze/Subscription/Team/Payment refunds/settings/APIContracts, plus backend build. `SUBSCRIPTION_FREEZE_TEST_DATABASE_URL` must name a disposable PostgreSQL database; `go test ./internal/repository -run TestSubscriptionFreezePostgres -count=1` creates/drops its own schema and checks migration replay, independent/replayed grants, partial batches, frozen expiry, quota preservation, concurrent thaw, ordering and admin restrictions. Use `-tags=unit` for the broader handler/service suites.
 
-Frontend: typecheck, lint:check, SubscriptionsView/settings/admin batch/API/operation-key/quota utility/locale tests, then build. Check frozen clocks while advancing mock time and the global-off thaw action. A passing component test is not a browser screenshot review.
+Frontend: typecheck, lint:check, DashboardSubscriptions/DashboardView/settings/admin batch/API/operation-key/quota utility/locale tests, then build. Check frozen clocks while advancing mock time and the global-off thaw action. A passing component test is not a browser screenshot review.
 
 ## 7. Wrong versus correct
 

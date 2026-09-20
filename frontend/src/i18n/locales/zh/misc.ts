@@ -111,10 +111,14 @@ export default {
 
   // User Subscriptions Page
   userSubscriptions: {
+    subscriptionId: '订阅 #{id}',
+    acquiredAt: '获取时间',
+    expiryBeforeFreeze: '冻结前到期时间',
+    quotaRemaining: '剩余额度',
     quotaEndsAfterThaw: '解冻后 {time} 额度到期',
     adminAssignHint: '每次新的分配都会新增一份独立订阅，已有订阅不延期、不重置；调整已有时长请使用“调整”。同一次失败请求重试不会重复发放。',
     overview: '订阅权益', counts: '可用 {active} 份 · 冻结 {frozen} 份',
-    orderTitle: '使用顺序', orderHint: '全部订阅 Key 会从上到下优先尝试可用订阅；冻结、到期或额度不足的会跳过。固定分组 Key 不受此顺序影响。',
+    orderTitle: '使用顺序', orderHint: '按编号从左到右、从上到下使用。全部订阅 Key 优先尝试排在前面的可用订阅，跳过冻结、到期或额度不足的订阅；固定分组 Key 不受此顺序影响。',
     orderAutoSave: '点击上移或下移后自动保存。', orderNumber: '使用顺序 {number}', savingOrder: '正在保存顺序…', orderSaved: '顺序已保存', orderRolledBack: '保存失败，已恢复原顺序',
     history: '历史及其他订阅', remainingTime: '剩余有效期', preservedTime: '保留有效期', durationDays: '{days} 天 {hours} 小时', durationHours: '{hours} 小时 {minutes} 分钟',
     frozen: '已冻结', frozenHint: '计时已暂停 · 使用时自动跳过', resetAfterThaw: '解冻后 {time} 刷新', noQuotaLimit: '此周期不限额',

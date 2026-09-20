@@ -72,7 +72,7 @@ function quota(over: Partial<PlatformQuotaItem> & { platform: string }): Platfor
 function mountStats(stats: UserStatsType, platformQuotas: PlatformQuotaItem[] | null = null, isSimple = false) {
   return mount(UserDashboardStats, {
     props: { stats, balance: 0, isSimple, platformQuotas },
-    global: { stubs: { Icon: true } },
+    global: { stubs: { RouterLink: true } },
   })
 }
 
@@ -82,6 +82,22 @@ function cardPlatforms(w: VueWrapper): string[] {
 }
 
 describe('UserDashboardStats 按平台拆分', () => {
+  it('keeps real zero usage distinct from unavailable data', async () => {
+    const w = mountStats(makeStats({ today_subscription_cost: 0, today_balance_cost: 0 }))
+    expect(w.get('[data-testid="today-tokens"] .summary-value').text()).toBe('0')
+    expect(w.get('[data-testid="today-requests"] .summary-value').text()).toBe('0')
+    expect(w.get('[data-testid="today-cost"]').text()).toContain('dashboard.subscriptionCost $0.0000')
+    await w.setProps({ stats: null, statsError: true })
+    expect(w.get('[data-testid="today-tokens"] .summary-value').text()).toBe('—')
+    expect(w.get('[data-testid="today-cost"]').text()).not.toContain('dashboard.subscriptionCost')
+  })
+
+  it('omits the cost split if either field was not computed', () => {
+    const w = mountStats(makeStats({ today_actual_cost: 3, today_subscription_cost: 2 }))
+    expect(w.get('[data-testid="today-cost"]').text()).toContain('$3.0000')
+    expect(w.get('[data-testid="today-cost"]').text()).not.toContain('dashboard.subscriptionCost')
+  })
+
   it('只有用量的平台才产生卡片；三档全空的限额记录不产生卡片', () => {
     const w = mountStats(
       makeStats({ total_actual_cost: 0.03, today_actual_cost: 0.03, by_platform: [usage('grok', 0.03)] }),

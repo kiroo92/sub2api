@@ -64,9 +64,10 @@ describe('AppSidebar header styles', () => {
 })
 
 describe('AppSidebar subscription feature flag', () => {
-  it('gates the My Subscriptions entry behind the subscription public-settings flag', () => {
-    expect(componentSource).toContain('const flagSubscription = makeSidebarFlag(FeatureFlags.subscription)')
-    expect(componentSource).toMatch(/path: '\/subscriptions'[^\n]*featureFlag: flagSubscription/)
+  it('uses one personal dashboard for both users and admins without a duplicate subscription entry', () => {
+    expect(componentSource).not.toContain("path: '/subscriptions'")
+    expect(componentSource).toContain("path: '/dashboard'")
+    expect(componentSource).toContain('const personalNavItems = computed((): NavItem[] => finalizeNav(buildSelfNavItems()))')
   })
 
   it('also hides the admin Subscription Management entry on recharge-only sites', () => {

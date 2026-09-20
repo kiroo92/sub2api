@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { RouteRecordRaw, RouterOptions } from 'vue-router'
 
 type NavigationGuard = (
   to: Record<string, any>,
@@ -8,6 +9,8 @@ type NavigationGuard = (
 
 const routerHarness = vi.hoisted(() => ({
   guard: null as NavigationGuard | null,
+  routes: [] as RouteRecordRaw[],
+  scrollBehavior: undefined as RouterOptions['scrollBehavior'],
 }))
 
 const authStore = vi.hoisted(() => ({
@@ -33,13 +36,17 @@ const appStore = vi.hoisted(() => ({
 
 vi.mock('vue-router', () => ({
   createWebHistory: vi.fn(() => ({})),
-  createRouter: vi.fn(() => ({
-    beforeEach: vi.fn((guard: NavigationGuard) => {
-      routerHarness.guard = guard
-    }),
-    afterEach: vi.fn(),
-    onError: vi.fn(),
-  })),
+  createRouter: vi.fn((options: RouterOptions) => {
+    routerHarness.routes = [...options.routes]
+    routerHarness.scrollBehavior = options.scrollBehavior
+    return {
+      beforeEach: vi.fn((guard: NavigationGuard) => {
+        routerHarness.guard = guard
+      }),
+      afterEach: vi.fn(),
+      onError: vi.fn(),
+    }
+  }),
 }))
 
 vi.mock('@/stores/auth', () => ({
@@ -118,6 +125,40 @@ describe('feature route guard', () => {
     appStore.publicSettingsLoaded = false
     appStore.cachedPublicSettings = null
     appStore.fetchPublicSettings.mockReset()
+  })
+
+  it('redirects legacy subscription URLs and names to the dashboard anchor', async () => {
+    const { createRouter, createMemoryHistory } = await vi.importActual<typeof import('vue-router')>('vue-router')
+    const legacy = routerHarness.routes.find(route => route.path === '/subscriptions')!
+    const router = createRouter({ history: createMemoryHistory(), routes: [
+      legacy, { path: '/dashboard', name: 'Dashboard', component: { render: () => null } },
+    ] })
+    await router.push('/subscriptions')
+    expect(router.currentRoute.value.fullPath).toBe('/dashboard#subscriptions')
+    await router.push('/dashboard')
+    await router.push({ name: 'Subscriptions' })
+    expect(router.currentRoute.value.fullPath).toBe('/dashboard#subscriptions')
+    const section = document.createElement('section')
+    section.id = 'subscriptions'
+    document.body.appendChild(section)
+    try {
+      expect(await routerHarness.scrollBehavior?.(router.currentRoute.value, router.currentRoute.value, null)).toEqual({ el: section, top: 96 })
+    } finally {
+      section.remove()
+    }
+    expect(legacy.component).toBeUndefined()
+    expect(routerHarness.routes.some(route => route.path === '/admin/subscriptions' && route.component)).toBe(true)
+  })
+
+  it.each([false, true])('keeps the merged dashboard accessible with subscriptions disabled (admin=%s)', async (admin) => {
+    authStore.isAdmin = admin
+    authStore.isSimpleMode = true
+    appStore.publicSettingsLoaded = true
+    appStore.cachedPublicSettings = { subscription_enabled: false }
+    const dashboard = routerHarness.routes.find(route => route.path === '/dashboard')!
+    const { navigation, next } = runGuard({ ...dashboard.meta, titleKey: undefined }, '/dashboard')
+    await navigation
+    expect(next).toHaveBeenCalledWith()
   })
 
   it('waits for the first public-settings request before deciding payment access', async () => {
