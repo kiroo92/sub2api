@@ -179,6 +179,7 @@ const isPending = computed(() => {
 
 const statusTitle = computed(() => {
   if (isSuccess.value) {
+    if (order.value && 'order_type' in order.value && order.value.order_type === 'invoice_fee') return t('invoices.paid')
     return t('payment.result.success')
   }
   if (isPending.value) {

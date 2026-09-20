@@ -21,7 +21,7 @@ export type OrderStatus =
 
 export type PaymentType = 'alipay' | 'wxpay' | 'alipay_direct' | 'wxpay_direct' | 'stripe' | 'easypay' | 'airwallex'
 
-export type OrderType = 'balance' | 'subscription'
+export type OrderType = 'balance' | 'subscription' | 'invoice_fee'
 
 // ==================== Configuration ====================
 
@@ -83,6 +83,8 @@ export interface CheckoutInfoResponse {
 // ==================== Orders ====================
 
 export interface PaymentOrder {
+  invoice?: import('./invoice').InvoiceSummary
+  invoice_request_id?: number
   discount?: PaymentDiscount
   discount_state?: string
   id: number
@@ -169,6 +171,7 @@ export interface ProviderInstance {
 // ==================== Request / Response ====================
 
 export interface CreateOrderRequest {
+  invoice_request_id?: number
   coupon_code?: string
   expected_pay_amount?: number
   amount: number
@@ -203,6 +206,8 @@ export interface WechatJSAPIPayload {
 }
 
 export interface CreateOrderResult {
+  invoice_request_id?: number
+  status?: OrderStatus
   discount?: PaymentDiscount
   order_id: number
   amount: number

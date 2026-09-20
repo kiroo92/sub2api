@@ -41,6 +41,7 @@ const (
 const (
 	OrderTypeBalance      = "balance"
 	OrderTypeSubscription = "subscription"
+	OrderTypeInvoiceFee   = "invoice_fee"
 )
 
 // Entity statuses shared across users, groups, etc.

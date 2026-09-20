@@ -228,6 +228,7 @@ func (h *PaymentHandler) GetLimits(c *gin.Context) {
 
 // CreateOrderRequest is the request body for creating a payment order.
 type CreateOrderRequest struct {
+	InvoiceRequestID  int64    `json:"invoice_request_id"`
 	CouponCode        string   `json:"coupon_code" binding:"max=64"`
 	ExpectedPayAmount *float64 `json:"expected_pay_amount"`
 	Amount            float64  `json:"amount"`
@@ -275,6 +276,7 @@ func (h *PaymentHandler) CreateOrder(c *gin.Context) {
 	}
 	result, err := h.paymentService.CreateOrder(c.Request.Context(), service.CreateOrderRequest{
 		UserID:            subject.UserID,
+		InvoiceRequestID:  req.InvoiceRequestID,
 		Amount:            req.Amount,
 		PaymentType:       req.PaymentType,
 		OpenID:            req.OpenID,
@@ -330,6 +332,12 @@ func applyWeChatPaymentResumeClaims(req *CreateOrderRequest, claims *service.WeC
 	if claims.OrderType != "" {
 		req.OrderType = claims.OrderType
 	}
+	if claims.OrderType == payment.OrderTypeInvoiceFee {
+		if claims.InvoiceRequestID <= 0 || req.InvoiceRequestID != 0 && req.InvoiceRequestID != claims.InvoiceRequestID {
+			return infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_RESUME_TOKEN", "invoice resume context mismatch")
+		}
+		req.InvoiceRequestID = claims.InvoiceRequestID
+	}
 	if claims.PlanID > 0 {
 		req.PlanID = claims.PlanID
 	}
@@ -367,7 +375,18 @@ func (h *PaymentHandler) GetMyOrders(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Paginated(c, sanitizePaymentOrdersForResponse(orders), int64(total), page, pageSize)
+	summaries, err := h.paymentService.OrderInvoiceSummaries(c.Request.Context(), orders)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	results := sanitizePaymentOrdersForResponse(orders)
+	for i := range results {
+		if summary, ok := summaries[results[i].ID]; ok {
+			results[i].Invoice = &summary
+		}
+	}
+	response.Paginated(c, results, int64(total), page, pageSize)
 }
 
 // GetOrder returns a single order for the authenticated user.
@@ -389,7 +408,16 @@ func (h *PaymentHandler) GetOrder(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Success(c, sanitizePaymentOrderForResponse(order))
+	summaries, err := h.paymentService.OrderInvoiceSummaries(c.Request.Context(), []*dbent.PaymentOrder{order})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	result := sanitizePaymentOrderForResponse(order)
+	if summary, ok := summaries[order.ID]; ok {
+		result.Invoice = &summary
+	}
+	response.Success(c, result)
 }
 
 // CancelOrder cancels a pending order for the authenticated user.
@@ -637,29 +665,31 @@ func isMobile(c *gin.Context) bool {
 }
 
 type PaymentOrderResult struct {
-	Discount            *service.PaymentDiscount `json:"discount,omitempty"`
-	DiscountState       string                   `json:"discount_state,omitempty"`
-	ID                  int64                    `json:"id"`
-	UserID              int64                    `json:"user_id"`
-	Amount              float64                  `json:"amount"`
-	PayAmount           float64                  `json:"pay_amount"`
-	FeeRate             float64                  `json:"fee_rate"`
-	Currency            string                   `json:"currency"`
-	PaymentType         string                   `json:"payment_type"`
-	OutTradeNo          string                   `json:"out_trade_no"`
-	Status              string                   `json:"status"`
-	OrderType           string                   `json:"order_type"`
-	CreatedAt           time.Time                `json:"created_at"`
-	ExpiresAt           time.Time                `json:"expires_at"`
-	PaidAt              *time.Time               `json:"paid_at,omitempty"`
-	CompletedAt         *time.Time               `json:"completed_at,omitempty"`
-	RefundAmount        float64                  `json:"refund_amount"`
-	RefundReason        *string                  `json:"refund_reason,omitempty"`
-	RefundRequestedAt   *time.Time               `json:"refund_requested_at,omitempty"`
-	RefundRequestedBy   *string                  `json:"refund_requested_by,omitempty"`
-	RefundRequestReason *string                  `json:"refund_request_reason,omitempty"`
-	PlanID              *int64                   `json:"plan_id,omitempty"`
-	ProviderInstanceID  *string                  `json:"provider_instance_id,omitempty"`
+	Invoice             *service.OrderInvoiceSummary `json:"invoice,omitempty"`
+	InvoiceRequestID    *int64                       `json:"invoice_request_id,omitempty"`
+	Discount            *service.PaymentDiscount     `json:"discount,omitempty"`
+	DiscountState       string                       `json:"discount_state,omitempty"`
+	ID                  int64                        `json:"id"`
+	UserID              int64                        `json:"user_id"`
+	Amount              float64                      `json:"amount"`
+	PayAmount           float64                      `json:"pay_amount"`
+	FeeRate             float64                      `json:"fee_rate"`
+	Currency            string                       `json:"currency"`
+	PaymentType         string                       `json:"payment_type"`
+	OutTradeNo          string                       `json:"out_trade_no"`
+	Status              string                       `json:"status"`
+	OrderType           string                       `json:"order_type"`
+	CreatedAt           time.Time                    `json:"created_at"`
+	ExpiresAt           time.Time                    `json:"expires_at"`
+	PaidAt              *time.Time                   `json:"paid_at,omitempty"`
+	CompletedAt         *time.Time                   `json:"completed_at,omitempty"`
+	RefundAmount        float64                      `json:"refund_amount"`
+	RefundReason        *string                      `json:"refund_reason,omitempty"`
+	RefundRequestedAt   *time.Time                   `json:"refund_requested_at,omitempty"`
+	RefundRequestedBy   *string                      `json:"refund_requested_by,omitempty"`
+	RefundRequestReason *string                      `json:"refund_request_reason,omitempty"`
+	PlanID              *int64                       `json:"plan_id,omitempty"`
+	ProviderInstanceID  *string                      `json:"provider_instance_id,omitempty"`
 }
 
 func sanitizePaymentOrdersForResponse(orders []*dbent.PaymentOrder) []PaymentOrderResult {
@@ -677,6 +707,7 @@ func sanitizePaymentOrderForResponse(order *dbent.PaymentOrder) *PaymentOrderRes
 		return nil
 	}
 	return &PaymentOrderResult{
+		InvoiceRequestID:    order.InvoiceRequestID,
 		Discount:            service.PaymentOrderDiscount(order),
 		DiscountState:       order.DiscountState,
 		ID:                  order.ID,

@@ -33,6 +33,12 @@ function createOrderResult(overrides: Partial<CreateOrderResult> = {}): CreateOr
 }
 
 describe('getVisibleMethods', () => {
+  it('preserves invoice identity through payment launch and browser recovery', () => {
+    const payload = buildCreateOrderPayload({ amount: 38, paymentType: 'wxpay', orderType: 'invoice_fee', invoiceRequestId: 77, isMobile: false, isWechatBrowser: false })
+    expect(payload).toMatchObject({ order_type: 'invoice_fee', invoice_request_id: 77, amount: 38 })
+    const launch = decidePaymentLaunch(createOrderResult({ invoice_request_id: 77, amount: 38, pay_amount: 38, qr_code: 'qr' }), { visibleMethod: 'wxpay', orderType: 'invoice_fee', isMobile: false })
+    expect(readPaymentRecoverySnapshot(JSON.stringify(launch.recovery))).toMatchObject({ orderType: 'invoice_fee', invoiceRequestId: 77, payAmount: 38 })
+  })
   it('only carries discounts on subscription checkout', () => {
     const input = { amount: 100, paymentType: 'wxpay', planId: 7, isMobile: false, isWechatBrowser: false, couponCode: ' vip80 ', expectedPayAmount: 80 }
     expect(buildCreateOrderPayload({ ...input, orderType: 'subscription' })).toMatchObject({ coupon_code: 'VIP80', expected_pay_amount: 80 })

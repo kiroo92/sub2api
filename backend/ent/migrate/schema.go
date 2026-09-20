@@ -1099,6 +1099,84 @@ var (
 			},
 		},
 	}
+	// InvoiceRequestsColumns holds the columns for the "invoice_requests" table.
+	InvoiceRequestsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "status", Type: field.TypeString, Size: 24, Default: "awaiting_payment"},
+		{Name: "tax_id", Type: field.TypeString, Size: 64},
+		{Name: "title", Type: field.TypeString, Size: 200},
+		{Name: "email", Type: field.TypeString, Size: 254},
+		{Name: "remarks", Type: field.TypeString, Size: 1000, Default: ""},
+		{Name: "currency", Type: field.TypeString, Size: 3, Default: "CNY"},
+		{Name: "base_amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,2)"}},
+		{Name: "service_fee", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,2)"}},
+		{Name: "total_amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,2)"}},
+		{Name: "net_amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,2)"}},
+		{Name: "tax_amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,2)"}},
+		{Name: "item_name", Type: field.TypeString, Size: 200},
+		{Name: "tax_rate", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "fee_type", Type: field.TypeString, Size: 20},
+		{Name: "fee_value", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,2)"}},
+		{Name: "fee_upper_amount", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,2)"}},
+		{Name: "operation_key", Type: field.TypeString, Unique: true, Size: 64},
+		{Name: "fingerprint", Type: field.TypeString, Size: 64},
+		{Name: "expires_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "submitted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "issued_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "issued_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// InvoiceRequestsTable holds the schema information for the "invoice_requests" table.
+	InvoiceRequestsTable = &schema.Table{
+		Name:       "invoice_requests",
+		Columns:    InvoiceRequestsColumns,
+		PrimaryKey: []*schema.Column{InvoiceRequestsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "invoicerequest_user_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{InvoiceRequestsColumns[1], InvoiceRequestsColumns[24]},
+			},
+			{
+				Name:    "invoicerequest_status_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{InvoiceRequestsColumns[2], InvoiceRequestsColumns[20]},
+			},
+		},
+	}
+	// InvoiceRequestOrdersColumns holds the columns for the "invoice_request_orders" table.
+	InvoiceRequestOrdersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "invoice_request_id", Type: field.TypeInt64},
+		{Name: "order_id", Type: field.TypeInt64},
+		{Name: "order_no", Type: field.TypeString, Size: 64},
+		{Name: "order_type", Type: field.TypeString, Size: 20},
+		{Name: "name", Type: field.TypeString, Size: 200},
+		{Name: "amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,2)"}},
+		{Name: "released_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// InvoiceRequestOrdersTable holds the schema information for the "invoice_request_orders" table.
+	InvoiceRequestOrdersTable = &schema.Table{
+		Name:       "invoice_request_orders",
+		Columns:    InvoiceRequestOrdersColumns,
+		PrimaryKey: []*schema.Column{InvoiceRequestOrdersColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "invoicerequestorder_invoice_request_id",
+				Unique:  false,
+				Columns: []*schema.Column{InvoiceRequestOrdersColumns[1]},
+			},
+			{
+				Name:    "invoicerequestorder_order_id",
+				Unique:  true,
+				Columns: []*schema.Column{InvoiceRequestOrdersColumns[2]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "released_at IS NULL",
+				},
+			},
+		},
+	}
 	// PaymentAuditLogsColumns holds the columns for the "payment_audit_logs" table.
 	PaymentAuditLogsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -1140,6 +1218,7 @@ var (
 		{Name: "pay_url", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "qr_code", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "qr_code_img", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "invoice_request_id", Type: field.TypeInt64, Unique: true, Nullable: true},
 		{Name: "order_type", Type: field.TypeString, Size: 20, Default: "balance"},
 		{Name: "plan_id", Type: field.TypeInt64, Nullable: true},
 		{Name: "subscription_group_id", Type: field.TypeInt64, Nullable: true},
@@ -1175,7 +1254,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "payment_orders_users_payment_orders",
-				Columns:    []*schema.Column{PaymentOrdersColumns[42]},
+				Columns:    []*schema.Column{PaymentOrdersColumns[43]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -1192,42 +1271,42 @@ var (
 			{
 				Name:    "paymentorder_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[42]},
+				Columns: []*schema.Column{PaymentOrdersColumns[43]},
 			},
 			{
 				Name:    "paymentorder_status",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[24]},
+				Columns: []*schema.Column{PaymentOrdersColumns[25]},
 			},
 			{
 				Name:    "paymentorder_expires_at",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[32]},
+				Columns: []*schema.Column{PaymentOrdersColumns[33]},
 			},
 			{
 				Name:    "paymentorder_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[40]},
+				Columns: []*schema.Column{PaymentOrdersColumns[41]},
 			},
 			{
 				Name:    "paymentorder_paid_at",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[33]},
+				Columns: []*schema.Column{PaymentOrdersColumns[34]},
 			},
 			{
 				Name:    "paymentorder_payment_type_paid_at",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[12], PaymentOrdersColumns[33]},
+				Columns: []*schema.Column{PaymentOrdersColumns[12], PaymentOrdersColumns[34]},
 			},
 			{
 				Name:    "paymentorder_order_type",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[17]},
+				Columns: []*schema.Column{PaymentOrdersColumns[18]},
 			},
 			{
 				Name:    "paymentorder_discount_code_id_discount_state_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{PaymentOrdersColumns[7], PaymentOrdersColumns[8], PaymentOrdersColumns[42]},
+				Columns: []*schema.Column{PaymentOrdersColumns[7], PaymentOrdersColumns[8], PaymentOrdersColumns[43]},
 			},
 		},
 	}
@@ -2147,6 +2226,8 @@ var (
 		GroupsTable,
 		IdempotencyRecordsTable,
 		IdentityAdoptionDecisionsTable,
+		InvoiceRequestsTable,
+		InvoiceRequestOrdersTable,
 		PaymentAuditLogsTable,
 		PaymentOrdersTable,
 		PaymentProviderInstancesTable,
@@ -2244,6 +2325,12 @@ func init() {
 	IdentityAdoptionDecisionsTable.ForeignKeys[1].RefTable = PendingAuthSessionsTable
 	IdentityAdoptionDecisionsTable.Annotation = &entsql.Annotation{
 		Table: "identity_adoption_decisions",
+	}
+	InvoiceRequestsTable.Annotation = &entsql.Annotation{
+		Table: "invoice_requests",
+	}
+	InvoiceRequestOrdersTable.Annotation = &entsql.Annotation{
+		Table: "invoice_request_orders",
 	}
 	PaymentAuditLogsTable.Annotation = &entsql.Annotation{
 		Table: "payment_audit_logs",

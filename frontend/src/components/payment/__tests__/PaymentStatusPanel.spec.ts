@@ -73,6 +73,16 @@ describe('PaymentStatusPanel', () => {
     vi.useRealTimers()
   })
 
+  it('labels invoice fees as CNY service payments rather than wallet credit', async () => {
+    pollOrderStatus.mockResolvedValue({ ...orderFactory('COMPLETED'), order_type: 'invoice_fee', amount: 38, pay_amount: 38, currency: 'CNY' })
+    const wrapper = mount(PaymentStatusPanel, { props: { orderId: 42, qrCode: 'qr', expiresAt: '2099-01-01T12:30:00Z', paymentType: 'alipay', orderType: 'invoice_fee', currency: 'CNY' }, global: { stubs: { Icon: true } } })
+    await flushPromises(); await vi.advanceTimersByTimeAsync(3000); await flushPromises()
+    expect(wrapper.text()).toContain('invoices.paid')
+    expect(wrapper.text()).toContain('invoices.serviceFee')
+    expect(wrapper.text()).not.toContain('$38.00')
+    wrapper.unmount()
+  })
+
   it('treats RECHARGING as a successful terminal state', async () => {
     pollOrderStatus.mockResolvedValue(orderFactory('RECHARGING'))
 

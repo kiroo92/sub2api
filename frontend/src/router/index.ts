@@ -358,6 +358,10 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/orders/invoice', name: 'InvoiceApply', component: () => import('@/views/user/InvoiceApplyView.vue'),
+    meta: { requiresAuth: true, requiresPayment: true, title: 'Invoice application', titleKey: 'invoices.title' }
+  },
+  {
     path: '/payment/qrcode',
     name: 'PaymentQRCode',
     component: () => import('@/views/user/PaymentQRCodeView.vue'),
@@ -752,6 +756,10 @@ const routes: RouteRecordRaw[] = [
     name: 'AdminDiscountCodes',
     component: () => import('@/views/admin/orders/AdminDiscountCodesView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, requiresPayment: true, title: 'Subscription Discounts', titleKey: 'payment.coupon.management' }
+  },
+  {
+    path: '/admin/orders/invoices', name: 'AdminInvoices', component: () => import('@/views/admin/orders/AdminInvoicesView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, requiresPayment: true, title: 'Invoices', titleKey: 'invoices.management' }
   },
   {
     path: '/:pathMatch(.*)*',

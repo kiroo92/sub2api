@@ -1,5 +1,8 @@
 <template>
   <DataTable :columns="columns" :data="orders" :loading="loading">
+    <template #cell-invoice_selection="{ row }"><input type="checkbox" class="h-4 w-4 rounded border-gray-300" :checked="selectedInvoiceIds?.includes(row.id)" :disabled="!canInvoiceOrder(row)" :aria-label="t('invoices.select') + ' #' + row.id" @change="$emit('toggleInvoice', row.id)" /></template>
+    <template #cell-order_type="{ row }"><span class="text-sm">{{ t(`invoices.orderTypes.${row.order_type}`) }}</span><p v-if="row.order_type === 'invoice_fee' && row.invoice" class="mt-1 text-xs text-gray-500">{{ t('invoices.feeInvoiceTotal', { amount: row.invoice.total_amount.toFixed(2) }) }}</p></template>
+    <template #cell-invoice="{ row }"><slot name="invoice" :row="row"><span v-if="row.invoice" class="badge badge-info">{{ t(`invoices.status.${row.invoice.status}`) }}</span><span v-else class="text-xs text-gray-400">—</span></slot></template>
     <template #cell-id="{ value }">
       <span class="font-mono text-sm">#{{ value }}</span>
     </template>
@@ -19,7 +22,7 @@
         <span v-if="row.fee_rate > 0" class="ml-1 text-xs text-gray-400" :title="t('payment.orders.fee') + ': ' + row.fee_rate + '%'">
           ({{ t('payment.orders.fee') }} {{ row.fee_rate }}%)
         </span>
-        <div v-if="row.amount !== row.pay_amount" class="text-xs text-gray-500">
+        <div v-if="row.order_type === 'balance' && row.amount !== row.pay_amount" class="text-xs text-gray-500">
           {{ t('payment.orders.creditedAmount') }}: {{ creditedAmountSymbol }}{{ row.amount.toFixed(2) }}
         </div>
       </div>
@@ -47,6 +50,7 @@ import type { Column } from '@/components/common/types'
 import DataTable from '@/components/common/DataTable.vue'
 import OrderStatusBadge from '@/components/payment/OrderStatusBadge.vue'
 import { currencySymbol } from '@/components/payment/currency'
+import { canInvoiceOrder } from './invoiceEligibility'
 
 const { t } = useI18n()
 
@@ -54,7 +58,11 @@ const props = defineProps<{
   orders: PaymentOrder[]
   loading: boolean
   showUser?: boolean
+  showInvoices?: boolean
+  selectInvoices?: boolean
+  selectedInvoiceIds?: number[]
 }>()
+defineEmits<{ toggleInvoice: [id: number] }>()
 
 function formatDate(dateStr: string) { return new Date(dateStr).toLocaleString() }
 
@@ -72,6 +80,9 @@ const columns = computed((): Column[] => {
   if (props.showUser) {
     cols.push({ key: 'user_email', label: t('payment.admin.colUser') })
   }
+  if (props.selectInvoices) cols.unshift({ key: 'invoice_selection', label: t('invoices.select') })
+  cols.push({ key: 'order_type', label: t('payment.orders.orderType') })
+  if (props.showInvoices) cols.push({ key: 'invoice', label: t('invoices.invoice') })
   cols.push(
     { key: 'pay_amount', label: t('payment.orders.payAmount') },
     { key: 'payment_type', label: t('payment.orders.paymentMethod') },

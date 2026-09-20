@@ -323,6 +323,33 @@ func (_u *PaymentOrderUpdate) ClearQrCodeImg() *PaymentOrderUpdate {
 	return _u
 }
 
+// SetInvoiceRequestID sets the "invoice_request_id" field.
+func (_u *PaymentOrderUpdate) SetInvoiceRequestID(v int64) *PaymentOrderUpdate {
+	_u.mutation.ResetInvoiceRequestID()
+	_u.mutation.SetInvoiceRequestID(v)
+	return _u
+}
+
+// SetNillableInvoiceRequestID sets the "invoice_request_id" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillableInvoiceRequestID(v *int64) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetInvoiceRequestID(*v)
+	}
+	return _u
+}
+
+// AddInvoiceRequestID adds value to the "invoice_request_id" field.
+func (_u *PaymentOrderUpdate) AddInvoiceRequestID(v int64) *PaymentOrderUpdate {
+	_u.mutation.AddInvoiceRequestID(v)
+	return _u
+}
+
+// ClearInvoiceRequestID clears the value of the "invoice_request_id" field.
+func (_u *PaymentOrderUpdate) ClearInvoiceRequestID() *PaymentOrderUpdate {
+	_u.mutation.ClearInvoiceRequestID()
+	return _u
+}
+
 // SetOrderType sets the "order_type" field.
 func (_u *PaymentOrderUpdate) SetOrderType(v string) *PaymentOrderUpdate {
 	_u.mutation.SetOrderType(v)
@@ -987,6 +1014,15 @@ func (_u *PaymentOrderUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if _u.mutation.QrCodeImgCleared() {
 		_spec.ClearField(paymentorder.FieldQrCodeImg, field.TypeString)
 	}
+	if value, ok := _u.mutation.InvoiceRequestID(); ok {
+		_spec.SetField(paymentorder.FieldInvoiceRequestID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedInvoiceRequestID(); ok {
+		_spec.AddField(paymentorder.FieldInvoiceRequestID, field.TypeInt64, value)
+	}
+	if _u.mutation.InvoiceRequestIDCleared() {
+		_spec.ClearField(paymentorder.FieldInvoiceRequestID, field.TypeInt64)
+	}
 	if value, ok := _u.mutation.OrderType(); ok {
 		_spec.SetField(paymentorder.FieldOrderType, field.TypeString, value)
 	}
@@ -1459,6 +1495,33 @@ func (_u *PaymentOrderUpdateOne) SetNillableQrCodeImg(v *string) *PaymentOrderUp
 // ClearQrCodeImg clears the value of the "qr_code_img" field.
 func (_u *PaymentOrderUpdateOne) ClearQrCodeImg() *PaymentOrderUpdateOne {
 	_u.mutation.ClearQrCodeImg()
+	return _u
+}
+
+// SetInvoiceRequestID sets the "invoice_request_id" field.
+func (_u *PaymentOrderUpdateOne) SetInvoiceRequestID(v int64) *PaymentOrderUpdateOne {
+	_u.mutation.ResetInvoiceRequestID()
+	_u.mutation.SetInvoiceRequestID(v)
+	return _u
+}
+
+// SetNillableInvoiceRequestID sets the "invoice_request_id" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillableInvoiceRequestID(v *int64) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetInvoiceRequestID(*v)
+	}
+	return _u
+}
+
+// AddInvoiceRequestID adds value to the "invoice_request_id" field.
+func (_u *PaymentOrderUpdateOne) AddInvoiceRequestID(v int64) *PaymentOrderUpdateOne {
+	_u.mutation.AddInvoiceRequestID(v)
+	return _u
+}
+
+// ClearInvoiceRequestID clears the value of the "invoice_request_id" field.
+func (_u *PaymentOrderUpdateOne) ClearInvoiceRequestID() *PaymentOrderUpdateOne {
+	_u.mutation.ClearInvoiceRequestID()
 	return _u
 }
 
@@ -2155,6 +2218,15 @@ func (_u *PaymentOrderUpdateOne) sqlSave(ctx context.Context) (_node *PaymentOrd
 	}
 	if _u.mutation.QrCodeImgCleared() {
 		_spec.ClearField(paymentorder.FieldQrCodeImg, field.TypeString)
+	}
+	if value, ok := _u.mutation.InvoiceRequestID(); ok {
+		_spec.SetField(paymentorder.FieldInvoiceRequestID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedInvoiceRequestID(); ok {
+		_spec.AddField(paymentorder.FieldInvoiceRequestID, field.TypeInt64, value)
+	}
+	if _u.mutation.InvoiceRequestIDCleared() {
+		_spec.ClearField(paymentorder.FieldInvoiceRequestID, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.OrderType(); ok {
 		_spec.SetField(paymentorder.FieldOrderType, field.TypeString, value)

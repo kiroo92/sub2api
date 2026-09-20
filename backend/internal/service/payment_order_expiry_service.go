@@ -119,4 +119,9 @@ func (s *PaymentOrderExpiryService) runOnce() {
 	if err := s.paymentSvc.ReconcileDiscountOrders(expireCtx); err != nil {
 		slog.Warn("[PaymentOrderExpiry] discount reconciliation failed", "error", err)
 	}
+	invoiceCtx, cancelInvoice := context.WithTimeout(context.Background(), expiryCheckTimeout)
+	defer cancelInvoice()
+	if err := s.paymentSvc.ReconcileInvoicePayments(invoiceCtx); err != nil {
+		slog.Warn("[PaymentOrderExpiry] invoice reconciliation failed", "error", err)
+	}
 }

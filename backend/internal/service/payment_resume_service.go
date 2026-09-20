@@ -55,6 +55,7 @@ type ResumeTokenClaims struct {
 }
 
 type WeChatPaymentResumeClaims struct {
+	InvoiceRequestID  int64  `json:"iid,omitempty"`
 	CouponCode        string `json:"coupon,omitempty"`
 	ExpectedPayAmount string `json:"expected_pay,omitempty"`
 	TokenType         string `json:"tk,omitempty"`

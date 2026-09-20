@@ -248,6 +248,16 @@ describe('PaymentResultView', () => {
     expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toBeNull()
   })
 
+  it('shows invoice submission instead of recharge and does not refresh wallet balance', async () => {
+    routeState.query = { resume_token: 'invoice-result' }
+    resolveOrderPublicByResumeToken.mockResolvedValue({ data: { ...orderFactory('COMPLETED'), order_type: 'invoice_fee', amount: 38, pay_amount: 38, currency: 'CNY' } })
+    const wrapper = mount(PaymentResultView, { global: { stubs: { OrderStatusBadge: true } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('invoices.paid')
+    expect(wrapper.text()).not.toContain('payment.result.success')
+    expect(refreshUser).not.toHaveBeenCalled()
+  })
+
   it('keeps the successful result when refreshing the user balance fails', async () => {
     routeState.query = {
       resume_token: 'resume-refresh-failure',

@@ -140,6 +140,7 @@ onMounted(async () => {
     appendQueryParam(query, 'amount', amount)
     appendQueryParam(query, 'order_type', orderType)
     appendQueryParam(query, 'plan_id', planId)
+    appendQueryParam(query, 'invoice_request_id', readParam('invoice_request_id'))
   }
 
   await router.replace({

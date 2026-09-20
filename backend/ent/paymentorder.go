@@ -53,6 +53,8 @@ type PaymentOrder struct {
 	QrCode *string `json:"qr_code,omitempty"`
 	// QrCodeImg holds the value of the "qr_code_img" field.
 	QrCodeImg *string `json:"qr_code_img,omitempty"`
+	// InvoiceRequestID holds the value of the "invoice_request_id" field.
+	InvoiceRequestID *int64 `json:"invoice_request_id,omitempty"`
 	// OrderType holds the value of the "order_type" field.
 	OrderType string `json:"order_type,omitempty"`
 	// PlanID holds the value of the "plan_id" field.
@@ -140,7 +142,7 @@ func (*PaymentOrder) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case paymentorder.FieldAmount, paymentorder.FieldPayAmount, paymentorder.FieldFeeRate, paymentorder.FieldRefundAmount:
 			values[i] = new(sql.NullFloat64)
-		case paymentorder.FieldID, paymentorder.FieldUserID, paymentorder.FieldDiscountCodeID, paymentorder.FieldPlanID, paymentorder.FieldSubscriptionGroupID, paymentorder.FieldSubscriptionDays:
+		case paymentorder.FieldID, paymentorder.FieldUserID, paymentorder.FieldDiscountCodeID, paymentorder.FieldInvoiceRequestID, paymentorder.FieldPlanID, paymentorder.FieldSubscriptionGroupID, paymentorder.FieldSubscriptionDays:
 			values[i] = new(sql.NullInt64)
 		case paymentorder.FieldUserEmail, paymentorder.FieldUserName, paymentorder.FieldUserNotes, paymentorder.FieldDiscountState, paymentorder.FieldRechargeCode, paymentorder.FieldOutTradeNo, paymentorder.FieldPaymentType, paymentorder.FieldPaymentTradeNo, paymentorder.FieldPayURL, paymentorder.FieldQrCode, paymentorder.FieldQrCodeImg, paymentorder.FieldOrderType, paymentorder.FieldProviderInstanceID, paymentorder.FieldProviderKey, paymentorder.FieldStatus, paymentorder.FieldRefundReason, paymentorder.FieldRefundRequestReason, paymentorder.FieldRefundRequestedBy, paymentorder.FieldFailedReason, paymentorder.FieldClientIP, paymentorder.FieldSrcHost, paymentorder.FieldSrcURL:
 			values[i] = new(sql.NullString)
@@ -275,6 +277,13 @@ func (_m *PaymentOrder) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.QrCodeImg = new(string)
 				*_m.QrCodeImg = value.String
+			}
+		case paymentorder.FieldInvoiceRequestID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field invoice_request_id", values[i])
+			} else if value.Valid {
+				_m.InvoiceRequestID = new(int64)
+				*_m.InvoiceRequestID = value.Int64
 			}
 		case paymentorder.FieldOrderType:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -543,6 +552,11 @@ func (_m *PaymentOrder) String() string {
 	if v := _m.QrCodeImg; v != nil {
 		builder.WriteString("qr_code_img=")
 		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.InvoiceRequestID; v != nil {
+		builder.WriteString("invoice_request_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
 	builder.WriteString("order_type=")

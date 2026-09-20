@@ -1,15 +1,15 @@
 <template>
-  <AppLayout :class="{ 'subscription-layout': activeTab === 'subscription' }">
+  <AppLayout :class="{ 'subscription-layout': !invoiceMode && activeTab === 'subscription' }">
     <div
       class="mx-auto space-y-6"
-      :class="activeTab === 'subscription' && paymentPhase === 'select' && !selectedPlan ? 'max-w-6xl' : 'max-w-4xl'"
+      :class="!invoiceMode && activeTab === 'subscription' && paymentPhase === 'select' && !selectedPlan ? 'max-w-6xl' : 'max-w-4xl'"
     >
       <div v-if="loading" class="flex items-center justify-center py-20">
         <div class="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
       </div>
       <template v-else>
         <!-- Tab Switcher (hide during payment and subscription confirm) -->
-        <div v-if="tabs.length > 1 && paymentPhase === 'select' && !selectedPlan" class="flex space-x-1 rounded-xl bg-gray-100 p-1 dark:bg-dark-800">
+        <div v-if="!invoiceMode && tabs.length > 1 && paymentPhase === 'select' && !selectedPlan" class="flex space-x-1 rounded-xl bg-gray-100 p-1 dark:bg-dark-800">
           <button v-for="tab in tabs" :key="tab.key"
             class="flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all"
             :class="activeTab === tab.key ? 'bg-white text-gray-900 shadow dark:bg-dark-700 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'"
@@ -37,7 +37,15 @@
         <!-- Tab content (select phase) -->
         <template v-else>
           <!-- Neither top-up nor subscriptions available (balance recharge disabled via API while subscriptions are off) -->
-          <div v-if="tabs.length === 0" class="card py-16 text-center">
+          <InvoiceApplicationForm v-if="invoiceMode" ref="invoiceForm" :busy="submitting" @quote="invoiceQuote = $event" @loaded="invoiceRequestId = $event.id">
+            <template #payment="{ quote, preparing }">
+              <div class="card space-y-4 p-5">
+                <PaymentMethodSelector :selected="selectedMethod" :methods="invoiceMethodOptions" @select="!submitting && !preparing && (selectedMethod = $event)" />
+                <button class="btn btn-primary w-full" :disabled="submitting || preparing || !canSubmitInvoice" @click="submitInvoice">{{ t(submitting || preparing ? 'common.processing' : 'invoices.pay') }} · ¥{{ quote.service_fee.toFixed(2) }}</button>
+              </div>
+            </template>
+          </InvoiceApplicationForm>
+          <div v-else-if="tabs.length === 0" class="card py-16 text-center">
             <p class="text-gray-500 dark:text-gray-400">{{ t('payment.billingUnavailable') }}</p>
           </div>
           <!-- Top-up Tab -->
@@ -285,6 +293,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import InvoiceApplicationForm from '@/components/payment/InvoiceApplicationForm.vue'
+import type { InvoiceQuote } from '@/types/invoice'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -333,6 +343,11 @@ const authStore = useAuthStore()
 const paymentStore = usePaymentStore()
 const subscriptionStore = useSubscriptionStore()
 const appStore = useAppStore()
+const props = defineProps<{ invoiceMode?: boolean }>()
+const invoiceMode = computed(() => props.invoiceMode === true)
+const invoiceForm = ref<InstanceType<typeof InvoiceApplicationForm> | null>(null)
+const invoiceQuote = ref<InvoiceQuote | null>(null)
+const invoiceRequestId = ref<number | undefined>(Number(route.query.invoice_request_id) || undefined)
 
 const user = computed(() => authStore.user)
 const activeSubscriptions = computed(() => subscriptionStore.activeSubscriptions)
@@ -515,10 +530,11 @@ function buildWechatOAuthAuthorizeUrl(
 
     redirectUrl.searchParams.set('payment_type', paymentType)
     redirectUrl.searchParams.set('order_type', context.orderType)
-    for (const key of ['coupon_code', 'expected_pay_amount']) {
+    for (const key of ['coupon_code', 'expected_pay_amount', 'invoice_request_id']) {
       const value = targetUrl.searchParams.get(key)
       if (value) redirectUrl.searchParams.set(key, value)
     }
+    if (context.orderType === 'invoice_fee') redirectUrl.pathname = '/orders/invoice'
 
     if (context.planId) {
       redirectUrl.searchParams.set('plan_id', String(context.planId))
@@ -540,6 +556,7 @@ function buildWechatOAuthAuthorizeUrl(
 }
 
 function onPaymentDone() {
+  if (invoiceMode.value) { resetPayment(); void router.push('/orders'); return }
   const wasSubscription = paymentState.value.orderType === 'subscription'
   resetPayment()
   selectedPlan.value = null
@@ -593,7 +610,7 @@ watch(tabs, (available) => {
 }, { immediate: true })
 
 const visibleMethods = computed(() => getVisibleMethods(checkout.value.methods))
-const enabledMethods = computed(() => Object.keys(visibleMethods.value))
+const enabledMethods = computed(() => Object.keys(visibleMethods.value).filter(type => !invoiceMode.value || normalizePaymentCurrency(visibleMethods.value[type]?.currency) === 'CNY'))
 const validAmount = computed(() => amount.value ?? 0)
 const balanceRechargeMultiplier = computed(() => {
   const multiplier = checkout.value.balance_recharge_multiplier
@@ -770,6 +787,16 @@ const canSubmitSubscription = computed(() =>
     && selectedLimit.value?.available !== false
 )
 
+const invoiceMethodOptions = computed<PaymentMethodOption[]>(() => enabledMethods.value.map(type => ({ type, display_name: visibleMethods.value[type]?.display_name, fee_rate: 0, available: visibleMethods.value[type]?.available !== false && amountFitsMethod(invoiceQuote.value?.service_fee ?? 0, type) })))
+const canSubmitInvoice = computed(() => !!invoiceQuote.value && invoiceMethodOptions.value.some(method => method.type === selectedMethod.value && method.available))
+async function submitInvoice() {
+  if (submitting.value || !canSubmitInvoice.value) return
+  const application = await invoiceForm.value?.prepare()
+  if (!application || application.status !== 'awaiting_payment') return
+  invoiceRequestId.value = application.id
+  await createOrder(application.quote.service_fee, 'invoice_fee')
+}
+
 // Auto-switch to first available method when current selection can't handle the amount
 watch(() => [validAmount.value, selectedMethod.value] as const, ([amt, method]) => {
   if (amt <= 0 || amountFitsMethod(amt, method)) return
@@ -851,6 +878,7 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
       paymentType: requestType,
       orderType,
       planId,
+      invoiceRequestId: orderType === 'invoice_fee' ? invoiceRequestId.value : undefined,
       couponCode: couponQuote.value?.discount?.code,
       expectedPayAmount: couponQuote.value?.pay_amount,
       origin: typeof window !== 'undefined' ? window.location.origin : '',
@@ -873,7 +901,8 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
         window.location.href = url
       }
     }
-    const visibleMethod = normalizeVisibleMethod(requestType) || requestType
+    const actualMethod = orderType === 'invoice_fee' ? result.payment_type || requestType : requestType
+    const visibleMethod = normalizeVisibleMethod(actualMethod) || actualMethod
     // When user clicks the dedicated Stripe button, leave method blank so the
     // landing page renders Stripe's full Payment Element (card/link/alipay/wxpay).
     const stripeMethod = visibleMethod === 'stripe'
@@ -903,6 +932,7 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
     const decision = decidePaymentLaunch(result, {
       visibleMethod,
       orderType,
+      invoiceRequestId: orderType === 'invoice_fee' ? invoiceRequestId.value : undefined,
       isMobile: isMobileDevice(),
       isWechatBrowser: typeof window !== 'undefined' && /MicroMessenger/i.test(window.navigator.userAgent),
       forceQRCode: !!(checkout.value.alipay_force_qrcode && visibleMethod === 'alipay'),
@@ -911,6 +941,13 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
       stripeRouteUrl,
       airwallexRouteUrl,
     })
+
+    // Replays return the original order; never reopen an already settled/cancelled payment URL.
+    if (orderType === 'invoice_fee' && result.order_id && result.status && result.status !== 'PENDING') {
+      paymentState.value = decision.paymentState
+      paymentPhase.value = 'paying'
+      return
+    }
 
     if (decision.kind === 'wechat_oauth' && decision.oauth?.authorize_url) {
       window.location.href = buildWechatOAuthAuthorizeUrl(decision.oauth.authorize_url, {
@@ -923,6 +960,13 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
     }
 
     if (decision.kind === 'unhandled') {
+      if (orderType === 'invoice_fee' && result.order_id) {
+        paymentState.value = decision.paymentState
+        paymentPhase.value = 'paying'
+        persistRecoverySnapshot(decision.recovery)
+        appStore.showInfo(t('invoices.paymentMissing'))
+        return
+      }
       applyScenarioError({ reason: 'UNHANDLED_PAYMENT_SCENARIO' }, visibleMethod)
       return
     }
@@ -1075,7 +1119,7 @@ function shouldFallbackToDesktopQr(err: unknown, paymentMethod: string, attempte
 
 async function attemptMobileQrFallback(err: unknown, context: MobileQrFallbackContext): Promise<boolean> {
   // A timed-out discounted order may already exist upstream and owns its use.
-  if (context.orderType === 'subscription' && couponCode.value.trim()) return false
+  if (context.orderType === 'invoice_fee' || context.orderType === 'subscription' && couponCode.value.trim()) return false
   if (!shouldFallbackToDesktopQr(err, context.paymentType, context.attempted)) {
     return false
   }
@@ -1153,6 +1197,7 @@ async function resumeWechatPaymentFromQuery() {
   }
 
   selectedMethod.value = resume.paymentType
+  if (resume.orderType === 'invoice_fee') invoiceRequestId.value = resume.invoiceRequestId
   activeTab.value = resume.orderType === 'subscription' ? 'subscription' : 'recharge'
   if (resume.orderType === 'balance' && resume.orderAmount > 0) {
     amount.value = resume.orderAmount
@@ -1217,7 +1262,7 @@ onMounted(async () => {
         window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY),
         { resumeToken: routeResumeToken },
       )
-      if (restored) {
+      if (restored && (invoiceMode.value ? restored.orderType === 'invoice_fee' && restored.invoiceRequestId === invoiceRequestId.value : restored.orderType !== 'invoice_fee')) {
         paymentState.value = restored
         activeTab.value = restored.orderType === 'subscription' ? 'subscription' : 'recharge'
         paymentPhase.value = 'paying'
@@ -1226,7 +1271,7 @@ onMounted(async () => {
         if (restoredMethod) {
           selectedMethod.value = restoredMethod
         }
-      } else {
+      } else if (!restored) {
         removeRecoverySnapshot()
       }
     }
@@ -1249,7 +1294,7 @@ onMounted(async () => {
   } catch (err: unknown) { appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error'))) }
   finally { loading.value = false }
   // Fetch active subscriptions (uses cache, non-blocking); skipped when the subscription feature is off
-  if (subscriptionEnabled.value) {
+  if (!invoiceMode.value && subscriptionEnabled.value) {
     subscriptionStore.fetchActiveSubscriptions().catch(() => {})
   }
 })

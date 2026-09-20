@@ -69,7 +69,18 @@ func (h *PaymentHandler) ListOrders(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	response.Paginated(c, sanitizeAdminPaymentOrdersForResponse(orders), int64(total), page, pageSize)
+	summaries, err := h.paymentService.OrderInvoiceSummaries(c.Request.Context(), orders)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	results := sanitizeAdminPaymentOrdersForResponse(orders)
+	for _, result := range results {
+		if summary, ok := summaries[result.ID]; ok {
+			result.Invoice = &summary
+		}
+	}
+	response.Paginated(c, results, int64(total), page, pageSize)
 }
 
 // GetOrderDetail returns detailed information about a single order.
@@ -85,7 +96,16 @@ func (h *PaymentHandler) GetOrderDetail(c *gin.Context) {
 		return
 	}
 	auditLogs, _ := h.paymentService.GetOrderAuditLogs(c.Request.Context(), orderID)
-	response.Success(c, gin.H{"order": sanitizeAdminPaymentOrderForResponse(order), "auditLogs": auditLogs})
+	summaries, err := h.paymentService.OrderInvoiceSummaries(c.Request.Context(), []*dbent.PaymentOrder{order})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	result := sanitizeAdminPaymentOrderForResponse(order)
+	if summary, ok := summaries[order.ID]; ok {
+		result.Invoice = &summary
+	}
+	response.Success(c, gin.H{"order": result, "auditLogs": auditLogs})
 }
 
 // CancelOrder cancels a pending order (admin).
@@ -118,48 +138,50 @@ func (h *PaymentHandler) RetryFulfillment(c *gin.Context) {
 }
 
 type AdminPaymentOrderResult struct {
-	Discount            *service.PaymentDiscount `json:"discount,omitempty"`
-	DiscountState       string                   `json:"discount_state,omitempty"`
-	ID                  int64                    `json:"id"`
-	UserID              int64                    `json:"user_id"`
-	UserEmail           string                   `json:"user_email,omitempty"`
-	UserName            string                   `json:"user_name,omitempty"`
-	UserNotes           *string                  `json:"user_notes,omitempty"`
-	Amount              float64                  `json:"amount"`
-	PayAmount           float64                  `json:"pay_amount"`
-	FeeRate             float64                  `json:"fee_rate"`
-	Currency            string                   `json:"currency"`
-	RechargeCode        string                   `json:"recharge_code,omitempty"`
-	OutTradeNo          string                   `json:"out_trade_no"`
-	PaymentType         string                   `json:"payment_type"`
-	PaymentTradeNo      string                   `json:"payment_trade_no,omitempty"`
-	PayURL              *string                  `json:"pay_url,omitempty"`
-	QRCode              *string                  `json:"qr_code,omitempty"`
-	QRCodeImg           *string                  `json:"qr_code_img,omitempty"`
-	OrderType           string                   `json:"order_type"`
-	PlanID              *int64                   `json:"plan_id,omitempty"`
-	SubscriptionGroupID *int64                   `json:"subscription_group_id,omitempty"`
-	SubscriptionDays    *int                     `json:"subscription_days,omitempty"`
-	ProviderInstanceID  *string                  `json:"provider_instance_id,omitempty"`
-	ProviderKey         *string                  `json:"provider_key,omitempty"`
-	Status              string                   `json:"status"`
-	RefundAmount        float64                  `json:"refund_amount"`
-	RefundReason        *string                  `json:"refund_reason,omitempty"`
-	RefundAt            *time.Time               `json:"refund_at,omitempty"`
-	ForceRefund         bool                     `json:"force_refund,omitempty"`
-	RefundRequestedAt   *time.Time               `json:"refund_requested_at,omitempty"`
-	RefundRequestReason *string                  `json:"refund_request_reason,omitempty"`
-	RefundRequestedBy   *string                  `json:"refund_requested_by,omitempty"`
-	ExpiresAt           time.Time                `json:"expires_at"`
-	PaidAt              *time.Time               `json:"paid_at,omitempty"`
-	CompletedAt         *time.Time               `json:"completed_at,omitempty"`
-	FailedAt            *time.Time               `json:"failed_at,omitempty"`
-	FailedReason        *string                  `json:"failed_reason,omitempty"`
-	ClientIP            string                   `json:"client_ip,omitempty"`
-	SrcHost             string                   `json:"src_host,omitempty"`
-	SrcURL              *string                  `json:"src_url,omitempty"`
-	CreatedAt           time.Time                `json:"created_at"`
-	UpdatedAt           time.Time                `json:"updated_at"`
+	Invoice             *service.OrderInvoiceSummary `json:"invoice,omitempty"`
+	InvoiceRequestID    *int64                       `json:"invoice_request_id,omitempty"`
+	Discount            *service.PaymentDiscount     `json:"discount,omitempty"`
+	DiscountState       string                       `json:"discount_state,omitempty"`
+	ID                  int64                        `json:"id"`
+	UserID              int64                        `json:"user_id"`
+	UserEmail           string                       `json:"user_email,omitempty"`
+	UserName            string                       `json:"user_name,omitempty"`
+	UserNotes           *string                      `json:"user_notes,omitempty"`
+	Amount              float64                      `json:"amount"`
+	PayAmount           float64                      `json:"pay_amount"`
+	FeeRate             float64                      `json:"fee_rate"`
+	Currency            string                       `json:"currency"`
+	RechargeCode        string                       `json:"recharge_code,omitempty"`
+	OutTradeNo          string                       `json:"out_trade_no"`
+	PaymentType         string                       `json:"payment_type"`
+	PaymentTradeNo      string                       `json:"payment_trade_no,omitempty"`
+	PayURL              *string                      `json:"pay_url,omitempty"`
+	QRCode              *string                      `json:"qr_code,omitempty"`
+	QRCodeImg           *string                      `json:"qr_code_img,omitempty"`
+	OrderType           string                       `json:"order_type"`
+	PlanID              *int64                       `json:"plan_id,omitempty"`
+	SubscriptionGroupID *int64                       `json:"subscription_group_id,omitempty"`
+	SubscriptionDays    *int                         `json:"subscription_days,omitempty"`
+	ProviderInstanceID  *string                      `json:"provider_instance_id,omitempty"`
+	ProviderKey         *string                      `json:"provider_key,omitempty"`
+	Status              string                       `json:"status"`
+	RefundAmount        float64                      `json:"refund_amount"`
+	RefundReason        *string                      `json:"refund_reason,omitempty"`
+	RefundAt            *time.Time                   `json:"refund_at,omitempty"`
+	ForceRefund         bool                         `json:"force_refund,omitempty"`
+	RefundRequestedAt   *time.Time                   `json:"refund_requested_at,omitempty"`
+	RefundRequestReason *string                      `json:"refund_request_reason,omitempty"`
+	RefundRequestedBy   *string                      `json:"refund_requested_by,omitempty"`
+	ExpiresAt           time.Time                    `json:"expires_at"`
+	PaidAt              *time.Time                   `json:"paid_at,omitempty"`
+	CompletedAt         *time.Time                   `json:"completed_at,omitempty"`
+	FailedAt            *time.Time                   `json:"failed_at,omitempty"`
+	FailedReason        *string                      `json:"failed_reason,omitempty"`
+	ClientIP            string                       `json:"client_ip,omitempty"`
+	SrcHost             string                       `json:"src_host,omitempty"`
+	SrcURL              *string                      `json:"src_url,omitempty"`
+	CreatedAt           time.Time                    `json:"created_at"`
+	UpdatedAt           time.Time                    `json:"updated_at"`
 }
 
 func sanitizeAdminPaymentOrdersForResponse(orders []*dbent.PaymentOrder) []*AdminPaymentOrderResult {
@@ -177,6 +199,7 @@ func sanitizeAdminPaymentOrderForResponse(order *dbent.PaymentOrder) *AdminPayme
 		return nil
 	}
 	return &AdminPaymentOrderResult{
+		InvoiceRequestID:    order.InvoiceRequestID,
 		Discount:            service.PaymentOrderDiscount(order),
 		DiscountState:       order.DiscountState,
 		ID:                  order.ID,

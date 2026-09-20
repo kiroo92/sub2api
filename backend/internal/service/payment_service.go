@@ -72,6 +72,8 @@ func generateRandomString(n int) string {
 }
 
 type CreateOrderRequest struct {
+	InvoiceRequestID  int64
+	invoice           *dbent.InvoiceRequest
 	UserID            int64
 	Amount            float64
 	PaymentType       string
@@ -92,6 +94,7 @@ type CreateOrderRequest struct {
 }
 
 type CreateOrderResponse struct {
+	InvoiceRequestID              *int64                          `json:"invoice_request_id,omitempty"`
 	Discount                      *PaymentDiscount                `json:"discount,omitempty"`
 	OrderID                       int64                           `json:"order_id"`
 	Amount                        float64                         `json:"amount"`
@@ -193,6 +196,7 @@ type TopUsersByCurrency map[string][]TopUserStat
 // --- Service ---
 
 type PaymentService struct {
+	invoiceReconcileCursor   atomic.Int64
 	discountReconcileCursor  atomic.Int64
 	providerMu               sync.Mutex
 	providersLoaded          bool

@@ -24,6 +24,18 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func TestInvoiceWeChatResumeBinding(t *testing.T) {
+	req := CreateOrderRequest{OrderType: "invoice_fee", InvoiceRequestID: 77}
+	claims := &service.WeChatPaymentResumeClaims{OrderType: "invoice_fee", InvoiceRequestID: 77, OpenID: "invoice-openid", PaymentType: "wxpay", Amount: "38"}
+	require.NoError(t, applyWeChatPaymentResumeClaims(&req, claims))
+	require.Equal(t, int64(77), req.InvoiceRequestID)
+	req.InvoiceRequestID = 88
+	require.Error(t, applyWeChatPaymentResumeClaims(&req, claims))
+	claims.InvoiceRequestID = 0
+	req.InvoiceRequestID = 0
+	require.Error(t, applyWeChatPaymentResumeClaims(&req, claims))
+}
+
 func TestApplyWeChatPaymentResumeClaims(t *testing.T) {
 	t.Parallel()
 

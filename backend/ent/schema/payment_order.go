@@ -78,6 +78,7 @@ func (PaymentOrder) Fields() []ent.Field {
 			SchemaType(map[string]string{dialect.Postgres: "text"}),
 
 		// 订单类型 & 订阅关联
+		field.Int64("invoice_request_id").Optional().Nillable().Unique(),
 		field.String("order_type").
 			MaxLen(20).
 			Default("balance"),

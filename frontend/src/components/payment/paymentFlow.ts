@@ -32,6 +32,7 @@ export type PaymentLaunchKind =
   | 'unhandled'
 
 export interface PaymentRecoverySnapshot {
+  invoiceRequestId?: number
   orderId: number
   amount: number
   qrCode: string
@@ -53,6 +54,7 @@ export interface PaymentRecoverySnapshot {
 }
 
 export interface PaymentLaunchContext {
+  invoiceRequestId?: number
   visibleMethod: string
   orderType: OrderType
   isMobile: boolean
@@ -77,6 +79,7 @@ export interface PaymentLaunchDecision {
 }
 
 export interface BuildCreateOrderPayloadInput {
+  invoiceRequestId?: number
   couponCode?: string
   expectedPayAmount?: number
   amount: number
@@ -141,6 +144,7 @@ export function buildCreateOrderPayload(input: BuildCreateOrderPayloadInput): Cr
   if (input.planId) {
     payload.plan_id = input.planId
   }
+  if (input.orderType === 'invoice_fee') payload.invoice_request_id = input.invoiceRequestId
   if (input.orderType === 'subscription' && input.couponCode?.trim()) {
     payload.coupon_code = input.couponCode.trim().toUpperCase()
     payload.expected_pay_amount = input.expectedPayAmount
@@ -159,6 +163,7 @@ export function decidePaymentLaunch(
   const visibleMethod = normalizeVisibleMethod(context.visibleMethod) || context.visibleMethod
   const baseState = createPaymentRecoverySnapshot({
     orderId: result.order_id,
+    invoiceRequestId: result.invoice_request_id ?? context.invoiceRequestId,
     amount: result.amount,
     qrCode: result.qr_code || '',
     expiresAt: result.expires_at || '',
@@ -285,6 +290,8 @@ export function readPaymentRecoverySnapshot(
 
   try {
     const parsed = JSON.parse(raw) as Partial<PaymentRecoverySnapshot>
+    if (parsed.orderType && !['balance', 'subscription', 'invoice_fee'].includes(parsed.orderType)) return null
+    if (parsed.orderType === 'invoice_fee' && (!Number.isSafeInteger(parsed.invoiceRequestId) || (parsed.invoiceRequestId ?? 0) <= 0)) return null
     if (
       typeof parsed.orderId !== 'number'
       || typeof parsed.amount !== 'number'
@@ -330,7 +337,8 @@ export function readPaymentRecoverySnapshot(
       countryCode: parsed.countryCode || '',
       paymentEnv: parsed.paymentEnv || '',
       payAmount: parsed.payAmount,
-      orderType: parsed.orderType === 'subscription' ? 'subscription' : 'balance',
+      orderType: parsed.orderType === 'invoice_fee' ? 'invoice_fee' : parsed.orderType === 'subscription' ? 'subscription' : 'balance',
+      invoiceRequestId: typeof parsed.invoiceRequestId === 'number' ? parsed.invoiceRequestId : undefined,
       paymentMode: parsed.paymentMode,
       resumeToken: parsed.resumeToken,
       alipayMobilePrecreateDeepLink: parsed.alipayMobilePrecreateDeepLink === true,

@@ -6,7 +6,8 @@ export interface ParsedWechatResumeRoute {
   couponCode?: string
   expectedPayAmount?: number
   orderAmount: number
-  orderType: 'balance' | 'subscription'
+  orderType: 'balance' | 'subscription' | 'invoice_fee'
+  invoiceRequestId?: number
   paymentType: string
   planId?: number
   openid?: string
@@ -45,7 +46,8 @@ export function parseWechatResumeRoute(
   const paymentType = normalizeVisibleMethod(readQueryString(query, 'payment_type')) || 'wxpay'
   const planId = Number.parseInt(readQueryString(query, 'plan_id'), 10)
   const hasPlanId = Number.isFinite(planId) && planId > 0
-  const orderType = readQueryString(query, 'order_type') === 'subscription' || hasPlanId
+  const invoiceRequestId = Number(readQueryString(query, 'invoice_request_id'))
+  const orderType = readQueryString(query, 'order_type') === 'invoice_fee' || invoiceRequestId > 0 ? 'invoice_fee' : readQueryString(query, 'order_type') === 'subscription' || hasPlanId
     ? 'subscription'
     : 'balance'
 
@@ -55,6 +57,7 @@ export function parseWechatResumeRoute(
       wechatResumeToken,
       paymentType,
       orderType,
+      invoiceRequestId: invoiceRequestId > 0 ? invoiceRequestId : undefined,
       orderAmount: 0,
       planId: hasPlanId ? planId : undefined,
     }
@@ -77,6 +80,7 @@ export function parseWechatResumeRoute(
     ...discount,
     paymentType,
     orderType,
+    invoiceRequestId: invoiceRequestId > 0 ? invoiceRequestId : undefined,
     orderAmount,
     planId: hasPlanId ? planId : undefined,
   }

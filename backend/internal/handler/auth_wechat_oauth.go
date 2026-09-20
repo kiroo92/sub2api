@@ -87,6 +87,7 @@ type wechatOAuthUserInfoResponse struct {
 }
 
 type wechatPaymentOAuthContext struct {
+	InvoiceRequestID  int64  `json:"invoice_request_id,omitempty"`
 	CouponCode        string `json:"coupon_code,omitempty"`
 	ExpectedPayAmount string `json:"expected_pay_amount,omitempty"`
 	PaymentType       string `json:"payment_type"`
@@ -363,6 +364,7 @@ func (h *AuthHandler) WeChatPaymentOAuthStart(c *gin.Context) {
 		PaymentType:       paymentType,
 		Amount:            strings.TrimSpace(c.Query("amount")),
 		OrderType:         strings.TrimSpace(c.Query("order_type")),
+		InvoiceRequestID:  parseWeChatPaymentPlanID(c.Query("invoice_request_id")),
 		PlanID:            parseWeChatPaymentPlanID(c.Query("plan_id")),
 	})
 	if err != nil {
@@ -466,6 +468,7 @@ func (h *AuthHandler) WeChatPaymentOAuthCallback(c *gin.Context) {
 		PaymentType:       paymentContext.PaymentType,
 		Amount:            paymentContext.Amount,
 		OrderType:         paymentContext.OrderType,
+		InvoiceRequestID:  paymentContext.InvoiceRequestID,
 		PlanID:            paymentContext.PlanID,
 		RedirectTo:        redirectTo,
 		Scope:             scope,

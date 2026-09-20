@@ -48,6 +48,8 @@ const (
 	FieldQrCode = "qr_code"
 	// FieldQrCodeImg holds the string denoting the qr_code_img field in the database.
 	FieldQrCodeImg = "qr_code_img"
+	// FieldInvoiceRequestID holds the string denoting the invoice_request_id field in the database.
+	FieldInvoiceRequestID = "invoice_request_id"
 	// FieldOrderType holds the string denoting the order_type field in the database.
 	FieldOrderType = "order_type"
 	// FieldPlanID holds the string denoting the plan_id field in the database.
@@ -131,6 +133,7 @@ var Columns = []string{
 	FieldPayURL,
 	FieldQrCode,
 	FieldQrCodeImg,
+	FieldInvoiceRequestID,
 	FieldOrderType,
 	FieldPlanID,
 	FieldSubscriptionGroupID,
@@ -305,6 +308,11 @@ func ByQrCode(opts ...sql.OrderTermOption) OrderOption {
 // ByQrCodeImg orders the results by the qr_code_img field.
 func ByQrCodeImg(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldQrCodeImg, opts...).ToFunc()
+}
+
+// ByInvoiceRequestID orders the results by the invoice_request_id field.
+func ByInvoiceRequestID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldInvoiceRequestID, opts...).ToFunc()
 }
 
 // ByOrderType orders the results by the order_type field.

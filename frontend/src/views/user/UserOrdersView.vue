@@ -5,7 +5,12 @@
       <div class="card p-4">
         <div class="flex flex-wrap items-center gap-3">
           <Select v-model="currentFilter" :options="statusFilters" class="w-36" @change="handlePageChange(1)" />
-          <div class="flex flex-1 items-center justify-end gap-2">
+          <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
+            <template v-if="invoiceEnabled">
+              <button class="btn btn-secondary" @click="router.push('/orders/invoice?selection=all')">{{ t('invoices.all') }}</button>
+              <button class="btn btn-secondary" :aria-pressed="selectInvoices" @click="selectInvoices = !selectInvoices">{{ t('invoices.select') }}</button>
+              <button v-if="selectInvoices" class="btn btn-primary" :disabled="!selectedInvoiceIds.length" @click="openSelectedInvoice">{{ t('invoices.next', { count: selectedInvoiceIds.length }) }}</button>
+            </template>
             <button @click="fetchOrders" :disabled="loading" class="btn btn-secondary" :title="t('common.refresh')">
               <Icon name="refresh" size="md" :class="loading ? 'animate-spin' : ''" />
             </button>
@@ -15,7 +20,12 @@
       </div>
 
       <!-- Table -->
-      <OrderTable :orders="orders" :loading="loading">
+      <OrderTable :orders="orders" :loading="loading" :show-invoices="invoiceEnabled || orders.some(order => order.invoice)" :select-invoices="selectInvoices" :selected-invoice-ids="selectedInvoiceIds" @toggle-invoice="toggleInvoice">
+        <template #invoice="{ row }">
+          <router-link v-if="row.invoice" :to="{ path: '/orders/invoice', query: { invoice_request_id: row.invoice.id } }" class="text-xs font-medium text-primary-600">{{ t(`invoices.status.${row.invoice.status}`) }}</router-link>
+          <router-link v-else-if="invoiceEnabled && canInvoiceOrder(row)" :to="{ path: '/orders/invoice', query: { ids: row.id } }" class="text-xs text-primary-600 underline">{{ t('invoices.title') }}</router-link>
+          <span v-else class="text-xs text-gray-400">—</span>
+        </template>
         <template #actions="{ row }">
           <div class="flex items-center gap-2">
             <button v-if="row.status === 'PENDING'" @click="handleCancel(row.id)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-900/20">
@@ -86,6 +96,9 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores'
 import { paymentAPI } from '@/api/payment'
+import { invoiceAPI } from '@/api/invoices'
+import { useAuthStore } from '@/stores/auth'
+import { canInvoiceOrder } from '@/components/payment/invoiceEligibility'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import type { PaymentOrder } from '@/types/payment'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -100,6 +113,15 @@ const router = useRouter()
 const appStore = useAppStore()
 
 const loading = ref(false)
+const invoiceEnabled = ref(false)
+const selectInvoices = ref(false)
+const selectedInvoiceIds = ref<number[]>([])
+const authStore = useAuthStore()
+function toggleInvoice(id: number) {
+  if (selectedInvoiceIds.value.includes(id)) selectedInvoiceIds.value = selectedInvoiceIds.value.filter(value => value !== id)
+  else if (orders.value.some(order => order.id === id && canInvoiceOrder(order))) selectedInvoiceIds.value.push(id)
+}
+function openSelectedInvoice() { void router.push({ path: '/orders/invoice', query: { ids: selectedInvoiceIds.value.join(',') } }) }
 const actionLoading = ref(false)
 const orders = ref<PaymentOrder[]>([])
 const refundEligibleProviders = ref<Set<string>>(new Set())
@@ -173,6 +195,7 @@ async function confirmRefund() {
 }
 
 function canRequestRefund(order: PaymentOrder): boolean {
+  if (order.order_type === 'invoice_fee') return false
   if (order.status !== 'COMPLETED') return false
   if (!order.provider_instance_id) return false
   return refundEligibleProviders.value.has(order.provider_instance_id)
@@ -185,5 +208,8 @@ async function loadRefundEligibility() {
   } catch { /* ignore — default to hiding refund button */ }
 }
 
-onMounted(() => { fetchOrders(); loadRefundEligibility() })
+onMounted(() => {
+  fetchOrders(); loadRefundEligibility()
+  if (!authStore.isSimpleMode) invoiceAPI.config().then(config => { invoiceEnabled.value = config.enabled }).catch(() => { invoiceEnabled.value = false })
+})
 </script>
