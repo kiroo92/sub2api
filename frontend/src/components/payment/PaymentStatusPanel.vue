@@ -89,7 +89,7 @@
             </p>
             <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('payment.qr.alipayWaitingHint') }}</p>
             <button
-              v-if="deepLinkState === 'backgrounded'"
+              v-if="deepLinkState === 'backgrounded' && orderType !== 'invoice_fee'"
               data-test="reopen-alipay"
               class="btn btn-alipay inline-flex items-center gap-2 text-sm"
               @click="reopenAlipay"
@@ -141,6 +141,7 @@
             </p>
             <div class="grid w-full gap-2 sm:grid-cols-2">
               <button
+                v-if="orderType !== 'invoice_fee'"
                 data-test="reopen-alipay"
                 class="btn btn-alipay inline-flex items-center justify-center gap-2"
                 @click="reopenAlipay"
@@ -180,7 +181,7 @@
             </div>
           </div>
           <p v-if="scanHint" class="text-center text-sm text-gray-500 dark:text-gray-400">{{ scanHint }}</p>
-          <button v-if="payUrl" class="btn btn-secondary text-sm" @click="reopenPopup">
+          <button v-if="payUrl && orderType !== 'invoice_fee'" class="btn btn-secondary text-sm" @click="reopenPopup">
             {{ t('payment.qr.openPayWindow') }}
           </button>
         </div>
@@ -201,7 +202,7 @@
         <div class="flex flex-col items-center space-y-4 py-4">
           <div class="h-10 w-10 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
           <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('payment.qr.payInNewWindowHint') }}</p>
-          <button v-if="payUrl" class="btn btn-secondary text-sm" @click="reopenPopup">
+          <button v-if="payUrl && orderType !== 'invoice_fee'" class="btn btn-secondary text-sm" @click="reopenPopup">
             {{ t('payment.qr.openPayWindow') }}
           </button>
         </div>
@@ -460,7 +461,7 @@ async function handleCancel() {
     cleanup()
     setOutcome('cancelled')
   } catch (err: unknown) {
-    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+    appStore.showError(extractI18nErrorMessage(err, t, props.orderType === 'invoice_fee' ? 'invoices.errors' : 'payment.errors', t('common.error')))
   } finally {
     cancelling.value = false
   }

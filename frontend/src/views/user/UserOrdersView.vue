@@ -170,7 +170,8 @@ async function confirmCancel() {
     cancelTargetId.value = null
     await fetchOrders()
   } catch (err: unknown) {
-    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+    const namespace = orders.value.find(order => order.id === cancelTargetId.value)?.order_type === 'invoice_fee' ? 'invoices.errors' : 'payment.errors'
+    appStore.showError(extractI18nErrorMessage(err, t, namespace, t('common.error')))
   } finally {
     actionLoading.value = false
   }

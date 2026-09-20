@@ -16,6 +16,71 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
 
+type UnpaidInvoice struct {
+	ID          int64     `json:"id"`
+	TotalAmount float64   `json:"total_amount"`
+	ServiceFee  float64   `json:"service_fee"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// Listing must be read-only: a page visit is not consent to cancel or recreate a payment.
+func (s *PaymentService) ListUnpaidInvoices(ctx context.Context, uid int64) ([]UnpaidInvoice, error) {
+	rows, err := s.entClient.InvoiceRequest.Query().Where(invoicerequest.UserIDEQ(uid), invoicerequest.StatusEQ(InvoiceAwaitingPayment)).Order(dbent.Desc(invoicerequest.FieldID)).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]UnpaidInvoice, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, UnpaidInvoice{ID: row.ID, TotalAmount: row.TotalAmount, ServiceFee: row.ServiceFee, CreatedAt: row.CreatedAt})
+	}
+	return result, nil
+}
+
+func (s *PaymentService) CancelInvoice(ctx context.Context, uid, id int64) (*InvoiceResult, error) {
+	row, err := s.entClient.InvoiceRequest.Query().Where(invoicerequest.IDEQ(id), invoicerequest.UserIDEQ(uid)).Only(ctx)
+	if dbent.IsNotFound(err) {
+		return nil, infraerrors.NotFound("INVOICE_NOT_FOUND", "invoice application not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if row.Status == InvoiceCancelled {
+		return s.GetInvoice(ctx, uid, id)
+	}
+	if row.Status != InvoiceAwaitingPayment {
+		return nil, infraerrors.Conflict("INVOICE_ALREADY_PAID", "invoice service fee is paid; cancellation is unavailable")
+	}
+	order, err := s.entClient.PaymentOrder.Query().Where(paymentorder.InvoiceRequestIDEQ(id)).Only(ctx)
+	var cancellationErr error
+	if dbent.IsNotFound(err) {
+		// releaseInvoice rechecks the payment binding under the same lock as creation.
+		cancellationErr = s.releaseInvoice(ctx, id, 0)
+	} else if err != nil {
+		return nil, err
+	} else {
+		if order.PaidAt == nil && order.Status != OrderStatusCompleted {
+			// Also permit an explicit cancellation of failed/expired attempts; the
+			// existing provider check and subsequent reconciliation still require final closure.
+			_, cancellationErr = s.cancelCore(ctx, order, OrderStatusCancelled, fmt.Sprintf("user:%d", uid), "user cancelled invoice application")
+		}
+		if cancellationErr == nil {
+			cancellationErr = s.reconcileInvoice(ctx, row)
+		}
+	}
+	current, err := s.GetInvoice(ctx, uid, id)
+	if err != nil {
+		return nil, err
+	}
+	switch current.Status {
+	case InvoiceCancelled:
+		return current, nil
+	case InvoicePending, InvoiceIssued:
+		return nil, infraerrors.Conflict("INVOICE_ALREADY_PAID", "invoice service fee is paid; cancellation is unavailable")
+	default:
+		return nil, infraerrors.Conflict("INVOICE_CANCEL_UNCONFIRMED", "payment closure has not been confirmed; please check again later").WithCause(cancellationErr)
+	}
+}
+
 func lockInvoice(ctx context.Context, client *dbent.Client, id int64) (*dbent.InvoiceRequest, error) {
 	q := client.InvoiceRequest.Query().Where(invoicerequest.IDEQ(id))
 	if paymentAuditDialect(client) == dialect.Postgres {

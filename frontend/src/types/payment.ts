@@ -206,6 +206,7 @@ export interface WechatJSAPIPayload {
 }
 
 export interface CreateOrderResult {
+  existing_payment?: boolean
   invoice_request_id?: number
   status?: OrderStatus
   discount?: PaymentDiscount

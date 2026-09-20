@@ -348,6 +348,7 @@ const invoiceMode = computed(() => props.invoiceMode === true)
 const invoiceForm = ref<InstanceType<typeof InvoiceApplicationForm> | null>(null)
 const invoiceQuote = ref<InvoiceQuote | null>(null)
 const invoiceRequestId = ref<number | undefined>(Number(route.query.invoice_request_id) || undefined)
+const invoiceOAuthIntentKey = 'payment.invoice.oauth.intent'
 
 const user = computed(() => authStore.user)
 const activeSubscriptions = computed(() => subscriptionStore.activeSubscriptions)
@@ -895,6 +896,11 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
     }
 
     const result = await paymentStore.createOrder(payload) as CreateOrderResult & { resume_token?: string }
+    if (orderType === 'invoice_fee' && result.existing_payment) {
+      await invoiceForm.value?.reload()
+      appStore.showInfo(t('invoices.unpaidNotice'))
+      return
+    }
     const openWindow = (url: string) => {
       const win = window.open(url, 'paymentPopup', getPaymentPopupFeatures())
       if (!win || win.closed) {
@@ -950,6 +956,7 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
     }
 
     if (decision.kind === 'wechat_oauth' && decision.oauth?.authorize_url) {
+      if (orderType === 'invoice_fee' && invoiceRequestId.value) sessionStorage.setItem(invoiceOAuthIntentKey, String(invoiceRequestId.value))
       window.location.href = buildWechatOAuthAuthorizeUrl(decision.oauth.authorize_url, {
         paymentType: visibleMethod,
         orderType,
@@ -1038,7 +1045,10 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
     }
   } catch (err: unknown) {
     const apiErr = err as Record<string, unknown>
-    if (apiErr.reason === 'TOO_MANY_PENDING') {
+    if (typeof apiErr.reason === 'string' && apiErr.reason.startsWith('INVOICE_')) {
+      errorMessage.value = extractI18nErrorMessage(err, t, 'invoices.errors', t('invoices.applyFailed'))
+      errorHintMessage.value = ''
+    } else if (apiErr.reason === 'TOO_MANY_PENDING') {
       const metadata = apiErr.metadata as Record<string, unknown> | undefined
       errorMessage.value = t('payment.errors.tooManyPending', { max: metadata?.max || '' })
       errorHintMessage.value = ''
@@ -1195,6 +1205,14 @@ async function resumeWechatPaymentFromQuery() {
   if (!resume) {
     return
   }
+  if (resume.orderType === 'invoice_fee') {
+    const intent = Number(sessionStorage.getItem(invoiceOAuthIntentKey))
+    sessionStorage.removeItem(invoiceOAuthIntentKey)
+    if (!invoiceMode.value || !resume.wechatResumeToken || !resume.invoiceRequestId || intent !== resume.invoiceRequestId) {
+      await router.replace({ path: route.path, query: stripWechatResumeQuery(route.query) })
+      return
+    }
+  }
 
   selectedMethod.value = resume.paymentType
   if (resume.orderType === 'invoice_fee') invoiceRequestId.value = resume.invoiceRequestId
@@ -1237,6 +1255,7 @@ async function resumeWechatPaymentFromQuery() {
 }
 
 onMounted(async () => {
+  if (invoiceMode.value && !hasWechatResumeQuery(route.query)) sessionStorage.removeItem(invoiceOAuthIntentKey)
   try {
     const res = await paymentAPI.getCheckoutInfo()
     checkout.value = res.data
@@ -1262,7 +1281,7 @@ onMounted(async () => {
         window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY),
         { resumeToken: routeResumeToken },
       )
-      if (restored && (invoiceMode.value ? restored.orderType === 'invoice_fee' && restored.invoiceRequestId === invoiceRequestId.value : restored.orderType !== 'invoice_fee')) {
+      if (restored && !invoiceMode.value && restored.orderType !== 'invoice_fee') {
         paymentState.value = restored
         activeTab.value = restored.orderType === 'subscription' ? 'subscription' : 'recharge'
         paymentPhase.value = 'paying'

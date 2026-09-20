@@ -104,8 +104,8 @@ func (h *LotteryHandler) Configure(c *gin.Context) {
 		response.BadRequest(c, "抽奖配置格式错误")
 		return
 	}
-	input.LotteryConfig.TurnstileSecretKey = strings.TrimSpace(input.SecretKey)
-	input.LotteryConfig.TurnstileSiteKey = strings.TrimSpace(input.TurnstileSiteKey)
+	input.TurnstileSecretKey = strings.TrimSpace(input.SecretKey)
+	input.TurnstileSiteKey = strings.TrimSpace(input.TurnstileSiteKey)
 	if err := h.service.Configure(c.Request.Context(), input.LotteryConfig); err != nil {
 		response.ErrorFrom(c, err)
 		return

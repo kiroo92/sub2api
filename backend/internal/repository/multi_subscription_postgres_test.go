@@ -61,7 +61,8 @@ CREATE UNIQUE INDEX user_subscriptions_user_group_unique_active ON user_subscrip
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, string(migration))
 	require.NoError(t, err)
-	repo := NewUserSubscriptionRepository(client).(*userSubscriptionRepository)
+	repo, ok := NewUserSubscriptionRepository(client).(*userSubscriptionRepository)
+	require.True(t, ok)
 	var wg sync.WaitGroup
 	errors := make(chan error, 8)
 	for i := 0; i < 8; i++ {

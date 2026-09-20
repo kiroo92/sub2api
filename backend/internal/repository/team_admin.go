@@ -33,7 +33,7 @@ func (r *teamRepository) AdminList(ctx context.Context, search, status string, p
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var item service.TeamAdminItem
 			if err = rows.Scan(&item.ID, &item.Name, &item.OwnerID, &item.OwnerEmail, &item.Status, &item.MemberCount, &item.TotalUsage); err != nil {
@@ -41,7 +41,10 @@ func (r *teamRepository) AdminList(ctx context.Context, search, status string, p
 			}
 			result = append(result, item)
 		}
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return rows.Close()
 	})
 	return result, total, err
 }

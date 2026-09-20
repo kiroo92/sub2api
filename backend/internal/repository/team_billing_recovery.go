@@ -73,15 +73,18 @@ func (r *teamRepository) RecoverBilling(ctx context.Context, userID int64) (int,
 				err = json.Unmarshal(data, &cmd)
 			}
 			if err != nil {
-				rows.Close()
+				_ = rows.Close()
 				return err
 			}
 			commands = append(commands, cmd)
 		}
 		err = rows.Err()
-		rows.Close()
+		closeErr := rows.Close()
 		if err != nil {
 			return err
+		}
+		if closeErr != nil {
+			return closeErr
 		}
 		billing := &usageBillingRepository{db: r.db}
 		for i := range commands {

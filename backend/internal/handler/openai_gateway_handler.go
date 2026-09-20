@@ -3092,7 +3092,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				c.Request = c.Request.WithContext(ctx)
 				c.Request.Header.Del("x-codex-turn-state")
 				reqModel = strings.TrimSpace(gjson.GetBytes(payload, "model").String())
-				wsAttemptMessage, firstMessage = payload, payload
+				wsAttemptMessage = payload
 				previousResponseID, previousResponseCanMove = "", true
 				firstTurnStartedAt = time.Now()
 				channelMappingWS, _ = h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, reqModel)

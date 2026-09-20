@@ -58,7 +58,7 @@ import { adminInvoiceAPI } from '@/api/invoices'
 import type { InvoiceConfig, InvoiceListParams, InvoiceRequest } from '@/types/invoice'
 import type { Column } from '@/components/common/types'
 import { useAppStore } from '@/stores/app'
-import { extractApiErrorMessage } from '@/utils/apiError'
+import { extractI18nErrorMessage } from '@/utils/apiError'
 import { formatDateTimeToMinute } from '@/utils/format'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
@@ -83,13 +83,13 @@ function upperAmount(event: Event) { const raw = (event.target as HTMLInputEleme
 async function loadConfig() {
   configError.value = ''
   try { config.value = await adminInvoiceAPI.config(); configLoaded.value = true }
-  catch (err) { configError.value = extractApiErrorMessage(err, t('invoices.loadFailed')) }
+  catch (err) { configError.value = extractI18nErrorMessage(err, t, 'invoices.errors', t('invoices.loadFailed')) }
 }
 async function saveConfig() {
   if (saving.value || !configLoaded.value) return
   saving.value = true
   try { config.value = await adminInvoiceAPI.saveConfig(config.value); app.showSuccess(t('invoices.configSaved')); configError.value = '' }
-  catch (err) { configError.value = extractApiErrorMessage(err, t('invoices.configurationInvalid')) }
+  catch (err) { configError.value = extractI18nErrorMessage(err, t, 'invoices.errors', t('invoices.configurationInvalid')) }
   finally { saving.value = false }
 }
 function params(): InvoiceListParams { return { ...filters, user_id: Number(filters.user_id) || undefined } }
@@ -97,7 +97,7 @@ async function loadInvoices() {
   if (loading.value) return
   loading.value = true; listError.value = ''
   try { const result = await adminInvoiceAPI.list({ ...params(), page: page.value, page_size: pageSize.value }); invoices.value = result.items; total.value = result.total }
-  catch (err) { listError.value = extractApiErrorMessage(err, t('invoices.loadFailed')) }
+  catch (err) { listError.value = extractI18nErrorMessage(err, t, 'invoices.errors', t('invoices.loadFailed')) }
   finally { loading.value = false }
 }
 function selectRows(keys: Array<string | number>) {
@@ -109,7 +109,7 @@ async function markIssued() {
   if (marking.value || !selected.value.length) return
   marking.value = true
   try { await adminInvoiceAPI.markIssued(selected.value.map(invoice => invoice.id)); selected.value = []; confirmMark.value = false; app.showSuccess(t('invoices.marked')); await loadInvoices() }
-  catch (err) { app.showError(extractApiErrorMessage(err, t('common.error'))) }
+  catch (err) { app.showError(extractI18nErrorMessage(err, t, 'invoices.errors', t('common.error'))) }
   finally { marking.value = false }
 }
 async function exportInvoices(filtered: boolean) {
@@ -128,7 +128,7 @@ async function exportInvoices(filtered: boolean) {
     }
     const { workbook, XLSX } = await createInvoiceWorkbook(rows, t)
     saveAs(new Blob([XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `invoices-${new Date().toISOString().slice(0, 10)}.xlsx`)
-  } catch (err) { app.showError(extractApiErrorMessage(err, t('invoices.exportFailed'))) }
+  } catch (err) { app.showError(extractI18nErrorMessage(err, t, 'invoices.errors', t('invoices.exportFailed'))) }
   finally { exporting.value = false }
 }
 onMounted(() => { void loadConfig(); void loadInvoices() })

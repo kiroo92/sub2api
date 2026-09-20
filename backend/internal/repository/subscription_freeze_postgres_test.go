@@ -58,7 +58,8 @@ func TestSubscriptionFreezePostgres(t *testing.T) {
 	owner := mustCreateAPIKeyRepoUser(t, ctx, client, "freeze-owner@example.com")
 	group, err := client.Group.Create().SetName("freeze group").SetSubscriptionType(service.SubscriptionTypeSubscription).Save(ctx)
 	require.NoError(t, err)
-	repo := NewUserSubscriptionRepository(client).(*userSubscriptionRepository)
+	repo, ok := NewUserSubscriptionRepository(client).(*userSubscriptionRepository)
+	require.True(t, ok)
 	svc := service.NewSubscriptionService(NewGroupRepository(client, db), repo, nil, client, nil)
 	t.Cleanup(svc.Stop)
 	input := &service.AssignSubscriptionInput{UserID: owner.ID, GroupID: group.ID, AssignedBy: owner.ID, ValidityDays: 30, OperationKey: "assign:first"}

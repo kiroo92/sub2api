@@ -11,6 +11,7 @@ export interface InvoiceQuote {
 export interface InvoiceInformation { tax_id: string; title: string; email: string; remarks: string }
 export interface CreateInvoiceRequest extends InvoiceInformation { order_ids: number[]; quote_fingerprint: string }
 export interface InvoiceSummary { id: number; status: InvoiceStatus; total_amount: number }
+export interface UnpaidInvoice { id: number; total_amount: number; service_fee: number; created_at: string }
 export interface InvoiceRequest extends InvoiceInformation {
   id: number; user_id: number; status: InvoiceStatus; quote: InvoiceQuote; payment?: CreateOrderResult
   created_at: string; expires_at: string; submitted_at: string | null; issued_at: string | null; issued_by: number | null

@@ -104,6 +104,13 @@ func (s *PaymentService) CancelOrder(ctx context.Context, orderID, userID int64)
 	if o.UserID != userID {
 		return "", infraerrors.Forbidden("FORBIDDEN", "no permission for this order")
 	}
+	if o.OrderType == payment.OrderTypeInvoiceFee && o.InvoiceRequestID != nil {
+		_, err := s.CancelInvoice(ctx, userID, *o.InvoiceRequestID)
+		if err != nil {
+			return "", err
+		}
+		return checkPaidResultCancelled, nil
+	}
 	if o.Status != OrderStatusPending {
 		return "", infraerrors.BadRequest("INVALID_STATUS", "order cannot be cancelled in current status")
 	}

@@ -35,6 +35,8 @@ func RegisterPaymentRoutes(
 		authenticated.GET("/limits", paymentHandler.GetLimits)
 		authenticated.POST("/subscription-quote", paymentHandler.QuoteSubscription)
 		authenticated.GET("/invoices/config", paymentHandler.GetInvoiceConfig)
+		authenticated.GET("/invoices/unpaid", paymentHandler.ListUnpaidInvoices)
+		authenticated.POST("/invoices/:id/cancel", paymentHandler.CancelInvoice)
 		authenticated.POST("/invoices/quote", paymentHandler.QuoteInvoice)
 		authenticated.POST("/invoices", paymentHandler.CreateInvoice)
 		authenticated.GET("/invoices/:id", paymentHandler.GetInvoice)

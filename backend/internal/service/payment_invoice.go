@@ -95,11 +95,25 @@ func normalizeInvoiceIDs(ids []int64) ([]int64, error) {
 }
 
 func (s *PaymentService) QuoteInvoice(ctx context.Context, uid int64, selection InvoiceSelection) (*InvoiceQuote, error) {
+	if err := s.requireNoUnpaidInvoice(ctx, s.entClient, uid); err != nil {
+		return nil, err
+	}
 	cfg, err := s.configService.GetInvoiceConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return quoteInvoice(ctx, s.entClient, uid, selection, *cfg, false)
+}
+
+func (s *PaymentService) requireNoUnpaidInvoice(ctx context.Context, client *dbent.Client, uid int64) error {
+	exists, err := client.InvoiceRequest.Query().Where(invoicerequest.UserIDEQ(uid), invoicerequest.StatusEQ(InvoiceAwaitingPayment)).Exist(ctx)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return infraerrors.Conflict("INVOICE_UNPAID_EXISTS", "cancel existing unpaid invoice applications before applying again")
+	}
+	return nil
 }
 
 func quoteInvoice(ctx context.Context, client *dbent.Client, uid int64, selection InvoiceSelection, cfg InvoiceConfig, lock bool) (*InvoiceQuote, error) {
@@ -260,6 +274,9 @@ func (s *PaymentService) CreateInvoice(ctx context.Context, uid int64, key strin
 		return nil, err
 	}
 	var cfg InvoiceConfig
+	if err := s.requireNoUnpaidInvoice(ctx, tx.Client(), uid); err != nil {
+		return nil, err
+	}
 	if err := json.Unmarshal([]byte(saved.Value), &cfg); err != nil {
 		return nil, err
 	}
@@ -335,7 +352,7 @@ func (s *PaymentService) GetInvoice(ctx context.Context, uid, id int64) (*Invoic
 }
 
 func invoicePaymentResponse(o *dbent.PaymentOrder) *CreateOrderResponse {
-	result := &CreateOrderResponse{InvoiceRequestID: o.InvoiceRequestID, OrderID: o.ID, Amount: o.Amount, PayAmount: o.PayAmount, Status: o.Status, PaymentType: o.PaymentType, OutTradeNo: o.OutTradeNo, Currency: PaymentOrderCurrency(o), ExpiresAt: o.ExpiresAt}
+	result := &CreateOrderResponse{ExistingPayment: true, InvoiceRequestID: o.InvoiceRequestID, OrderID: o.ID, Amount: o.Amount, PayAmount: o.PayAmount, Status: o.Status, PaymentType: o.PaymentType, OutTradeNo: o.OutTradeNo, Currency: PaymentOrderCurrency(o), ExpiresAt: o.ExpiresAt}
 	if o.PayURL != nil {
 		result.PayURL = *o.PayURL
 	}

@@ -1,8 +1,10 @@
 import { apiClient } from './client'
 import type { BasePaginationResponse } from '@/types'
-import type { CreateInvoiceRequest, InvoiceConfig, InvoiceListParams, InvoiceQuote, InvoiceRequest } from '@/types/invoice'
+import type { CreateInvoiceRequest, InvoiceConfig, InvoiceListParams, InvoiceQuote, InvoiceRequest, UnpaidInvoice } from '@/types/invoice'
 
 export const invoiceAPI = {
+  async unpaid() { return (await apiClient.get<UnpaidInvoice[]>('/payment/invoices/unpaid')).data },
+  async cancel(id: number) { return (await apiClient.post<InvoiceRequest>(`/payment/invoices/${id}/cancel`)).data },
   async config() { return (await apiClient.get<InvoiceConfig>('/payment/invoices/config')).data },
   async quote(selection: { selection: 'all' | 'selected'; order_ids?: number[] }) {
     return (await apiClient.post<InvoiceQuote>('/payment/invoices/quote', selection)).data

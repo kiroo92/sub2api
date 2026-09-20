@@ -59,7 +59,7 @@ func TestSubscriptionWSNativeAndBridgeSwitchKeepsClientConnected(t *testing.T) {
 					result <- err
 					return
 				}
-				defer conn.CloseNow()
+				defer func() { _ = conn.CloseNow() }()
 				_, first, err := conn.Read(ctx)
 				if err != nil {
 					result <- err
@@ -78,7 +78,7 @@ func TestSubscriptionWSNativeAndBridgeSwitchKeepsClientConnected(t *testing.T) {
 			}))
 			defer server.Close()
 			client := dialPassthroughLifecycleClientWithPayload(t, server, `{"type":"response.create","model":"gpt-5.1","input":[{"role":"user","content":"first"}]}`)
-			defer client.CloseNow()
+			defer func() { _ = client.CloseNow() }()
 			_, err := readPassthroughLifecycleFrame(t, client, 4*time.Second)
 			require.NoError(t, err)
 			require.NoError(t, client.Write(ctx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.1","previous_response_id":"resp_first","input":[{"role":"user","content":"second"}]}`)))

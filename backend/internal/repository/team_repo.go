@@ -25,7 +25,7 @@ func (r *teamRepository) transaction(ctx context.Context, fn func(*sql.Tx) error
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err = fn(tx); err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func (r *teamRepository) Snapshot(ctx context.Context, id int64) (*service.TeamS
 				var m service.TeamMember
 				var day, week, month *time.Time
 				if err = rows.Scan(&m.ID, &m.UserID, &m.Email, &m.Username, &m.Active, &m.Limits.Daily, &m.Limits.Weekly, &m.Limits.Monthly, &m.Usage.Daily, &m.Usage.Weekly, &m.Usage.Monthly, &m.Usage.Total, &day, &week, &month, &m.JoinedAt); err != nil {
-					rows.Close()
+					_ = rows.Close()
 					return err
 				}
 				m.Role = "member"
@@ -139,16 +139,19 @@ func (r *teamRepository) Snapshot(ctx context.Context, id int64) (*service.TeamS
 				}
 			}
 			err = rows.Err()
-			rows.Close()
+			closeErr := rows.Close()
 			if err != nil {
 				return err
+			}
+			if closeErr != nil {
+				return closeErr
 			}
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT i.id,i.team_id,t.name,i.email,i.status,i.expires_at,i.created_at FROM team_invitations i JOIN teams t ON t.id=i.team_id WHERE t.status!='dissolving' AND i.status='pending' AND (t.owner_id=$1 OR lower(i.email)=(SELECT lower(email) FROM users WHERE id=$1)) ORDER BY i.id`, id)
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var i service.TeamInvitation
 			if err := rows.Scan(&i.ID, &i.TeamID, &i.TeamName, &i.Email, &i.Status, &i.ExpiresAt, &i.CreatedAt); err != nil {
@@ -160,7 +163,10 @@ func (r *teamRepository) Snapshot(ctx context.Context, id int64) (*service.TeamS
 				out.PendingInvitations = append(out.PendingInvitations, i)
 			}
 		}
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return rows.Close()
 	})
 	return out, err
 }
@@ -321,7 +327,7 @@ func (r *teamRepository) Keys(ctx context.Context, id int64) ([]service.TeamKey,
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var k service.TeamKey
 			if err := rows.Scan(&k.ID, &k.MemberID, &k.UserID, &k.Name, &k.Key, &k.Status, &k.Usage, &k.CreatedAt, &k.Email, &k.LastUsedAt); err != nil {
@@ -329,7 +335,10 @@ func (r *teamRepository) Keys(ctx context.Context, id int64) ([]service.TeamKey,
 			}
 			out = append(out, k)
 		}
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return rows.Close()
 	})
 	return out, err
 }
@@ -458,15 +467,18 @@ func (r *teamRepository) Dissolve(ctx context.Context, id int64) error {
 			for rows.Next() {
 				var id int64
 				if err = rows.Scan(&id); err != nil {
-					rows.Close()
+					_ = rows.Close()
 					return err
 				}
 				ids[id] = true
 			}
 			err = rows.Err()
-			rows.Close()
+			closeErr := rows.Close()
 			if err != nil {
 				return err
+			}
+			if closeErr != nil {
+				return closeErr
 			}
 			if err = deleteTeamImageTaskCache(ctx, r.redis, ids); err != nil {
 				return err

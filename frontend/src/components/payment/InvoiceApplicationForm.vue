@@ -3,7 +3,17 @@
     <header class="flex flex-wrap items-center gap-4"><router-link to="/orders" class="text-sm text-primary-600">← {{ t('invoices.back') }}</router-link><h1 class="text-xl font-semibold text-gray-900 dark:text-white">{{ t('invoices.title') }}</h1></header>
     <p v-if="loading" class="py-8 text-center text-gray-500">{{ t('common.loading') }}</p>
     <div v-if="error" role="alert" class="rounded-xl bg-red-50 p-4 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">{{ error }} <button class="ml-2 underline" :disabled="loading || busy" @click="load()">{{ t('common.refresh') }}</button></div>
-    <template v-if="quote">
+    <section v-if="unpaid.length" class="card space-y-4 p-5" data-unpaid-invoices>
+      <p role="status" class="text-sm font-medium text-amber-700 dark:text-amber-300">{{ t('invoices.unpaidNotice') }}</p>
+      <div v-for="invoice in unpaid" :key="invoice.id" class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 p-4 dark:border-dark-600">
+        <div class="text-sm"><p class="font-medium">{{ t('invoices.applicationId') }} #{{ invoice.id }} · ¥{{ invoice.total_amount.toFixed(2) }}</p><p class="mt-1 text-xs text-gray-500">{{ t('invoices.serviceFee') }} ¥{{ invoice.service_fee.toFixed(2) }} · {{ formatDateTimeToMinute(invoice.created_at) }}</p></div>
+        <button class="btn btn-secondary btn-sm" :disabled="cancelling || busy" @click="cancelTarget = invoice.id">{{ t('invoices.cancelApplication') }}</button>
+      </div>
+      <button class="text-sm text-primary-600 underline" :disabled="loading || cancelling" @click="load()">{{ t('common.refresh') }}</button>
+    </section>
+    <section v-else-if="cancelled" class="card space-y-4 p-5" data-cancelled-invoice><p role="status">{{ t('invoices.cancelledHint') }}</p><button class="btn btn-primary" :disabled="loading" @click="startAgain">{{ t('invoices.applyAgain') }}</button></section>
+    <section v-else-if="empty" role="status" class="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500 dark:border-dark-600">{{ t('invoices.noOrders') }}</section>
+    <template v-else-if="quote">
       <div class="rounded-2xl border border-primary-200 bg-primary-50/60 p-5 dark:border-primary-900 dark:bg-primary-900/10">
         <dl class="space-y-3 text-sm">
           <div class="flex justify-between gap-3"><dt class="text-gray-500">{{ t('invoices.baseAmount') }}</dt><dd>¥{{ quote.base_amount.toFixed(2) }}</dd></div>
@@ -33,6 +43,7 @@
       <slot v-else name="payment" :quote="quote" :preparing="preparing" />
     </template>
     <BaseDialog :show="showPreview" :title="t('invoices.previewTitle')" @close="showPreview = false"><InvoicePreview v-if="quote" :quote="quote" :information="information" /></BaseDialog>
+    <BaseDialog :show="cancelTarget !== null" :title="t('invoices.cancelApplication')" :show-close-button="!cancelling" :close-on-escape="!cancelling" @close="!cancelling && (cancelTarget = null)"><p class="text-sm">{{ t('invoices.cancelConfirm') }}</p><template #footer><button class="btn btn-secondary" :disabled="cancelling" @click="cancelTarget = null">{{ t('common.cancel') }}</button><button class="btn btn-primary" :disabled="cancelling" @click="cancelApplication">{{ t(cancelling ? 'common.processing' : 'common.confirm') }}</button></template></BaseDialog>
   </div>
 </template>
 
@@ -41,10 +52,12 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { invoiceAPI } from '@/api/invoices'
-import { extractApiErrorMessage } from '@/utils/apiError'
-import type { CreateInvoiceRequest, InvoiceInformation, InvoiceQuote, InvoiceRequest } from '@/types/invoice'
+import { extractApiErrorCode, extractI18nErrorMessage } from '@/utils/apiError'
+import { formatDateTimeToMinute } from '@/utils/format'
+import type { CreateInvoiceRequest, InvoiceInformation, InvoiceQuote, InvoiceRequest, UnpaidInvoice } from '@/types/invoice'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import InvoicePreview from './InvoicePreview.vue'
+import { PAYMENT_RECOVERY_STORAGE_KEY, clearPaymentRecoverySnapshot, readPaymentRecoverySnapshot } from './paymentFlow'
 
 defineProps<{ busy?: boolean }>()
 const emit = defineEmits<{ quote: [quote: InvoiceQuote | null]; loaded: [invoice: InvoiceRequest] }>()
@@ -58,6 +71,11 @@ const informationForm = ref<HTMLFormElement | null>(null)
 const loading = ref(false)
 const preparing = ref(false)
 const error = ref('')
+const unpaid = ref<UnpaidInvoice[]>([])
+const cancelTarget = ref<number | null>(null)
+const cancelling = ref(false)
+const cancelled = ref(false)
+const empty = ref(false)
 const showPreview = ref(false)
 let requestKey = ''
 let requestPayload = ''
@@ -66,27 +84,31 @@ let selectAll = route.query.selection === 'all'
 
 async function load(ids?: number[]) {
   if (loading.value) return
-  loading.value = true; error.value = ''; quote.value = null; emit('quote', null)
+  loading.value = true; error.value = ''; quote.value = null; empty.value = false; emit('quote', null)
   try {
     const invoiceId = Number(route.query.invoice_request_id)
     if (invoiceId > 0) {
       saved.value = await invoiceAPI.get(invoiceId)
+      if (saved.value.status === 'awaiting_payment') { unpaid.value = await invoiceAPI.unpaid(); return }
+      unpaid.value = []
       Object.assign(information, { tax_id: saved.value.tax_id, title: saved.value.title, email: saved.value.email, remarks: saved.value.remarks })
       quote.value = saved.value.quote
       emit('loaded', saved.value)
     } else {
+      unpaid.value = await invoiceAPI.unpaid()
+      if (unpaid.value.length || cancelled.value) return
       if (ids) { selectedIds = ids; selectAll = false }
       quote.value = await invoiceAPI.quote(selectAll ? { selection: 'all' } : { selection: 'selected', order_ids: selectedIds })
       selectedIds = quote.value.orders.map(order => order.id)
       selectAll = false
     }
     emit('quote', quote.value)
-  } catch (err) { error.value = extractApiErrorMessage(err, t('invoices.loadFailed')) }
+  } catch (err) { await showInvoiceError(err, 'invoices.loadFailed') }
   finally { loading.value = false }
 }
 async function remove(id: number) {
   const ids = quote.value?.orders.filter(order => order.id !== id).map(order => order.id) ?? []
-  if (!ids.length) { selectedIds = []; selectAll = false; quote.value = null; emit('quote', null); error.value = t('invoices.noOrders'); return }
+  if (!ids.length) { selectedIds = []; selectAll = false; quote.value = null; emit('quote', null); empty.value = true; return }
   await load(ids)
 }
 function validInformation() {
@@ -95,6 +117,7 @@ function validInformation() {
 }
 function preview() { if (saved.value || validInformation()) showPreview.value = true }
 async function prepare(): Promise<InvoiceRequest | null> {
+  if (unpaid.value.length || cancelling.value || cancelled.value) return null
   if (saved.value) return saved.value
   if (!quote.value || preparing.value || loading.value || !validInformation()) return null
   const payload: CreateInvoiceRequest = { ...information, order_ids: quote.value.orders.map(order => order.id), quote_fingerprint: quote.value.fingerprint }
@@ -107,9 +130,38 @@ async function prepare(): Promise<InvoiceRequest | null> {
     await router.replace({ path: '/orders/invoice', query: { invoice_request_id: String(saved.value.id) } })
     emit('loaded', saved.value)
     return saved.value
-  } catch (err) { error.value = extractApiErrorMessage(err, t('invoices.applyFailed')); return null }
+  } catch (err) { await showInvoiceError(err, 'invoices.applyFailed'); return null }
   finally { preparing.value = false }
 }
-defineExpose({ prepare })
+async function showInvoiceError(err: unknown, fallback: string) {
+  const code = extractApiErrorCode(err)
+  if (code === 'INVOICE_NO_ORDERS') { empty.value = true; return }
+  error.value = code?.startsWith('INVOICE_') ? extractI18nErrorMessage(err, t, 'invoices.errors', t(fallback)) : t(fallback)
+  if (code === 'INVOICE_UNPAID_EXISTS') {
+    try { unpaid.value = await invoiceAPI.unpaid(); if (unpaid.value.length) error.value = '' } catch { /* Keep the original localized error. */ }
+  }
+}
+async function cancelApplication() {
+  if (cancelTarget.value === null || cancelling.value) return
+  cancelling.value = true; error.value = ''
+  const id = cancelTarget.value
+  try {
+    await invoiceAPI.cancel(id)
+    const recovery = readPaymentRecoverySnapshot(localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY))
+    if (recovery?.orderType === 'invoice_fee' && recovery.invoiceRequestId === id) clearPaymentRecoverySnapshot(localStorage)
+    unpaid.value = unpaid.value.filter(invoice => invoice.id !== id)
+    cancelled.value = true
+    saved.value = null; quote.value = null; emit('quote', null)
+    unpaid.value = await invoiceAPI.unpaid()
+  } catch (err) { await showInvoiceError(err, 'invoices.cancelFailed') }
+  finally { cancelling.value = false; cancelTarget.value = null }
+}
+async function startAgain() {
+  if (loading.value || unpaid.value.length) return
+  await router.replace({ path: '/orders/invoice', query: { selection: 'all' } })
+  saved.value = null; cancelled.value = false; selectedIds = []; selectAll = true; requestKey = ''; requestPayload = ''
+  await load()
+}
+defineExpose({ prepare, reload: load })
 onMounted(() => { void load() })
 </script>

@@ -21,6 +21,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/migrations"
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -319,6 +320,77 @@ func TestInvoicePostgres(t *testing.T) {
 		require.NotNil(t, racePayment.PaidAt)
 		require.Zero(t, n)
 	}
+	// Opening the page only lists owned unpaid applications; cancellation is explicit.
+	newDraft := func(key string) *InvoiceResult {
+		origin := source(owner.ID, 12)
+		preview, e := service.QuoteInvoice(ctx, owner.ID, InvoiceSelection{Selection: "selected", OrderIDs: []int64{origin.ID}})
+		require.NoError(t, e)
+		input := req
+		input.OrderIDs = []int64{origin.ID}
+		input.QuoteFingerprint = preview.Fingerprint
+		application, e := service.CreateInvoice(ctx, owner.ID, key, input)
+		require.NoError(t, e)
+		return application
+	}
+	newFee := func(application *InvoiceResult) *dbent.PaymentOrder {
+		input := CreateOrderRequest{UserID: owner.ID, OrderType: payment.OrderTypeInvoiceFee, InvoiceRequestID: application.ID, PaymentType: payment.TypeAlipay}
+		_, e := service.prepareInvoicePayment(ctx, &input)
+		require.NoError(t, e)
+		row, e := service.createOrderInTx(ctx, input, user, nil, &PaymentConfig{MaxPendingOrders: 100}, 38, 38, 0, 38, nil)
+		require.NoError(t, e)
+		return row
+	}
+	draft := newDraft("manual-no-payment")
+	queryCount, cancelCount := provider.queryCalls, provider.cancelCalls
+	unpaidApplications, err := service.ListUnpaidInvoices(ctx, owner.ID)
+	require.NoError(t, err)
+	require.Len(t, unpaidApplications, 1)
+	require.Equal(t, draft.ID, unpaidApplications[0].ID)
+	otherApplications, err := service.ListUnpaidInvoices(ctx, other.ID)
+	require.NoError(t, err)
+	require.Empty(t, otherApplications)
+	require.Equal(t, queryCount, provider.queryCalls)
+	require.Equal(t, cancelCount, provider.cancelCalls)
+	_, err = service.QuoteInvoice(ctx, owner.ID, InvoiceSelection{Selection: "all"})
+	require.Equal(t, "INVOICE_UNPAID_EXISTS", infraerrors.Reason(err))
+	_, err = service.CancelInvoice(ctx, other.ID, draft.ID)
+	require.Equal(t, "INVOICE_NOT_FOUND", infraerrors.Reason(err))
+	cancelled, err := service.CancelInvoice(ctx, owner.ID, draft.ID)
+	require.NoError(t, err)
+	require.Equal(t, InvoiceCancelled, cancelled.Status)
+	_, err = service.CancelInvoice(ctx, owner.ID, draft.ID)
+	require.NoError(t, err)
+	noPayments, err := client.PaymentOrder.Query().Where(paymentorder.InvoiceRequestIDEQ(draft.ID)).Count(ctx)
+	require.NoError(t, err)
+	require.Zero(t, noPayments)
+	require.Equal(t, queryCount, provider.queryCalls)
+	require.Equal(t, cancelCount, provider.cancelCalls)
+
+	unknown := newDraft("manual-unknown-payment")
+	unknownFee := newFee(unknown)
+	provider.resp = &payment.QueryOrderResponse{Status: payment.ProviderStatusPending, TradeNo: unknownFee.OutTradeNo}
+	_, err = service.CancelInvoice(ctx, owner.ID, unknown.ID)
+	require.Equal(t, "INVOICE_CANCEL_UNCONFIRMED", infraerrors.Reason(err))
+	retained, err := service.GetInvoice(ctx, owner.ID, unknown.ID)
+	require.NoError(t, err)
+	require.Equal(t, InvoiceAwaitingPayment, retained.Status)
+	provider.resp.Closed = true
+	_, err = service.CancelOrder(ctx, unknownFee.ID, owner.ID)
+	require.NoError(t, err, "cancellation from My Orders also releases the invoice after proven closure")
+	retained, err = service.GetInvoice(ctx, owner.ID, unknown.ID)
+	require.NoError(t, err)
+	require.Equal(t, InvoiceCancelled, retained.Status)
+
+	paidDuringCancel := newDraft("manual-paid-payment")
+	paidFee := newFee(paidDuringCancel)
+	provider.resp = &payment.QueryOrderResponse{Status: payment.ProviderStatusPaid, TradeNo: paidFee.OutTradeNo, Amount: 38}
+	_, err = service.CancelInvoice(ctx, owner.ID, paidDuringCancel.ID)
+	require.Equal(t, "INVOICE_ALREADY_PAID", infraerrors.Reason(err))
+	paidApplication, err := service.GetInvoice(ctx, owner.ID, paidDuringCancel.ID)
+	require.NoError(t, err)
+	require.Equal(t, InvoicePending, paidApplication.Status)
+	_, err = service.CancelInvoice(ctx, owner.ID, created.ID)
+	require.Equal(t, "INVOICE_ALREADY_PAID", infraerrors.Reason(err))
 	_, err = db.ExecContext(ctx, string(migration))
 	require.NoError(t, err, "migration replay preserves invoice history")
 	paidOrders, err := client.PaymentOrder.Query().Where(paymentorder.InvoiceRequestIDEQ(created.ID)).Count(ctx)

@@ -94,6 +94,7 @@ type CreateOrderRequest struct {
 }
 
 type CreateOrderResponse struct {
+	ExistingPayment               bool                            `json:"existing_payment,omitempty"`
 	InvoiceRequestID              *int64                          `json:"invoice_request_id,omitempty"`
 	Discount                      *PaymentDiscount                `json:"discount,omitempty"`
 	OrderID                       int64                           `json:"order_id"`

@@ -5,16 +5,19 @@ import { parseWechatResumeRoute, stripWechatResumeQuery } from '../paymentWechat
 import { PAYMENT_RECOVERY_STORAGE_KEY } from '@/components/payment/paymentFlow'
 import type { InvoiceQuote } from '@/types/invoice'
 
-const mocks = vi.hoisted(() => ({ quote: vi.fn(), get: vi.fn(), createInvoice: vi.fn(), createOrder: vi.fn(), refreshUser: vi.fn(), replace: vi.fn(), showError: vi.fn(),
+const mocks = vi.hoisted(() => ({ unpaid: vi.fn(), cancel: vi.fn(), quote: vi.fn(), get: vi.fn(), createInvoice: vi.fn(), createOrder: vi.fn(), refreshUser: vi.fn(), replace: vi.fn(), showError: vi.fn(),
   route: { path: '/orders/invoice', query: { selection: 'all' } as Record<string, string> },
 }))
 vi.mock('vue-router', async (original) => ({ ...await original<typeof import('vue-router')>(), useRoute: () => mocks.route, useRouter: () => ({ replace: mocks.replace, push: vi.fn(), resolve: () => ({ href: '/payment/mock' }) }) }))
-vi.mock('vue-i18n', async (original) => ({ ...await original<typeof import('vue-i18n')>(), useI18n: () => ({ t: (key: string) => key, locale: 'en' }) }))
+vi.mock('vue-i18n', async (original) => {
+  const { default: messages } = await import('@/i18n/locales/zh/invoices')
+  return { ...await original<typeof import('vue-i18n')>(), useI18n: () => ({ t: (key: string) => key.startsWith('invoices.errors.') ? messages.errors[key.slice('invoices.errors.'.length) as keyof typeof messages.errors] ?? key : key, locale: 'zh' }) }
+})
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: { balance: 0 }, refreshUser: mocks.refreshUser }) }))
 vi.mock('@/stores', () => ({ useAppStore: () => ({ cachedPublicSettings: { subscription_enabled: false }, showError: mocks.showError, showInfo: vi.fn(), showWarning: vi.fn() }) }))
 vi.mock('@/stores/subscriptions', () => ({ useSubscriptionStore: () => ({ activeSubscriptions: [], fetchActiveSubscriptions: vi.fn() }) }))
 vi.mock('@/stores/payment', () => ({ usePaymentStore: () => ({ createOrder: mocks.createOrder }) }))
-vi.mock('@/api/invoices', () => ({ invoiceAPI: { quote: mocks.quote, get: mocks.get, create: mocks.createInvoice } }))
+vi.mock('@/api/invoices', () => ({ invoiceAPI: { unpaid: mocks.unpaid, cancel: mocks.cancel, quote: mocks.quote, get: mocks.get, create: mocks.createInvoice } }))
 vi.mock('@/api/payment', () => ({ paymentAPI: { getCheckoutInfo: async () => ({ data: {
   methods: { wxpay: { currency: 'CNY', available: true, single_min: 0, single_max: 0 }, stripe: { currency: 'USD', available: true } },
   plans: [], global_min: 100, global_max: 10000, balance_disabled: true, balance_recharge_multiplier: 20, recharge_fee_rate: 15,
@@ -22,14 +25,18 @@ vi.mock('@/api/payment', () => ({ paymentAPI: { getCheckoutInfo: async () => ({ 
 vi.mock('@/utils/device', () => ({ isMobileDevice: () => false }))
 
 const quote: InvoiceQuote = { orders: [{ id: 1, order_no: '000000123', order_type: 'balance', name: '', amount: 311.5 }], currency: 'CNY', base_amount: 311.5, service_fee: 38, total_amount: 349.5, net_amount: 339.32, tax_amount: 10.18, item_name: 'Technical services', tax_rate: 3, tier: { upper_amount: null, type: 'fixed', value: 38 }, fingerprint: 'quote-1' }
+const unpaidInvoice = { id: 77, total_amount: 349.5, service_fee: 38, created_at: '2026-09-20T00:00:00Z' }
 let wrapper: VueWrapper | undefined
 beforeEach(() => {
-  vi.clearAllMocks(); localStorage.clear()
+  vi.clearAllMocks(); localStorage.clear(); sessionStorage.clear()
   mocks.route.query = { selection: 'all' }
   mocks.quote.mockResolvedValue(quote)
+  mocks.unpaid.mockReset().mockResolvedValue([])
+  mocks.cancel.mockReset().mockResolvedValue({ id: 77, status: 'cancelled' })
+  mocks.get.mockResolvedValue({ id: 77, status: 'awaiting_payment', quote, tax_id: '00123', title: 'Example', email: 'billing@example.com', remarks: '' })
   mocks.createInvoice.mockResolvedValue({ id: 77, status: 'awaiting_payment', quote })
   mocks.createOrder.mockResolvedValue({ order_id: 999, invoice_request_id: 77, amount: 38, pay_amount: 38, fee_rate: 0, currency: 'CNY', expires_at: '2099-01-01T00:00:00Z', qr_code: 'invoice-qr', payment_type: 'wxpay' })
-  mocks.replace.mockResolvedValue(undefined)
+  mocks.replace.mockImplementation(async (target: { query: Record<string, string> }) => { mocks.route.query = target.query })
 })
 afterEach(() => { wrapper?.unmount() })
 async function open() {
@@ -46,6 +53,93 @@ async function fill(w: VueWrapper) {
   await w.get('#invoice-email').setValue('billing@example.com')
 }
 describe('invoice checkout using the real shared payment view', () => {
+  it('only reads unpaid applications on opening and requires explicit cancellation and a separate new application action', async () => {
+    mocks.unpaid.mockResolvedValueOnce([unpaidInvoice]).mockResolvedValue([])
+    const w = await open()
+    expect(w.get('[data-unpaid-invoices]').text()).toContain('invoices.unpaidNotice')
+    expect(mocks.quote).not.toHaveBeenCalled()
+    expect(mocks.cancel).not.toHaveBeenCalled()
+    expect(mocks.createInvoice).not.toHaveBeenCalled()
+    expect(mocks.createOrder).not.toHaveBeenCalled()
+    await w.findAll('button').find(b => b.text() === 'invoices.cancelApplication')!.trigger('click')
+    expect(mocks.cancel).not.toHaveBeenCalled()
+    await w.findAll('button').find(b => b.text() === 'common.confirm')!.trigger('click'); await flushPromises()
+    expect(mocks.cancel).toHaveBeenCalledWith(77)
+    expect(w.get('[data-cancelled-invoice]').text()).toContain('invoices.cancelledHint')
+    expect(mocks.quote).not.toHaveBeenCalled()
+    expect(mocks.createInvoice).not.toHaveBeenCalled()
+    expect(mocks.createOrder).not.toHaveBeenCalled()
+    await w.findAll('button').find(b => b.text() === 'invoices.applyAgain')!.trigger('click'); await flushPromises()
+    expect(mocks.quote).toHaveBeenCalledWith({ selection: 'all' })
+    expect(mocks.createInvoice).not.toHaveBeenCalled()
+    expect(mocks.createOrder).not.toHaveBeenCalled()
+  })
+  it('does not restore an old invoice payment window from browser storage', async () => {
+    mocks.route.query = { invoice_request_id: '77' }
+    mocks.unpaid.mockResolvedValue([unpaidInvoice])
+    localStorage.setItem(PAYMENT_RECOVERY_STORAGE_KEY, JSON.stringify({ orderId: 999, invoiceRequestId: 77, orderType: 'invoice_fee', amount: 38, payAmount: 38, qrCode: 'old-qr', expiresAt: '2099-01-01T00:00:00Z', paymentType: 'wxpay', payUrl: 'https://pay.example.com/old', clientSecret: '', intentId: '', currency: 'CNY', countryCode: '', paymentEnv: '', paymentMode: 'redirect', resumeToken: '', createdAt: Date.now() }))
+    const w = await open()
+    expect(w.find('[data-payment]').exists()).toBe(false)
+    expect(w.find('[data-unpaid-invoices]').exists()).toBe(true)
+    expect(mocks.createOrder).not.toHaveBeenCalled()
+    expect(mocks.cancel).not.toHaveBeenCalled()
+  })
+  it('shows the cancellation gate instead of reopening a replayed pending payment', async () => {
+    const openWindow = vi.spyOn(window, 'open').mockReturnValue(null)
+    mocks.unpaid.mockResolvedValueOnce([]).mockResolvedValue([unpaidInvoice])
+    mocks.createOrder.mockResolvedValue({ existing_payment: true, invoice_request_id: 77, order_id: 999, amount: 38, pay_amount: 38, fee_rate: 0, status: 'PENDING', payment_type: 'wxpay', pay_url: 'https://pay.example.com/old', expires_at: '2099-01-01T00:00:00Z' })
+    const w = await open(); await fill(w)
+    await w.findAll('button').find(b => b.text().includes('invoices.pay'))!.trigger('click'); await flushPromises()
+    expect(w.find('[data-unpaid-invoices]').exists()).toBe(true)
+    expect(w.find('[data-payment]').exists()).toBe(false)
+    expect(openWindow).not.toHaveBeenCalled()
+    openWindow.mockRestore()
+  })
+  it('keeps an unconfirmed cancellation reserved and shows the Chinese error', async () => {
+    mocks.unpaid.mockResolvedValue([unpaidInvoice])
+    mocks.cancel.mockRejectedValue({ reason: 'INVOICE_CANCEL_UNCONFIRMED', message: 'payment closure has not been confirmed' })
+    const w = await open()
+    await w.findAll('button').find(b => b.text() === 'invoices.cancelApplication')!.trigger('click')
+    await w.findAll('button').find(b => b.text() === 'common.confirm')!.trigger('click'); await flushPromises()
+    expect(w.get('[role="alert"]').text()).toContain('支付渠道尚未确认关单')
+    expect(w.text()).not.toContain('payment closure has not been confirmed')
+    expect(w.find('[data-unpaid-invoices]').exists()).toBe(true)
+    expect(mocks.createOrder).not.toHaveBeenCalled()
+  })
+  it('renders no eligible orders as a localized empty state', async () => {
+    mocks.quote.mockRejectedValueOnce({ reason: 'INVOICE_NO_ORDERS', message: 'no eligible orders to invoice' })
+    const w = await open()
+    expect(w.text()).toContain('invoices.noOrders')
+    expect(w.text()).not.toContain('no eligible orders to invoice')
+    expect(w.find('[role="alert"]').exists()).toBe(false)
+  })
+  it('localizes configuration failures instead of displaying the backend message', async () => {
+    mocks.quote.mockRejectedValueOnce({ reason: 'INVOICE_CONFIG_INVALID', message: 'complete the invoice item, tax rate and ordered fee tiers' })
+    const w = await open()
+    expect(w.get('[role="alert"]').text()).toContain('开票配置不完整')
+    expect(w.text()).not.toContain('complete the invoice')
+  })
+  it('also localizes an invoice error from the shared payment creation path', async () => {
+    mocks.createOrder.mockRejectedValueOnce({ reason: 'INVOICE_NOT_PAYABLE', message: 'invoice application is no longer payable' })
+    const w = await open(); await fill(w)
+    await w.findAll('button').find(b => b.text().includes('invoices.pay'))!.trigger('click'); await flushPromises()
+    expect(mocks.showError).toHaveBeenCalledWith(expect.stringContaining('该开票申请已过期或取消'))
+    expect(w.text()).not.toContain('invoice application is no longer payable')
+  })
+  it('does not automatically execute a stale WeChat return without a current user-initiated authorization', async () => {
+    mocks.route.query = { invoice_request_id: '77', order_type: 'invoice_fee', wechat_resume_token: 'old-signed-token', wechat_resume: '1' }
+    mocks.unpaid.mockResolvedValue([unpaidInvoice])
+    const w = await open()
+    expect(mocks.createOrder).not.toHaveBeenCalled()
+    expect(w.find('[data-unpaid-invoices]').exists()).toBe(true)
+  })
+  it('finishes the signed WeChat authorization for a payment the user just initiated', async () => {
+    mocks.route.query = { invoice_request_id: '77', order_type: 'invoice_fee', wechat_resume_token: 'new-signed-token', wechat_resume: '1' }
+    sessionStorage.setItem('payment.invoice.oauth.intent', '77')
+    await open()
+    expect(mocks.createOrder).toHaveBeenCalledWith(expect.objectContaining({ order_type: 'invoice_fee', invoice_request_id: 77, wechat_resume_token: 'new-signed-token' }))
+    expect(sessionStorage.getItem('payment.invoice.oauth.intent')).toBeNull()
+  })
   it('previews an inclusive invoice and pays only the service fee when recharge/subscriptions are disabled', async () => {
     const w = await open()
     expect(mocks.quote).toHaveBeenCalledWith({ selection: 'all' })

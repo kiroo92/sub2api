@@ -4,12 +4,15 @@
 
 Users start from My Orders: **Invoice all** selects every eligible order across pages, while **Select orders** selects complete orders. Amounts are CNY; partial invoices and editable order amounts are not supported. Tax ID, buyer name and email are required; remarks are optional. The preview includes the service fee in the final invoice amount.
 
+Opening the invoice page first checks for unpaid applications. If any exist, show them with a localized notice and a **Cancel application** button. Cancellation requires the user's confirmation; opening or refreshing the page never cancels, recreates or resumes an old payment. After cancellation succeeds, the user clicks **Apply again** to request a fresh quote. Truly empty eligibility is a normal empty state, not an English error message.
+
 Administrators configure and process applications at `/admin/orders/invoices` under payment management. The feature defaults off. Set the item name, invoice tax rate and fee tiers, then enable applications. Administrators can filter, export selected/all filtered applications to Excel, and mark paid applications issued individually or in a batch. Export alone never changes invoice status. Email is exported for manual delivery; there is no automated issuance, email delivery, rejection, refund, upload/download or red-letter invoice workflow.
 
 ## 2. Interfaces and persistence
 
 - Setting `payment_invoice_config`: `{enabled, item_name, tax_rate, tiers:[{upper_amount:number|null,type:"fixed"|"percentage",value:number}]}`. PUT replaces the complete configuration.
 - User endpoints: `GET /api/v1/payment/invoices/config`, `POST /invoices/quote` with `{selection:"all"|"selected",order_ids?}`, `POST /invoices` with `{order_ids,tax_id,title,email,remarks,quote_fingerprint}` and `Idempotency-Key`, `GET /invoices/:id` for the owner.
+- `GET /api/v1/payment/invoices/unpaid` is a read-only owned summary list; `POST /invoices/:id/cancel` performs explicit owned cancellation. User cancellation of an invoice fee through the existing payment-order endpoint uses the same invoice cancellation operation.
 - Existing `POST /api/v1/payment/orders` supports `order_type:"invoice_fee"` and `invoice_request_id`. The fee comes from the saved application, never from a client-provided arbitrary amount.
 - Admin endpoints under `/api/v1/admin/payment/invoices`: `GET/PUT /config`, `GET /`, `GET /:id`, `POST /mark-issued` with `{ids:[...]}`. Filters include status, search, user ID, start_date and end_date (UTC YYYY-MM-DD). Lists contain submitted/issued applications, not unpaid drafts.
 - Migration `245_order_invoicing.sql` adds `invoice_requests`, `invoice_request_orders` and nullable unique `payment_orders.invoice_request_id`. A partial unique index on unreleased source order IDs prevents overlapping active applications. Monetary and invoice-order type checks are enforced in SQL. Ent code is generated using the existing `go generate ./ent` entry point.
@@ -31,6 +34,8 @@ Invoice gross G = B + F. For invoice tax rate r: net N = round(G / (1 + r / 100)
 
 Quote is read-only. CreateInvoice keeps an actor-scoped operation marker/fingerprint and atomically stores the request and its source order lines. Creation takes the invoice configuration row lock, rechecks the operation marker, and locks source orders in ascending ID order. It deliberately avoids a user row lock to prevent lock inversion with existing order/user refund transactions. This serializes new applications on a small configuration row; no Redis counter or extra scheduler is introduced.
 
+New quotes/applications are blocked while the user has an outstanding unpaid application. A replay of the same application operation still returns its original record. The database check inside the creation lock prevents concurrent tabs from creating distinct unpaid applications after both observed an empty list.
+
 The application state is `awaiting_payment → pending → issued`. `cancelled` is only unpaid payment cleanup, not an admin rejection flow. Creating the fee order locks the application and writes the unique payment binding before invoking a provider. Replays return the existing order identity/state; they never call the provider again. Backend fulfillment, direct balance/subscription entry points and refund preparation dispatch explicitly by order type.
 
 Verified fee payments atomically complete their payment order and submit their application. The amount must match the saved fee exactly to the cent. Repeated/concurrent callbacks or administrator retries do not issue multiple invoices, credit balance, create redemption codes, issue subscriptions or grant affiliate rebates. Manual issued marking requires a completed, paid fee order, records the real admin actor/time, and is idempotent.
@@ -39,7 +44,11 @@ Local cancellation, expiry and create failure are not proof that the provider ca
 
 ### Recovery and compatibility
 
-The invoice route reuses PaymentView, PaymentStatusPanel, paymentFlow and existing SDK pages. Browser recovery and the signed WeChat flow retain invoice_fee and the request ID. Buyer data is not carried in URLs/OAuth tokens. Shared idempotency response storage redacts client_secret: use it for application creation only, not for raw SDK payment replay. If browser SDK material is lost, query/cancel the original payment rather than silently creating a replacement; existing persisted QR/URL can be reused. A settled/cancelled replay must not reopen its provider URL.
+The invoice route reuses PaymentView, PaymentStatusPanel, paymentFlow and existing SDK pages. The deployed provider cannot reuse the same payment after its window closes, so the invoice page does not restore old payment snapshots and its status panel does not offer reopening old windows. An existing-payment response is marked `existing_payment:true`; the frontend shows the cancellation gate instead of relaunching it, including when its status is still PENDING.
+
+The signed WeChat flow retains invoice_fee and the request ID. Automatic continuation is limited to the user's just-initiated OAuth handoff, recorded as a one-use tab session intent (`payment.invoice.oauth.intent`); stale returns without that intent only show the application gate. This intent is a UI guard, not authorization: the server still checks signed context and invoice ownership. Buyer data is not carried in URLs/OAuth tokens. Shared idempotency response storage redacts client_secret, so it is used for application creation only. Ordinary recharge/subscription recovery is unchanged.
+
+Explicit cancellation may immediately release a draft with no payment binding. If a payment exists, use the bound provider's paid/closed evidence; confirmed paid applications cannot be cancelled, and an unknown closure retains reservations with a localized explanation. Successful cancellation clears only the matching invoice browser snapshot and never automatically creates another application or payment.
 
 Disabling new invoicing does not prevent an existing application from completing payment or being marked issued. Original recharge/subscription refunds remain unchanged and do not rewrite invoice snapshots; invoice-fee refunds are explicitly unsupported. Do not roll back to an old binary that defaults unknown order types to balance while invoice_fee orders exist. Disable new applications for a controlled rollback instead of deleting records.
 
@@ -48,6 +57,9 @@ Disabling new invoicing does not prevent an existing application from completing
 | Condition | Result |
 | --- | --- |
 | Empty/foreign/unpaid/already reserved source selection | INVOICE_SELECTION_INVALID / INVOICE_ORDER_UNAVAILABLE / INVOICE_NO_ORDERS |
+| Outstanding unpaid application | INVOICE_UNPAID_EXISTS; cancel explicitly before applying again |
+| Paid application cancellation | INVOICE_ALREADY_PAID; no release |
+| Cancellation without confirmed payment closure | INVOICE_CANCEL_UNCONFIRMED; retain reservation |
 | Unsupported currency or inconsistent fee | INVOICE_CURRENCY_INVALID / INVOICE_AMOUNT_INVALID |
 | Missing buyer fields or invalid email | INVOICE_INFO_INVALID |
 | Invalid tiers or tax configuration | INVOICE_CONFIG_INVALID |
@@ -73,6 +85,8 @@ Disabling new invoicing does not prevent an existing application from completing
 For real PostgreSQL checks set `INVOICE_TEST_DATABASE_URL` exclusively to a disposable database, then run `go test -tags=unit ./internal/service -run '^TestInvoice' -count=1`. The test creates/drops its own schema and covers migration replay, 31-order selection, price drift, ownership, competing applications, duplicate fee creation, parallel notifications, zero balance/subscription/redemption effects, manual issuance, provider closure and release/payment races.
 
 Frontend: typecheck, lint:check, InvoicePayment, AdminInvoicesView, invoiceExport, PaymentView, paymentFlow, paymentWechatResume, callback/result/status panel, UserOrdersView and locale tests, then build. Workbook tests round-trip a real XLSX to verify identifiers stay text and user strings are not formulas. Browser screenshot review is separate; do not equate component tests with visual QA.
+
+The unpaid-cancellation regressions verify read-only entry, explicit confirmation, no automatic quote/create after cancellation, rejected stale WeChat/browser recovery, localized errors, and fresh authorized OAuth continuation. PostgreSQL checks cover no-payment cancellation, ownership, repetition, uncertain provider closure, paid-during-cancel and cancellation through My Orders. Run the complete backend `golangci-lint run --timeout=30m` using the CI workflow's version; frontend ESLint and Go test/build do not replace it.
 
 ## 7. Wrong vs correct
 

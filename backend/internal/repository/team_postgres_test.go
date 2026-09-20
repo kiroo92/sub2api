@@ -38,10 +38,10 @@ func TestTeamPostgresMembershipBillingAndCleanup(t *testing.T) {
 	require.NoError(t, err)
 	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
 	t.Cleanup(func() {
-		client.Close()
+		require.NoError(t, client.Close())
 		_, err := base.ExecContext(ctx, "DROP SCHEMA "+schema+" CASCADE")
 		require.NoError(t, err)
-		base.Close()
+		require.NoError(t, base.Close())
 	})
 	require.NoError(t, client.Schema.Create(ctx))
 	// The shared usage writer also consumes SQL-only fields not modeled by Ent.
@@ -276,7 +276,7 @@ CREATE TRIGGER reject_team_test_debit BEFORE UPDATE OF balance ON users FOR EACH
 	// rather than create a key that could become valid on a later rejoin.
 	removal, err := db.BeginTx(ctx, nil)
 	require.NoError(t, err)
-	defer removal.Rollback()
+	defer func() { _ = removal.Rollback() }()
 	_, err = removal.ExecContext(ctx, `SELECT id FROM teams WHERE id=$1 FOR UPDATE`, a.TeamID)
 	require.NoError(t, err)
 	raceCtx, cancel := context.WithTimeout(ctx, 10*time.Second)

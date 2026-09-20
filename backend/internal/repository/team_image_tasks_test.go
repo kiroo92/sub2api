@@ -13,7 +13,7 @@ import (
 func TestDeleteTeamImageTaskCachePreservesPersonalTasks(t *testing.T) {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	defer rdb.Close()
+	t.Cleanup(func() { require.NoError(t, rdb.Close()) })
 	store := NewImageTaskStore(rdb)
 	ctx := context.Background()
 	require.NoError(t, store.Save(ctx, &service.ImageTaskRecord{ID: "team", APIKeyID: 1}, time.Hour))

@@ -142,6 +142,14 @@ describe('PaymentStatusPanel', () => {
     openSpy.mockRestore()
   })
 
+  it('does not offer to reopen a hosted invoice payment', async () => {
+    pollOrderStatus.mockResolvedValue({ ...orderFactory('PENDING'), order_type: 'invoice_fee' })
+    const wrapper = mount(PaymentStatusPanel, { props: { orderId: 42, orderType: 'invoice_fee', paymentType: 'alipay', payUrl: 'https://pay.example.com/old-invoice', qrCode: 'old-qr', expiresAt: '2099-01-01T12:30:00Z' }, global: { stubs: { Icon: true } } })
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('payment.qr.openPayWindow')
+    wrapper.unmount()
+  })
+
   it('uses generic QR copy for custom methods that contain built-in names', async () => {
     const wrapper = mount(PaymentStatusPanel, {
       props: {

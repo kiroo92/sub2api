@@ -65,3 +65,34 @@ func (h *PaymentHandler) GetInvoice(c *gin.Context) {
 	}
 	response.Success(c, invoice)
 }
+
+func (h *PaymentHandler) ListUnpaidInvoices(c *gin.Context) {
+	subject, ok := requireAuth(c)
+	if !ok {
+		return
+	}
+	items, err := h.paymentService.ListUnpaidInvoices(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, items)
+}
+
+func (h *PaymentHandler) CancelInvoice(c *gin.Context) {
+	subject, ok := requireAuth(c)
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "Invalid invoice ID")
+		return
+	}
+	result, err := h.paymentService.CancelInvoice(c.Request.Context(), subject.UserID, id)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}

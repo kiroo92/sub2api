@@ -16,7 +16,8 @@ func TestMultiSubscriptionCreateReorderAndFixedGroupIsolation(t *testing.T) {
 	u := mustCreateAPIKeyRepoUser(t, ctx, client, "multi@example.com")
 	g, err := client.Group.Create().SetName("multi").SetSubscriptionType(service.SubscriptionTypeSubscription).Save(ctx)
 	require.NoError(t, err)
-	r := NewUserSubscriptionRepository(client).(*userSubscriptionRepository)
+	r, ok := NewUserSubscriptionRepository(client).(*userSubscriptionRepository)
+	require.True(t, ok)
 	create := func() *service.UserSubscription {
 		sub := &service.UserSubscription{UserID: u.ID, GroupID: g.ID, StartsAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour), Status: service.SubscriptionStatusActive}
 		require.NoError(t, r.Create(ctx, sub))
