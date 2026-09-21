@@ -1,11 +1,10 @@
 export default {
   unpaidNotice: 'You have unpaid invoice applications. Cancel them before applying again.', cancelApplication: 'Cancel application',
-  cancelConfirm: 'Cancel this unpaid invoice application? Payment status will be checked before cancellation releases the orders.',
+  cancelConfirm: 'Cancel this unpaid invoice application and its local service fee order? The selected orders will be released so you can apply again and create a new payment order.',
   cancelledHint: 'Application cancelled. You can apply for an invoice again.', applyAgain: 'Apply again', cancelFailed: 'Could not cancel the application. Please retry.',
   errors: {
     INVOICE_UNPAID_EXISTS: 'You have unpaid invoice applications. Cancel them before applying again.',
-    INVOICE_CANCEL_UNCONFIRMED: 'The payment provider has not confirmed closure. The application is still reserved; please retry later.',
-    INVOICE_ALREADY_PAID: 'The service fee has been paid. Return to orders to view the application.',
+    INVOICE_ALREADY_PAID: 'The service fee is paid or processing and cannot be cancelled. Return to orders to view the application.',
     INVOICE_NO_ORDERS: 'No eligible orders to invoice.',
     INVOICE_CONFIG_INVALID: 'Complete the item name, tax rate and fee tiers. The last tier must have no upper limit.',
     INVOICE_SELECTION_INVALID: 'Select valid whole orders without duplicates.',

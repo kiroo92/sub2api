@@ -4,7 +4,7 @@
 
 Users start from My Orders: **Invoice all** selects every eligible order across pages, while **Select orders** selects complete orders. Amounts are CNY; partial invoices and editable order amounts are not supported. Tax ID, buyer name and email are required; remarks are optional. The preview includes the service fee in the final invoice amount.
 
-Opening the invoice page first checks for unpaid applications. If any exist, show them with a localized notice and a **Cancel application** button. Cancellation requires the user's confirmation; opening or refreshing the page never cancels, recreates or resumes an old payment. After cancellation succeeds, the user clicks **Apply again** to request a fresh quote. Truly empty eligibility is a normal empty state, not an English error message.
+Opening the invoice page first checks for unpaid applications. If any exist, show them with a localized notice and a **Cancel application** button. Confirming cancellation changes only the local invoice application and unpaid service-fee order, and releases the source orders without querying or closing the payment provider. Opening or refreshing the page never cancels, recreates or resumes an old payment. After cancellation succeeds, the user clicks **Apply again** to request a fresh quote and create a new application/payment order. Truly empty eligibility is a normal empty state, not an English error message.
 
 Administrators configure and process applications at `/admin/orders/invoices` under payment management. The feature defaults off. Set the item name, invoice tax rate and fee tiers, then enable applications. Administrators can filter, export selected/all filtered applications to Excel, and mark paid applications issued individually or in a batch. Export alone never changes invoice status. Email is exported for manual delivery; there is no automated issuance, email delivery, rejection, refund, upload/download or red-letter invoice workflow.
 
@@ -40,7 +40,9 @@ The application state is `awaiting_payment → pending → issued`. `cancelled` 
 
 Verified fee payments atomically complete their payment order and submit their application. The amount must match the saved fee exactly to the cent. Repeated/concurrent callbacks or administrator retries do not issue multiple invoices, credit balance, create redemption codes, issue subscriptions or grant affiliate rebates. Manual issued marking requires a completed, paid fee order, records the real admin actor/time, and is idempotent.
 
-Local cancellation, expiry and create failure are not proof that the provider can no longer receive payment. Release source orders only if no provider call occurred, or its bound order is definitively Closed. A request with no payment order can expire safely. Unknown results retain their reservation and use the existing leader-locked payment reconciliation service. Channels without definitive closure evidence can remain reserved; never force-clear them merely because a local timeout elapsed. Contradictory payments after confirmed release are audited and rejected for automatic fulfillment.
+Manual cancellation uses the local state, as explicitly chosen for this deployment. Lock the owned invoice application and then its fee order, in the same order as payment confirmation/creation. Allow cancellation of an awaiting_payment application with no fee order, or a PENDING/FAILED/EXPIRED/CANCELLED fee order with no paid_at. Atomically mark both local records cancelled, release the source reservations and persist a cancellation audit. No provider lookup, query, cancellation or payment creation is invoked. A FAILED order with paid_at is paid and cannot be cancelled; PAID/RECHARGING/COMPLETED and refund statuses are protected even if a timestamp is missing. Duplicate cancellation does nothing further. Database failures roll back the whole change.
+
+The existing automatic reconciliation retains its separate verified-paid/closed policy and leader lock. Manual cancellation does not claim that the provider order is closed. A later successful payment notification for a cancelled application records reconciliation evidence and is blocked from reactivating it or affecting a replacement application. Existing ordinary balance/subscription cancellations are unchanged.
 
 ### Recovery and compatibility
 
@@ -48,7 +50,7 @@ The invoice route reuses PaymentView, PaymentStatusPanel, paymentFlow and existi
 
 The signed WeChat flow retains invoice_fee and the request ID. Automatic continuation is limited to the user's just-initiated OAuth handoff, recorded as a one-use tab session intent (`payment.invoice.oauth.intent`); stale returns without that intent only show the application gate. This intent is a UI guard, not authorization: the server still checks signed context and invoice ownership. Buyer data is not carried in URLs/OAuth tokens. Shared idempotency response storage redacts client_secret, so it is used for application creation only. Ordinary recharge/subscription recovery is unchanged.
 
-Explicit cancellation may immediately release a draft with no payment binding. If a payment exists, use the bound provider's paid/closed evidence; confirmed paid applications cannot be cancelled, and an unknown closure retains reservations with a localized explanation. Successful cancellation clears only the matching invoice browser snapshot and never automatically creates another application or payment.
+Explicit local cancellation does not depend on provider availability or closure support. Confirmed paid/submitted/issued applications remain protected by the local transaction. Successful cancellation clears only the matching invoice browser snapshot and never automatically creates another application or payment. A subsequent application has a new ID and service-fee payment order; cancelled records are preserved for history.
 
 Disabling new invoicing does not prevent an existing application from completing payment or being marked issued. Original recharge/subscription refunds remain unchanged and do not rewrite invoice snapshots; invoice-fee refunds are explicitly unsupported. Do not roll back to an old binary that defaults unknown order types to balance while invoice_fee orders exist. Disable new applications for a controlled rollback instead of deleting records.
 
@@ -58,8 +60,7 @@ Disabling new invoicing does not prevent an existing application from completing
 | --- | --- |
 | Empty/foreign/unpaid/already reserved source selection | INVOICE_SELECTION_INVALID / INVOICE_ORDER_UNAVAILABLE / INVOICE_NO_ORDERS |
 | Outstanding unpaid application | INVOICE_UNPAID_EXISTS; cancel explicitly before applying again |
-| Paid application cancellation | INVOICE_ALREADY_PAID; no release |
-| Cancellation without confirmed payment closure | INVOICE_CANCEL_UNCONFIRMED; retain reservation |
+| Paid/processing application cancellation | INVOICE_ALREADY_PAID; no release |
 | Unsupported currency or inconsistent fee | INVOICE_CURRENCY_INVALID / INVOICE_AMOUNT_INVALID |
 | Missing buyer fields or invalid email | INVOICE_INFO_INVALID |
 | Invalid tiers or tax configuration | INVOICE_CONFIG_INVALID |
@@ -68,7 +69,7 @@ Disabling new invoicing does not prevent an existing application from completing
 | Expired/cancelled request without an existing payment | INVOICE_NOT_PAYABLE |
 | Existing payment creation | Return the existing payment, no new provider call |
 | Unpaid application marked issued | INVOICE_NOT_SUBMITTED |
-| Payment after confirmed release | INVOICE_PAYMENT_RECONCILIATION_REQUIRED |
+| Payment after invoice cancellation | INVOICE_PAYMENT_RECONCILIATION_REQUIRED; audit the original payment, no duplicate fulfillment |
 | Invoice fee refund attempt | INVOICE_REFUND_UNSUPPORTED |
 
 ## 5. Examples
@@ -86,10 +87,10 @@ For real PostgreSQL checks set `INVOICE_TEST_DATABASE_URL` exclusively to a disp
 
 Frontend: typecheck, lint:check, InvoicePayment, AdminInvoicesView, invoiceExport, PaymentView, paymentFlow, paymentWechatResume, callback/result/status panel, UserOrdersView and locale tests, then build. Workbook tests round-trip a real XLSX to verify identifiers stay text and user strings are not formulas. Browser screenshot review is separate; do not equate component tests with visual QA.
 
-The unpaid-cancellation regressions verify read-only entry, explicit confirmation, no automatic quote/create after cancellation, rejected stale WeChat/browser recovery, localized errors, and fresh authorized OAuth continuation. PostgreSQL checks cover no-payment cancellation, ownership, repetition, uncertain provider closure, paid-during-cancel and cancellation through My Orders. Run the complete backend `golangci-lint run --timeout=30m` using the CI workflow's version; frontend ESLint and Go test/build do not replace it.
+The unpaid-cancellation regressions verify read-only entry, explicit confirmation, no automatic quote/create after cancellation, rejected stale WeChat/browser recovery, localized errors, and fresh authorized OAuth continuation. PostgreSQL checks cover no-payment cancellation, all four cancellable local states without any provider calls, new request/payment IDs after reapplication, ownership, repetition, paid/processing-state protection, audit-failure rollback, late callback isolation and concurrent cancellation/payment. Cancellation through My Orders uses the same operation. Run the complete backend `golangci-lint run --timeout=30m` using the CI workflow's version; frontend ESLint and Go test/build do not replace it.
 
 ## 7. Wrong vs correct
 
-Wrong: treat every non-subscription payment as recharge; cache full SDK creation through the redacting idempotency helper; infer a closed provider payment from a local cancelled status.
+Wrong: treat every non-subscription payment as recharge, cache full SDK creation through the redacting idempotency helper, or block an explicit local cancellation on provider closure.
 
-Correct: explicit invoice_fee dispatch, unique persisted payment binding, preserved browser/WeChat context, and verified payment/closure evidence before changing invoice reservations.
+Correct: explicit invoice_fee dispatch, unique persisted payment binding, preserved browser/WeChat context, and atomic manual cancellation using local unpaid state. Keep verified payment processing and automatic provider reconciliation separate from this local cancellation operation.

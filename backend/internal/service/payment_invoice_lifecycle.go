@@ -37,7 +37,17 @@ func (s *PaymentService) ListUnpaidInvoices(ctx context.Context, uid int64) ([]U
 }
 
 func (s *PaymentService) CancelInvoice(ctx context.Context, uid, id int64) (*InvoiceResult, error) {
-	row, err := s.entClient.InvoiceRequest.Query().Where(invoicerequest.IDEQ(id), invoicerequest.UserIDEQ(uid)).Only(ctx)
+	tx, err := s.entClient.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	// Use the same invoice-then-payment lock order as payment confirmation.
+	q := tx.InvoiceRequest.Query().Where(invoicerequest.IDEQ(id), invoicerequest.UserIDEQ(uid))
+	if paymentAuditDialect(tx.Client()) == dialect.Postgres {
+		q.ForUpdate()
+	}
+	row, err := q.Only(ctx)
 	if dbent.IsNotFound(err) {
 		return nil, infraerrors.NotFound("INVOICE_NOT_FOUND", "invoice application not found")
 	}
@@ -45,40 +55,47 @@ func (s *PaymentService) CancelInvoice(ctx context.Context, uid, id int64) (*Inv
 		return nil, err
 	}
 	if row.Status == InvoiceCancelled {
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
 		return s.GetInvoice(ctx, uid, id)
 	}
 	if row.Status != InvoiceAwaitingPayment {
 		return nil, infraerrors.Conflict("INVOICE_ALREADY_PAID", "invoice service fee is paid; cancellation is unavailable")
 	}
-	order, err := s.entClient.PaymentOrder.Query().Where(paymentorder.InvoiceRequestIDEQ(id)).Only(ctx)
-	var cancellationErr error
-	if dbent.IsNotFound(err) {
-		// releaseInvoice rechecks the payment binding under the same lock as creation.
-		cancellationErr = s.releaseInvoice(ctx, id, 0)
-	} else if err != nil {
-		return nil, err
-	} else {
-		if order.PaidAt == nil && order.Status != OrderStatusCompleted {
-			// Also permit an explicit cancellation of failed/expired attempts; the
-			// existing provider check and subsequent reconciliation still require final closure.
-			_, cancellationErr = s.cancelCore(ctx, order, OrderStatusCancelled, fmt.Sprintf("user:%d", uid), "user cancelled invoice application")
-		}
-		if cancellationErr == nil {
-			cancellationErr = s.reconcileInvoice(ctx, row)
-		}
+	orders := tx.PaymentOrder.Query().Where(paymentorder.InvoiceRequestIDEQ(id))
+	if paymentAuditDialect(tx.Client()) == dialect.Postgres {
+		orders.ForUpdate()
 	}
-	current, err := s.GetInvoice(ctx, uid, id)
-	if err != nil {
+	order, err := orders.Only(ctx)
+	if err != nil && !dbent.IsNotFound(err) {
 		return nil, err
 	}
-	switch current.Status {
-	case InvoiceCancelled:
-		return current, nil
-	case InvoicePending, InvoiceIssued:
-		return nil, infraerrors.Conflict("INVOICE_ALREADY_PAID", "invoice service fee is paid; cancellation is unavailable")
-	default:
-		return nil, infraerrors.Conflict("INVOICE_CANCEL_UNCONFIRMED", "payment closure has not been confirmed; please check again later").WithCause(cancellationErr)
+	if order != nil {
+		if order.UserID != uid || order.OrderType != payment.OrderTypeInvoiceFee {
+			return nil, infraerrors.BadRequest("INVOICE_PAYMENT_INVALID", "invoice payment does not match its application")
+		}
+		// FAILED can also mean a paid fulfillment failed; paid_at is authoritative.
+		if order.PaidAt != nil || !psSliceContains([]string{OrderStatusPending, OrderStatusFailed, OrderStatusExpired, OrderStatusCancelled}, order.Status) {
+			return nil, infraerrors.Conflict("INVOICE_ALREADY_PAID", "invoice service fee is paid or processing; cancellation is unavailable")
+		}
+		if _, err := tx.PaymentOrder.UpdateOneID(order.ID).SetStatus(OrderStatusCancelled).Save(ctx); err != nil {
+			return nil, err
+		}
+		if _, err := tx.PaymentAuditLog.Create().SetOrderID(strconv.FormatInt(order.ID, 10)).SetAction("ORDER_CANCELLED").SetOperator(fmt.Sprintf("user:%d", uid)).SetDetail(fmt.Sprintf(`{"invoice_id":%d,"detail":"user cancelled invoice locally"}`, id)).Save(ctx); err != nil {
+			return nil, err
+		}
 	}
+	if _, err := tx.InvoiceRequest.UpdateOneID(id).SetStatus(InvoiceCancelled).Save(ctx); err != nil {
+		return nil, err
+	}
+	if _, err := tx.InvoiceRequestOrder.Update().Where(invoicerequestorder.InvoiceRequestIDEQ(id), invoicerequestorder.ReleasedAtIsNil()).SetReleasedAt(time.Now()).Save(ctx); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return s.GetInvoice(ctx, uid, id)
 }
 
 func lockInvoice(ctx context.Context, client *dbent.Client, id int64) (*dbent.InvoiceRequest, error) {
@@ -167,8 +184,8 @@ func (s *PaymentService) completeInvoicePayment(ctx context.Context, oid int64, 
 	}
 	if invoice.Status == InvoiceCancelled {
 		_ = tx.Rollback()
-		s.writeAuditLog(ctx, oid, "INVOICE_PAYMENT_RECONCILIATION_REQUIRED", "system", map[string]any{"invoiceID": invoice.ID})
-		return infraerrors.Conflict("INVOICE_PAYMENT_RECONCILIATION_REQUIRED", "payment arrived after confirmed closure")
+		s.writeAuditLog(ctx, oid, "INVOICE_PAYMENT_RECONCILIATION_REQUIRED", "system", map[string]any{"invoiceID": invoice.ID, "tradeNo": tradeNo, "paidAmount": paid})
+		return infraerrors.Conflict("INVOICE_PAYMENT_RECONCILIATION_REQUIRED", "payment arrived after invoice cancellation")
 	}
 	if order.UserID != invoice.UserID || order.InvoiceRequestID == nil || *order.InvoiceRequestID != invoice.ID || order.OrderType != payment.OrderTypeInvoiceFee || order.Amount != invoice.ServiceFee || order.PayAmount != invoice.ServiceFee || PaymentOrderCurrency(order) != "CNY" || psIsRefundStatus(order.Status) {
 		return infraerrors.BadRequest("INVOICE_PAYMENT_INVALID", "invoice payment does not match its application")

@@ -277,7 +277,7 @@ func TestInvoicePostgres(t *testing.T) {
 	current, err := client.PaymentOrder.Get(ctx, pending.ID)
 	require.NoError(t, err)
 	require.Nil(t, current.PaidAt)
-	// A closure release racing a confirmed payment cannot both free and invoice the same source.
+	// Explicit local cancellation and a confirmed payment share locks and cannot both win.
 	q3, err := service.QuoteInvoice(ctx, owner.ID, InvoiceSelection{Selection: "selected", OrderIDs: []int64{extra.ID}})
 	require.NoError(t, err)
 	r2.QuoteFingerprint = q3.Fingerprint
@@ -294,7 +294,8 @@ func TestInvoicePostgres(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		<-start
-		outcomes <- service.releaseInvoice(ctx, raceApplication.ID, racePayment.ID)
+		_, err := service.CancelInvoice(ctx, owner.ID, raceApplication.ID)
+		outcomes <- err
 	}()
 	go func() {
 		defer wg.Done()
@@ -304,7 +305,10 @@ func TestInvoicePostgres(t *testing.T) {
 	close(start)
 	wg.Wait()
 	close(outcomes)
-	for range outcomes {
+	for err := range outcomes {
+		if err != nil {
+			require.Contains(t, []string{"INVOICE_ALREADY_PAID", "INVOICE_PAYMENT_RECONCILIATION_REQUIRED"}, infraerrors.Reason(err))
+		}
 	}
 	raceRecord, err := service.GetInvoice(ctx, owner.ID, raceApplication.ID)
 	require.NoError(t, err)
@@ -314,6 +318,7 @@ func TestInvoicePostgres(t *testing.T) {
 	require.NoError(t, err)
 	if raceRecord.Status == InvoiceCancelled {
 		require.Nil(t, racePayment.PaidAt)
+		require.Equal(t, OrderStatusCancelled, racePayment.Status)
 		require.Equal(t, 1, n)
 	} else {
 		require.Equal(t, InvoicePending, raceRecord.Status)
@@ -366,29 +371,100 @@ func TestInvoicePostgres(t *testing.T) {
 	require.Equal(t, queryCount, provider.queryCalls)
 	require.Equal(t, cancelCount, provider.cancelCalls)
 
-	unknown := newDraft("manual-unknown-payment")
-	unknownFee := newFee(unknown)
-	provider.resp = &payment.QueryOrderResponse{Status: payment.ProviderStatusPending, TradeNo: unknownFee.OutTradeNo}
-	_, err = service.CancelInvoice(ctx, owner.ID, unknown.ID)
-	require.Equal(t, "INVOICE_CANCEL_UNCONFIRMED", infraerrors.Reason(err))
-	retained, err := service.GetInvoice(ctx, owner.ID, unknown.ID)
+	// The provider deliberately has no usable close evidence; manual cancellation must never consult it.
+	provider.resp = &payment.QueryOrderResponse{Status: payment.ProviderStatusPending, Closed: false}
+	for _, status := range []string{OrderStatusPending, OrderStatusFailed, OrderStatusExpired, OrderStatusCancelled} {
+		t.Run("local_cancel_"+status, func(t *testing.T) {
+			application := newDraft("local-cancel-" + status)
+			fee := newFee(application)
+			_, err := client.PaymentOrder.UpdateOneID(fee.ID).SetStatus(status).SetPayURL("https://pay.example.com/old").SetPaymentTradeNo("provider-created").Save(ctx)
+			require.NoError(t, err)
+			_, err = service.CancelInvoice(ctx, other.ID, application.ID)
+			require.Equal(t, "INVOICE_NOT_FOUND", infraerrors.Reason(err))
+			_, err = service.CancelOrder(ctx, fee.ID, owner.ID)
+			require.NoError(t, err, "My Orders cancellation is also purely local")
+			cancelled, err := service.CancelInvoice(ctx, owner.ID, application.ID)
+			require.NoError(t, err, "repeated cancellation is idempotent")
+			require.Equal(t, InvoiceCancelled, cancelled.Status)
+			stored, err := client.PaymentOrder.Get(ctx, fee.ID)
+			require.NoError(t, err)
+			require.Equal(t, OrderStatusCancelled, stored.Status)
+			require.Nil(t, stored.PaidAt)
+			audits, err := client.PaymentAuditLog.Query().Where(paymentauditlog.OrderIDEQ(fmt.Sprint(fee.ID)), paymentauditlog.ActionEQ("ORDER_CANCELLED")).All(ctx)
+			require.NoError(t, err)
+			require.Len(t, audits, 1)
+			require.Equal(t, fmt.Sprintf("user:%d", owner.ID), audits[0].Operator)
+			originID := application.Quote.Orders[0].ID
+			preview, err := service.QuoteInvoice(ctx, owner.ID, InvoiceSelection{Selection: "selected", OrderIDs: []int64{originID}})
+			require.NoError(t, err, "original order is immediately available for a fresh application")
+			next := req
+			next.OrderIDs = []int64{originID}
+			next.QuoteFingerprint = preview.Fingerprint
+			fresh, err := service.CreateInvoice(ctx, owner.ID, "reapply-"+status, next)
+			require.NoError(t, err)
+			freshFee := newFee(fresh)
+			require.NotEqual(t, application.ID, fresh.ID)
+			require.NotEqual(t, fee.ID, freshFee.ID)
+			require.NotEqual(t, fee.OutTradeNo, freshFee.OutTradeNo)
+			require.Error(t, service.toPaid(ctx, fee, "old-late-payment", 38, payment.TypeAlipay))
+			unaffected, err := service.GetInvoice(ctx, owner.ID, fresh.ID)
+			require.NoError(t, err)
+			require.Equal(t, InvoiceAwaitingPayment, unaffected.Status)
+			require.Equal(t, OrderStatusPending, unaffected.Payment.Status)
+			_, err = service.CancelInvoice(ctx, owner.ID, fresh.ID)
+			require.NoError(t, err)
+			require.Equal(t, queryCount, provider.queryCalls, "manual cancellation must not query the provider")
+			require.Equal(t, cancelCount, provider.cancelCalls, "manual cancellation must not close the provider order")
+		})
+	}
+
+	protected := newDraft("local-paid-protection")
+	protectedFee := newFee(protected)
+	for _, state := range []struct {
+		status string
+		paid   bool
+	}{
+		{OrderStatusPending, true}, {OrderStatusFailed, true}, {OrderStatusPaid, false},
+		{OrderStatusRecharging, false}, {OrderStatusCompleted, false}, {OrderStatusRefunding, false},
+	} {
+		update := client.PaymentOrder.UpdateOneID(protectedFee.ID).SetStatus(state.status)
+		if state.paid {
+			update.SetPaidAt(time.Now())
+		} else {
+			update.ClearPaidAt()
+		}
+		_, err = update.Save(ctx)
+		require.NoError(t, err)
+		_, err = service.CancelInvoice(ctx, owner.ID, protected.ID)
+		require.Equal(t, "INVOICE_ALREADY_PAID", infraerrors.Reason(err))
+		retained, err := service.GetInvoice(ctx, owner.ID, protected.ID)
+		require.NoError(t, err)
+		require.Equal(t, InvoiceAwaitingPayment, retained.Status)
+		require.Equal(t, state.status, retained.Payment.Status)
+		n, err := client.InvoiceRequestOrder.Query().Where(invoicerequestorder.InvoiceRequestIDEQ(protected.ID), invoicerequestorder.ReleasedAtIsNil()).Count(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 1, n)
+	}
+	_, err = client.PaymentOrder.UpdateOneID(protectedFee.ID).SetStatus(OrderStatusPending).ClearPaidAt().Save(ctx)
+	require.NoError(t, err)
+	// Failure to persist the audit must also roll back both local status changes and source release.
+	_, err = db.ExecContext(ctx, `ALTER TABLE payment_audit_logs ADD CONSTRAINT invoice_cancel_audit_failure CHECK (action <> 'ORDER_CANCELLED') NOT VALID`)
+	require.NoError(t, err)
+	_, err = service.CancelInvoice(ctx, owner.ID, protected.ID)
+	require.Error(t, err)
+	retained, err := service.GetInvoice(ctx, owner.ID, protected.ID)
 	require.NoError(t, err)
 	require.Equal(t, InvoiceAwaitingPayment, retained.Status)
-	provider.resp.Closed = true
-	_, err = service.CancelOrder(ctx, unknownFee.ID, owner.ID)
-	require.NoError(t, err, "cancellation from My Orders also releases the invoice after proven closure")
-	retained, err = service.GetInvoice(ctx, owner.ID, unknown.ID)
+	require.Equal(t, OrderStatusPending, retained.Payment.Status)
+	n, err = client.InvoiceRequestOrder.Query().Where(invoicerequestorder.InvoiceRequestIDEQ(protected.ID), invoicerequestorder.ReleasedAtIsNil()).Count(ctx)
 	require.NoError(t, err)
-	require.Equal(t, InvoiceCancelled, retained.Status)
-
-	paidDuringCancel := newDraft("manual-paid-payment")
-	paidFee := newFee(paidDuringCancel)
-	provider.resp = &payment.QueryOrderResponse{Status: payment.ProviderStatusPaid, TradeNo: paidFee.OutTradeNo, Amount: 38}
-	_, err = service.CancelInvoice(ctx, owner.ID, paidDuringCancel.ID)
-	require.Equal(t, "INVOICE_ALREADY_PAID", infraerrors.Reason(err))
-	paidApplication, err := service.GetInvoice(ctx, owner.ID, paidDuringCancel.ID)
+	require.Equal(t, 1, n)
+	_, err = db.ExecContext(ctx, `ALTER TABLE payment_audit_logs DROP CONSTRAINT invoice_cancel_audit_failure`)
 	require.NoError(t, err)
-	require.Equal(t, InvoicePending, paidApplication.Status)
+	_, err = service.CancelInvoice(ctx, owner.ID, protected.ID)
+	require.NoError(t, err)
+	require.Equal(t, queryCount, provider.queryCalls)
+	require.Equal(t, cancelCount, provider.cancelCalls)
 	_, err = service.CancelInvoice(ctx, owner.ID, created.ID)
 	require.Equal(t, "INVOICE_ALREADY_PAID", infraerrors.Reason(err))
 	_, err = db.ExecContext(ctx, string(migration))

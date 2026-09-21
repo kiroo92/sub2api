@@ -95,14 +95,14 @@ describe('invoice checkout using the real shared payment view', () => {
     expect(openWindow).not.toHaveBeenCalled()
     openWindow.mockRestore()
   })
-  it('keeps an unconfirmed cancellation reserved and shows the Chinese error', async () => {
+  it('preserves a paid application when local cancellation is rejected and shows the Chinese error', async () => {
     mocks.unpaid.mockResolvedValue([unpaidInvoice])
-    mocks.cancel.mockRejectedValue({ reason: 'INVOICE_CANCEL_UNCONFIRMED', message: 'payment closure has not been confirmed' })
+    mocks.cancel.mockRejectedValue({ reason: 'INVOICE_ALREADY_PAID', message: 'invoice service fee is paid or processing; cancellation is unavailable' })
     const w = await open()
     await w.findAll('button').find(b => b.text() === 'invoices.cancelApplication')!.trigger('click')
     await w.findAll('button').find(b => b.text() === 'common.confirm')!.trigger('click'); await flushPromises()
-    expect(w.get('[role="alert"]').text()).toContain('支付渠道尚未确认关单')
-    expect(w.text()).not.toContain('payment closure has not been confirmed')
+    expect(w.get('[role="alert"]').text()).toContain('开票服务费已支付或正在处理')
+    expect(w.text()).not.toContain('invoice service fee is paid or processing')
     expect(w.find('[data-unpaid-invoices]').exists()).toBe(true)
     expect(mocks.createOrder).not.toHaveBeenCalled()
   })

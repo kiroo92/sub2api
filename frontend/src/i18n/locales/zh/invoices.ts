@@ -1,11 +1,10 @@
 export default {
   unpaidNotice: '您有未支付的开票申请，请先取消后再申请。', cancelApplication: '取消申请',
-  cancelConfirm: '确认取消这份未支付的开票申请？系统会先核对支付状态，确认取消后才能重新申请。',
+  cancelConfirm: '确认取消这份未支付的开票申请及本地服务费订单？取消后将释放所选订单，您可重新申请并创建新的支付订单。',
   cancelledHint: '申请已取消，您可以重新申请开票。', applyAgain: '重新申请开票', cancelFailed: '取消申请失败，请重试。',
   errors: {
     INVOICE_UNPAID_EXISTS: '您有未支付的开票申请，请先取消后再申请。',
-    INVOICE_CANCEL_UNCONFIRMED: '支付渠道尚未确认关单，申请暂未取消。请稍后再试。',
-    INVOICE_ALREADY_PAID: '开票服务费已支付，无法取消，请返回订单查看申请。',
+    INVOICE_ALREADY_PAID: '开票服务费已支付或正在处理，无法取消，请返回订单查看申请。',
     INVOICE_NO_ORDERS: '暂无可开票订单。',
     INVOICE_CONFIG_INVALID: '开票配置不完整，请检查项目名称、税率和收费阶梯；最后一档需设置为无上限。',
     INVOICE_SELECTION_INVALID: '请选择有效的整笔订单，不能重复选择。',
