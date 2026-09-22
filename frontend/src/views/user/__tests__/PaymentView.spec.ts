@@ -878,16 +878,16 @@ describe('PaymentView subscription feature flag', () => {
       .filter((text) => text === 'payment.tabTopUp' || text === 'payment.tabSubscribe')
   }
 
-  it('puts subscriptions first and opens them by default', async () => {
+  it('puts top-up first and opens it by default', async () => {
     const wrapper = await mountSubscriptionPlanList(2, {})
 
-    expect(tabLabels(wrapper)).toEqual(['payment.tabSubscribe', 'payment.tabTopUp'])
-    expect(wrapper.findAllComponents(SubscriptionPlanCard)).toHaveLength(2)
-    expect(wrapper.get('[role="note"]').text()).toContain('payment.independentSubscriptionHint')
-    const recharge = wrapper.findAll('button').find(button => button.text() === 'payment.tabTopUp')!
-    await recharge.trigger('click')
+    expect(tabLabels(wrapper)).toEqual(['payment.tabTopUp', 'payment.tabSubscribe'])
     expect(wrapper.findComponent(AmountInput).exists()).toBe(true)
     expect(wrapper.find('[role="note"]').exists()).toBe(false)
+    const subscription = wrapper.findAll('button').find(button => button.text() === 'payment.tabSubscribe')!
+    await subscription.trigger('click')
+    expect(wrapper.findAllComponents(SubscriptionPlanCard)).toHaveLength(2)
+    expect(wrapper.get('[role="note"]').text()).toContain('payment.independentSubscriptionHint')
     wrapper.unmount()
   })
 
@@ -899,10 +899,10 @@ describe('PaymentView subscription feature flag', () => {
     wrapper.unmount()
   })
 
-  it('respects a direct top-up link while keeping subscriptions first', async () => {
-    const wrapper = await mountSubscriptionPlanList(2, { tab: 'recharge' })
-    expect(tabLabels(wrapper)).toEqual(['payment.tabSubscribe', 'payment.tabTopUp'])
-    expect(wrapper.findComponent(AmountInput).exists()).toBe(true)
+  it('respects a direct subscription link while keeping top-up first', async () => {
+    const wrapper = await mountSubscriptionPlanList(2, { tab: 'subscription' })
+    expect(tabLabels(wrapper)).toEqual(['payment.tabTopUp', 'payment.tabSubscribe'])
+    expect(wrapper.findAllComponents(SubscriptionPlanCard)).toHaveLength(2)
     wrapper.unmount()
   })
 
