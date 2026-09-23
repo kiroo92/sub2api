@@ -1,0 +1,272 @@
+/* Adapted from kiss-kedaya/sub2api (LGPL-3.0-or-later); scoped to channel monitoring. */
+.channel-monitor-theme {
+  --signal-bg: #f8f9f9;
+  --signal-surface: #ffffff;
+  --signal-raised: #f2f5f6;
+  --signal-line: #dde2e4;
+  --signal-text: #202426;
+  --signal-muted: #657078;
+  --signal-accent: #007db5;
+  --signal-amber: #a66a19;
+  --signal-hover: #edf2f4;
+  --signal-accent-soft: #e6f4fc;
+  --signal-control-line: #b4c0c7;
+  --signal-highlight: #ffffff;
+  --signal-divider: #e9edef;
+  --signal-shadow: 0 2px 4px #20242603;
+}
+
+.dark .channel-monitor-theme {
+  --signal-bg: #141718;
+  --signal-surface: #1e2224;
+  --signal-raised: #272d30;
+  --signal-line: #353e43;
+  --signal-text: #f1f5f6;
+  --signal-muted: #aab7be;
+  --signal-accent: #6dc7f2;
+  --signal-amber: #e3b770;
+  --signal-hover: #2c3438;
+  --signal-accent-soft: #203741;
+  --signal-control-line: #586a74;
+  --signal-highlight: #ffffff0c;
+  --signal-divider: #30383c;
+  --signal-shadow: 0 2px 4px #00000014, 0 8px 20px #0000000f;
+}
+.channel-monitor-theme.signal-channel-page {
+  --channel-bg: var(--signal-bg);
+  --channel-surface: var(--signal-surface);
+  --channel-surface-muted: var(--signal-hover);
+  --channel-line: var(--signal-line);
+  --channel-line-strong: var(--signal-control-line);
+  --channel-text: var(--signal-text);
+  --channel-muted: var(--signal-muted);
+  --channel-accent: var(--signal-accent);
+  --channel-accent-soft: var(--signal-accent-soft);
+  --channel-amber: var(--signal-amber);
+  min-width: 0;
+  color: var(--channel-text);
+  letter-spacing: 0;
+}
+
+.channel-monitor-theme.signal-channel-page :is(button, input, [role='tab']) {
+  letter-spacing: 0;
+}
+
+.channel-monitor-theme.signal-channel-page :is(.btn, .btn-icon, .input, .select-trigger) {
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.channel-monitor-theme.signal-channel-page :is(button, input, [tabindex='0']):focus-visible {
+  outline: 2px solid var(--channel-accent);
+  outline-offset: 2px;
+}
+
+.channel-monitor-theme .signal-channel-command {
+  border: 1px solid var(--channel-line) !important;
+  border-radius: 6px !important;
+  background: var(--channel-surface) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.channel-monitor-theme .signal-channel-command > header {
+  border-color: var(--channel-line) !important;
+}
+
+.channel-monitor-theme .signal-channel-command .page-title > span:first-child {
+  border: 1px solid var(--channel-line);
+  border-radius: 5px;
+  color: var(--channel-accent);
+  background: var(--channel-accent-soft);
+}
+
+.channel-monitor-theme .signal-channel-command .page-title {
+  color: var(--channel-text) !important;
+  font-weight: 700 !important;
+}
+
+.channel-monitor-theme .signal-channel-command .monitor-toolbar,
+.channel-monitor-theme .signal-channel-range {
+  border-top: 0;
+  background: var(--channel-bg);
+}
+
+.channel-monitor-theme .signal-channel-command .tabs {
+  gap: 0;
+}
+
+.channel-monitor-theme .signal-channel-command .tab {
+  min-height: 30px;
+  border-radius: 0;
+}
+
+.channel-monitor-theme .signal-channel-command .tab-active {
+  color: var(--channel-accent);
+  box-shadow: inset 0 -2px var(--channel-accent);
+}
+
+.channel-monitor-theme.signal-channel-v3 .channel-status-board {
+  display: grid;
+  gap: 28px;
+}
+
+.channel-monitor-theme.signal-channel-page .signal-platform-heading {
+  min-height: 30px;
+  margin-bottom: 0 !important;
+  padding: 0 10px !important;
+  color: var(--channel-text) !important;
+  border: 1px solid var(--channel-line);
+  border-bottom: 0;
+  background: var(--channel-bg);
+  font-size: 12px !important;
+  text-transform: uppercase;
+}
+
+.channel-monitor-theme.signal-channel-page .signal-platform-heading > span {
+  margin-left: auto;
+  border-radius: 3px !important;
+  color: var(--channel-muted) !important;
+  background: var(--channel-surface) !important;
+}
+
+.channel-monitor-theme.signal-channel-v3 section[data-layout='cluster'] > .grid,
+.channel-monitor-theme.signal-channel-v3 [data-testid='channel-status-compact-platforms'] > .grid {
+  gap: 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.channel-monitor-theme.signal-channel-v3 [data-testid='channel-status-compact-platforms'] > .grid {
+  border-radius: 6px;
+}
+
+.channel-monitor-theme.signal-channel-v3 [data-testid='channel-status-compact-platforms'] > .grid > div {
+  min-width: 0;
+  background: transparent;
+}
+
+.channel-monitor-theme.signal-channel-v3 [data-testid='channel-status-compact-platforms'] > .grid .signal-platform-heading {
+  border-inline: 0;
+  border-top: 0;
+}
+
+.channel-monitor-theme .channel-signal-card {
+  min-height: 272px !important;
+  padding: 18px !important;
+  border: 1px solid var(--channel-line) !important;
+  border-radius: 8px !important;
+  background: linear-gradient(165deg, var(--signal-raised), var(--channel-surface) 60%) !important;
+  box-shadow: inset 0 1px 0 var(--signal-highlight), var(--signal-shadow) !important;
+  backdrop-filter: none !important;
+}
+
+.channel-monitor-theme .channel-signal-card__header {
+  min-height: 42px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--signal-divider);
+}
+
+.channel-monitor-theme .channel-signal-card__provider {
+  border-radius: 5px !important;
+}
+
+.channel-monitor-theme .channel-signal-card__name {
+  color: var(--channel-text) !important;
+  font-weight: 650;
+}
+
+.channel-monitor-theme .channel-signal-card__meta > span,
+.channel-monitor-theme .channel-signal-card__sample {
+  border-radius: 3px !important;
+}
+
+.channel-monitor-theme .channel-signal-card__sample {
+  border: 1px solid var(--channel-line);
+  background: var(--channel-bg) !important;
+}
+
+.channel-monitor-theme .channel-signal-card__metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.channel-monitor-theme .channel-signal-card__metric {
+  min-width: 0;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.channel-monitor-theme .channel-signal-card__metric > div:last-child {
+  font-variant-numeric: lining-nums tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.channel-monitor-theme .channel-signal-card__timeline {
+  border-color: var(--channel-line) !important;
+}
+
+.channel-monitor-theme .channel-signal-timeline__legend,
+.channel-monitor-theme .channel-signal-timeline__axis {
+  color: var(--channel-muted) !important;
+  letter-spacing: 0;
+}
+
+.channel-monitor-theme .channel-signal-timeline .v3-timeline-bars {
+  gap: 3px;
+}
+
+.channel-monitor-theme .channel-signal-timeline .v3-soft-glass-bar {
+  border-radius: 1px;
+}
+
+.channel-monitor-theme .signal-channel-loading-grid {
+  gap: 1px !important;
+  overflow: hidden;
+  border: 1px solid var(--channel-line);
+  border-radius: 6px;
+  background: var(--channel-line);
+}
+
+.channel-monitor-theme .signal-channel-loading-grid > div {
+  border-radius: 0;
+}
+
+@media (max-width: 639px) {
+  .channel-monitor-theme .channel-signal-card {
+    min-height: 0 !important;
+    padding: 14px !important;
+  }
+.channel-monitor-theme .signal-channel-command {
+    position: static !important;
+  }
+
+.channel-monitor-theme .signal-channel-command > header {
+    padding: 14px !important;
+  }
+
+.channel-monitor-theme .signal-channel-command .monitor-toolbar {
+    padding-inline: 10px !important;
+  }
+
+.channel-monitor-theme .channel-signal-card__metric {
+    padding: 8px 6px;
+  }
+
+.channel-monitor-theme .channel-signal-card__metric > div:last-child {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 374px) {
+.channel-monitor-theme .channel-signal-card__metric > div:first-child {
+    font-size: 9px;
+  }
+}
