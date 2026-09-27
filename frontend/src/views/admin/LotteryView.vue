@@ -44,6 +44,8 @@ import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import LotteryRoundsTable from '@/components/lottery/LotteryRoundsTable.vue'
 import { lotteryAPI, type LotteryConfig, type LotterySnapshot } from '@/api/lottery'
+import { useLotteryStore } from '@/stores/lottery'
+const lotteryStore = useLotteryStore()
 const { t } = useI18n()
 const snapshot = ref<LotterySnapshot | null>(null)
 const form = reactive<LotteryConfig>({ enabled: false, prize_amount: 5, winner_count: 6, participant_target: 60, min_recharge: 50 })
@@ -52,7 +54,7 @@ const loading = ref(false); const saving = ref(false); const saved = ref(false);
 const budget = computed(() => (Number(form.prize_amount) * Number(form.winner_count) || 0).toFixed(2))
 async function load() {
   loading.value = true
-  try { snapshot.value = await lotteryAPI.adminGet(); Object.assign(form, snapshot.value.config); error.value = '' }
+  try { snapshot.value = await lotteryAPI.adminGet(); Object.assign(form, snapshot.value.config); lotteryStore.setEnabled(snapshot.value.config.enabled); error.value = '' }
   catch { error.value = t('lottery.loadFailed') }
   finally { loading.value = false }
 }
@@ -60,7 +62,7 @@ async function save() {
   if (saving.value) return
   saving.value = true; saved.value = false; error.value = ''
   try {
-    await lotteryAPI.configure({ ...form, turnstile_secret_key: secretKey.value }); secretKey.value = ''; saved.value = true
+    const config = await lotteryAPI.configure({ ...form, turnstile_secret_key: secretKey.value }); lotteryStore.setEnabled(config.enabled); secretKey.value = ''; saved.value = true
     await load()
   } catch (err: unknown) {
     error.value = (err as { reason?: string })?.reason === 'INVALID_LOTTERY_CONFIG' ? t('lottery.invalidConfig') : t('lottery.saveFailed')

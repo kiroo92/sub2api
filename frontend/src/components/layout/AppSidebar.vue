@@ -205,6 +205,7 @@ import { sanitizeUrl } from '@/utils/url'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
 import { resolveSiteBillingMode } from '@/utils/siteBillingMode'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
+import { useLotteryStore } from '@/stores/lottery'
 
 interface NavItem {
   path: string
@@ -249,6 +250,7 @@ const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
 const authStore = useAuthStore()
+const lotteryStore = useLotteryStore()
 const onboardingStore = useOnboardingStore()
 const adminSettingsStore = useAdminSettingsStore()
 const { canUseBatchImage, refreshBatchImageAccess } = useBatchImageAccess()
@@ -735,7 +737,7 @@ function buildSelfNavItems(): NavItem[] {
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
     { path: '/purchase', label: purchaseNavLabel.value, icon: RechargeSubscriptionIcon, hideInSimpleMode: true, featureFlag: flagPayment },
     { path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, hideInSimpleMode: true, featureFlag: flagPayment },
-    { path: '/lottery', label: t('lottery.title'), icon: GiftIcon, hideInSimpleMode: true },
+    { path: '/lottery', label: t('lottery.title'), icon: GiftIcon, hideInSimpleMode: true, featureFlag: () => lotteryStore.enabled },
     { path: '/redeem', label: t('nav.redeem'), icon: GiftIcon, hideInSimpleMode: true },
     { path: '/affiliate', label: t('nav.affiliate'), icon: UsersIcon, hideInSimpleMode: true, featureFlag: flagAffiliate },
     { path: '/profile', label: t('nav.profile'), icon: UserIcon },
@@ -952,6 +954,16 @@ if (
   document.documentElement.classList.add('dark')
 }
 
+// Availability is separate from public settings: use the activity's own config.
+watch(
+  () => [authStore.isAuthenticated, authStore.user?.id, authStore.isSimpleMode, route.fullPath],
+  () => { void lotteryStore.refresh() },
+  { immediate: true },
+)
+function refreshLotteryOnVisibility() {
+  if (!document.hidden) void lotteryStore.refresh()
+}
+
 // Fetch admin settings (for feature-gated nav items like Ops).
 watch(
   isAdmin,
@@ -964,6 +976,7 @@ watch(
 )
 
 onMounted(() => {
+  document.addEventListener('visibilitychange', refreshLotteryOnVisibility)
   void refreshBatchImageAccess()
   if (isAdmin.value) {
     adminSettingsStore.fetch()
@@ -979,6 +992,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', refreshLotteryOnVisibility)
   if (sidebarNavRef.value) {
     appStore.sidebarScrollTop = sidebarNavRef.value.scrollTop
   }

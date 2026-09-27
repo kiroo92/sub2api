@@ -5,9 +5,10 @@ import LotteryView from '../LotteryView.vue'
 import AdminLotteryView from '@/views/admin/LotteryView.vue'
 import type { LotterySnapshot } from '@/api/lottery'
 
-const { get, join, adminGet, configure, refreshUser, resetCaptcha } = vi.hoisted(() => ({ get: vi.fn(), join: vi.fn(), adminGet: vi.fn(), configure: vi.fn(), refreshUser: vi.fn(), resetCaptcha: vi.fn() }))
+const { get, join, adminGet, configure, refreshUser, resetCaptcha, setLotteryEnabled } = vi.hoisted(() => ({ get: vi.fn(), join: vi.fn(), adminGet: vi.fn(), configure: vi.fn(), refreshUser: vi.fn(), resetCaptcha: vi.fn(), setLotteryEnabled: vi.fn() }))
 vi.mock('@/components/TurnstileWidget.vue', () => ({ default: defineComponent({ emits: ['verify', 'expire', 'error'], setup(_, { expose, emit }) { expose({ reset: resetCaptcha }); return () => h('button', { 'data-testid': 'verify-turnstile', onClick: () => emit('verify', 'turnstile-proof') }, 'Verify') } }) }))
 vi.mock('@/api/lottery', () => ({ lotteryAPI: { get, join, adminGet, configure } }))
+vi.mock('@/stores/lottery', () => ({ useLotteryStore: () => ({ setEnabled: setLotteryEnabled }) }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ refreshUser }) }))
 vi.mock('vue-i18n', async () => ({ ...(await vi.importActual<typeof import('vue-i18n')>('vue-i18n')), useI18n: () => ({ t: (key: string) => key, locale: { value: 'zh' } }) }))
 const config = { turnstile_site_key: 'site-key', turnstile_secret_configured: true, enabled: true, prize_amount: 5, winner_count: 6, participant_target: 60, min_recharge: 50 }
@@ -97,6 +98,7 @@ describe('Lottery participation', () => {
 describe('Lottery administration', () => {
   it('loads and saves next-round rules while showing the current rules', async () => {
     const wrapper = mountPage(true); await flushPromises()
+    expect(setLotteryEnabled).toHaveBeenCalledWith(true)
     expect(wrapper.get<HTMLInputElement>('#prize-amount').element.value).toBe('5')
     await wrapper.get('#prize-amount').setValue('2.50')
     await wrapper.get('#participant-target').setValue('100')
