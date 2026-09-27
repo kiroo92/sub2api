@@ -8,7 +8,7 @@
 name: sub2api
 services:
   sub2api:
-    image: sub2api-local:homepage-20260927
+    image: sub2api-local:marketplace-20260927
     container_name: sub2api
     restart: unless-stopped
     dns:

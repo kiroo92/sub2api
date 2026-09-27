@@ -26,6 +26,7 @@ const appStore = vi.hoisted(() => ({
   backendModeEnabled: false,
   publicSettingsLoaded: false,
   cachedPublicSettings: null as null | {
+    model_plaza_enabled?: boolean
     payment_enabled?: boolean
     risk_control_enabled?: boolean
     subscription_enabled?: boolean
@@ -125,6 +126,17 @@ describe('feature route guard', () => {
     appStore.publicSettingsLoaded = false
     appStore.cachedPublicSettings = null
     appStore.fetchPublicSettings.mockReset()
+  })
+
+  it.each([true, false])('gates the new marketplace with the catalog flag (%s)', async (enabled) => {
+    appStore.publicSettingsLoaded = true
+    appStore.cachedPublicSettings = { model_plaza_enabled: enabled }
+    const route = routerHarness.routes.find(route => route.path === '/model-marketplace')!
+    expect(route.meta?.requiresAuth).toBe(true)
+    const { navigation, next } = runGuard({ ...route.meta, titleKey: undefined }, '/model-marketplace')
+    await navigation
+    if (enabled) expect(next).toHaveBeenCalledWith()
+    else expect(next).toHaveBeenCalledWith('/dashboard')
   })
 
   it('redirects legacy subscription URLs and names to the dashboard anchor', async () => {

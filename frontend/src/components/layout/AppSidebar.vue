@@ -696,6 +696,7 @@ const ChevronDownIcon = {
 // Public-settings flags go through the registry in utils/featureFlags.ts,
 // which handles the opt-in vs opt-out fallback when settings haven't loaded
 // yet. Admin-only flags (not in public settings) stay inline below.
+const flagModelPlaza = makeSidebarFlag(FeatureFlags.modelPlaza)
 const flagChannelMonitor = makeSidebarFlag(FeatureFlags.channelMonitor)
 const flagPayment = makeSidebarFlag(FeatureFlags.payment)
 const flagAvailableChannels = makeSidebarFlag(FeatureFlags.availableChannels)
@@ -722,11 +723,12 @@ const flagBatchImageAccess = () => canUseBatchImage.value
 // buildSelfNavItems 构造用户自己的导航项（用户端主菜单和管理员的"我的账户"子菜单共享这组声明）。
 // 管理员的个人区也进入用户仪表盘，管理总览仍使用 /admin/dashboard。
 //
-// 条目顺序：密钥 → 用量 → 可用渠道 → 渠道状态 → 订阅/支付 → 兑换/资料。
+// 条目顺序：模型广场 → 密钥 → 用量 → 可用渠道 → 渠道状态 → 订阅/支付 → 兑换/资料。
 // 可用渠道紧挨渠道状态之上，让用户"先看自己能用什么、再看对应状态"。
 function buildSelfNavItems(): NavItem[] {
   const items: NavItem[] = [{ path: '/dashboard', label: t('nav.dashboard'), icon: DashboardIcon }]
   items.push(
+    { path: '/model-marketplace', label: t('nav.modelPlaza'), icon: ChannelIcon, featureFlag: flagModelPlaza },
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
     { path: '/team', label: t('team.title'), icon: UsersIcon, hideInSimpleMode: true },
     { path: '/batch-image', label: t('nav.batchImage'), icon: BatchImageIcon, hideInSimpleMode: true, featureFlag: flagBatchImageAccess },

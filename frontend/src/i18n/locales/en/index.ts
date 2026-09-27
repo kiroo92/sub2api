@@ -1,4 +1,5 @@
 import lottery from './lottery'
+import modelMarketplace from './modelMarketplace'
 import invoices from './invoices'
 import team from './team'
 import landing from './landing'
@@ -11,6 +12,7 @@ import admin from './admin'
 import misc from './misc'
 
 export default {
+  ...modelMarketplace,
   invoices,
   team,
   ...lottery,

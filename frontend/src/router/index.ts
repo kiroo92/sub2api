@@ -189,6 +189,18 @@ const routes: RouteRecordRaw[] = [
 
   // ==================== User Routes ====================
   {
+    path: '/model-marketplace',
+    name: 'ModelMarketplace',
+    component: () => import('@/views/user/ModelMarketplaceView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresModelPlaza: true,
+      title: 'Model Marketplace',
+      titleKey: 'modelPlaza.title',
+    },
+  },
+
+  {
     path: '/admin/teams', name: 'AdminTeams',
     component: () => import('@/views/admin/TeamsView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Teams', titleKey: 'team.adminTitle' }
@@ -968,12 +980,21 @@ router.beforeEach(async (to, _from, next) => {
   // 公共设置可能尚未加载（App.vue 的 onMounted 异步拉取晚于首次导航，且纯静态部署
   // 无 __APP_CONFIG__ 注入）。此时 cachedPublicSettings 为空会把 payment/risk_control
   // 误判为“未启用”而错误拦截，故这里先确保设置加载完成。
-  if ((to.meta.requiresPayment || to.meta.requiresRiskControl || to.meta.requiresSubscription) && !appStore.publicSettingsLoaded) {
+  if ((to.meta.requiresPayment || to.meta.requiresRiskControl || to.meta.requiresSubscription || to.meta.requiresModelPlaza) && !appStore.publicSettingsLoaded) {
     try {
       await appStore.fetchPublicSettings()
     } catch (error) {
       console.warn('Failed to load public settings in route guard', error)
     }
+  }
+
+  if (
+    to.meta.requiresModelPlaza &&
+    appStore.publicSettingsLoaded &&
+    appStore.cachedPublicSettings?.model_plaza_enabled !== true
+  ) {
+    next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+    return
   }
 
   // Only an explicit value from successfully loaded settings can disable a route.
