@@ -1,6 +1,6 @@
 # 模型广场与渠道状态
 
-登录后的 `/model-marketplace` 合并模型分组价目与渠道监控 V2，用户侧边栏和顶部模型广场入口均指向此页。原公开 `/model-plaza` 与 `/monitor` 保留。
+登录后的 `/model-marketplace` 合并模型分组价目与渠道监控 V2，用户侧边栏的模型广场入口指向此页。原公开 `/model-plaza` 与 `/monitor` 保留。
 
 - 以 `/model-plaza` 返回的分组为准，沿用模型广场启用开关；按分组 ID 关联用户 `/channel-monitor-v2/matrix?group_by=platform_group`。不使用管理员接口或分组名称猜测关联。
 - 一个分组对应多个监控平台时分行展示，不对脱敏后的指标做未经加权的平均。
