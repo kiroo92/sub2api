@@ -723,8 +723,7 @@ const flagBatchImageAccess = () => canUseBatchImage.value
 // buildSelfNavItems 构造用户自己的导航项（用户端主菜单和管理员的"我的账户"子菜单共享这组声明）。
 // 管理员的个人区也进入用户仪表盘，管理总览仍使用 /admin/dashboard。
 //
-// 条目顺序：模型广场 → 密钥 → 用量 → 可用渠道 → 渠道状态 → 订阅/支付 → 兑换/资料。
-// 可用渠道紧挨渠道状态之上，让用户"先看自己能用什么、再看对应状态"。
+// 渠道状态统一从模型广场查看，个人菜单不再单独展示渠道状态入口。
 function buildSelfNavItems(): NavItem[] {
   const items: NavItem[] = [{ path: '/dashboard', label: t('nav.dashboard'), icon: DashboardIcon }]
   items.push(
@@ -734,7 +733,6 @@ function buildSelfNavItems(): NavItem[] {
     { path: '/batch-image', label: t('nav.batchImage'), icon: BatchImageIcon, hideInSimpleMode: true, featureFlag: flagBatchImageAccess },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
-    { path: '/monitor', label: t('nav.channelStatus'), icon: SignalIcon, featureFlag: flagChannelMonitor },
     { path: '/purchase', label: purchaseNavLabel.value, icon: RechargeSubscriptionIcon, hideInSimpleMode: true, featureFlag: flagPayment },
     { path: '/orders', label: t('nav.myOrders'), icon: OrderListIcon, hideInSimpleMode: true, featureFlag: flagPayment },
     { path: '/lottery', label: t('lottery.title'), icon: GiftIcon, hideInSimpleMode: true },
