@@ -12,6 +12,12 @@ export function effectiveGroupRate(group: ModelPlazaGroup): number {
   return group.user_rate_multiplier ?? group.rate_multiplier
 }
 
+export function marketplacePlatformPriority(platform: string): number {
+  if (platform === 'openai') return 0
+  if (platform === 'anthropic' || platform === 'claude') return 1
+  return 2
+}
+
 export function filterMarketplaceGroups(
   groups: ModelPlazaGroup[],
   search: string,
@@ -34,7 +40,10 @@ export function filterMarketplaceGroups(
         ].some((value) => value.toLocaleLowerCase().includes(query))
       )
     })
-    .sort((a, b) => effectiveGroupRate(a) - effectiveGroupRate(b) || a.id - b.id)
+    .sort((a, b) =>
+      marketplacePlatformPriority(a.platform) - marketplacePlatformPriority(b.platform) ||
+      effectiveGroupRate(a) - effectiveGroupRate(b) || a.id - b.id,
+    )
 }
 
 export function indexMonitorRows(rows: MonitorMatrixRow[]) {

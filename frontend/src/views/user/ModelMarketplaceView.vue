@@ -159,6 +159,7 @@ import {
   effectiveGroupRate,
   filterMarketplaceGroups,
   indexMonitorRows,
+  marketplacePlatformPriority,
 } from '@/features/model-marketplace/marketplace'
 import { platformLabel } from '@/utils/platformColors'
 import type { MonitorRange } from '@/api/channelMonitorV2'
@@ -182,7 +183,9 @@ const rate = ref<number | 'all'>('all')
 const filtersOpen = ref(false)
 const ranges: MonitorRange[] = ['90m', '24h', '7d', '30d']
 const groups = computed(() => catalog.value?.groups ?? [])
-const platforms = computed(() => [...new Set(groups.value.map((group) => group.platform))].sort())
+const platforms = computed(() => [...new Set(groups.value.map((group) => group.platform))].sort(
+  (a, b) => marketplacePlatformPriority(a) - marketplacePlatformPriority(b) || a.localeCompare(b),
+))
 const rates = computed(() =>
   [...new Set(groups.value.map(effectiveGroupRate))].sort((a, b) => a - b),
 )
