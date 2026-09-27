@@ -20,6 +20,10 @@ const { appStore, authStore } = vi.hoisted(() => ({
   },
 }))
 
+vi.mock('@/api/modelPlaza', () => ({
+  getModelPlaza: vi.fn().mockResolvedValue({ groups: [] }),
+}))
+
 vi.mock('@/stores', () => ({
   useAppStore: () => appStore,
   useAuthStore: () => authStore,
@@ -108,7 +112,7 @@ describe('HomeView compact mode', () => {
     const wrapper = mountHome(settings)
 
     expect(wrapper.find('[data-testid="compact-home"]').exists()).toBe(false)
-    expect(wrapper.find('.terminal-container').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="default-home"]').exists()).toBe(true)
   })
 
   it('links unauthenticated visitors to login', () => {
