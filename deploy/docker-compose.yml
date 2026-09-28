@@ -8,7 +8,7 @@
 name: sub2api
 services:
   sub2api:
-    image: sub2api-local:header-cleanup-20260927
+    image: sub2api-local:invoice-e4ad848e
     container_name: sub2api
     restart: unless-stopped
     dns:
