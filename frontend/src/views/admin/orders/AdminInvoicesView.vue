@@ -41,10 +41,10 @@
         <template #cell-total_amount="{ row }"><strong>¥{{ row.quote.total_amount.toFixed(2) }}</strong><p class="text-xs text-gray-500">{{ t('invoices.serviceFee') }} ¥{{ row.quote.service_fee.toFixed(2) }}</p></template>
         <template #cell-status="{ row }"><span class="badge" :class="row.status === 'issued' ? 'badge-success' : 'badge-info'">{{ t(`invoices.status.${row.status}`) }}</span></template>
         <template #cell-submitted_at="{ row }">{{ formatDateTimeToMinute(row.submitted_at) }}</template>
-        <template #cell-actions="{ row }"><button class="btn btn-secondary btn-sm" @click="detail = row">{{ t('common.view') }}</button></template>
+        <template #cell-actions="{ row }"><button class="btn btn-secondary btn-sm" @click="openDetail(row)">{{ t('common.view') }}</button></template>
       </DataTable>
       <Pagination v-if="total" :page="page" :page-size="pageSize" :total="total" @update:page="page = $event; loadInvoices()" @update:page-size="pageSize = $event; page = 1; loadInvoices()" />
-      <BaseDialog :show="!!detail" :title="t('invoices.details')" @close="detail = null"><template v-if="detail"><InvoicePreview :quote="detail.quote" :information="detail" /><dl class="mt-4 space-y-2 break-words text-sm"><div>{{ t('invoices.email') }}: {{ detail.email }}</div><div>{{ t('invoices.remarks') }}: {{ detail.remarks || '—' }}</div><div v-if="detail.issued_at">{{ t('invoices.issuedAt') }}: {{ formatDateTimeToMinute(detail.issued_at) }} · {{ t('invoices.issuedBy') }}: #{{ detail.issued_by }}</div></dl></template></BaseDialog>
+      <BaseDialog :show="!!detail" :title="t('invoices.details')" :show-close-button="!sending" :close-on-escape="!sending" @close="!sending && (detail = null)"><template v-if="detail"><InvoicePreview :quote="detail.quote" :information="detail" /><dl class="mt-4 space-y-2 break-words text-sm"><div>{{ t('invoices.email') }}: {{ detail.email }}</div><div>{{ t('invoices.remarks') }}: {{ detail.remarks || '—' }}</div><div v-if="detail.issued_at">{{ t('invoices.issuedAt') }}: {{ formatDateTimeToMinute(detail.issued_at) }} · {{ t('invoices.issuedBy') }}: #{{ detail.issued_by }}</div><div v-if="detail.delivered_at">{{ t('invoices.deliveredAt') }}: {{ formatDateTimeToMinute(detail.delivered_at) }} · {{ detail.attachment_name }}</div></dl><div class="mt-5 border-t border-gray-200 pt-4 dark:border-dark-600"><template v-if="!detail.delivered_at"><label for="invoice-attachment" class="input-label">{{ t('invoices.uploadAttachment') }}</label><input id="invoice-attachment" type="file" accept="application/pdf,.pdf" class="input" :disabled="sending" @change="selectAttachment" /><p class="mt-2 text-xs text-gray-500">{{ t('invoices.attachmentHint', { email: detail.email }) }}</p><button class="btn btn-primary mt-3" :disabled="sending || !attachment" @click="sendAttachment">{{ t(sending ? 'common.processing' : 'invoices.sendAttachment') }}</button></template><p v-else class="text-sm text-green-600">{{ t('invoices.attachmentSent') }}</p></div></template></BaseDialog>
       <BaseDialog :show="confirmMark" :title="t('invoices.markIssued')" :show-close-button="!marking" :close-on-escape="!marking" @close="!marking && (confirmMark = false)"><p>{{ t('invoices.markConfirm', { count: selected.length }) }}</p><template #footer><button class="btn btn-secondary" :disabled="marking" @click="confirmMark = false">{{ t('common.cancel') }}</button><button class="btn btn-primary" :disabled="marking" @click="markIssued">{{ t('common.confirm') }}</button></template></BaseDialog>
     </div>
   </AppLayout>
@@ -72,6 +72,7 @@ const app = useAppStore()
 const config = ref<InvoiceConfig>({ enabled: false, item_name: '', tax_rate: 0, tiers: [] })
 const configLoaded = ref(false), configError = ref(''), saving = ref(false)
 const invoices = ref<InvoiceRequest[]>([]), selected = ref<InvoiceRequest[]>([]), detail = ref<InvoiceRequest | null>(null)
+const attachment = ref<File | null>(null), sending = ref(false)
 const loading = ref(false), listError = ref(''), exporting = ref(false), marking = ref(false), confirmMark = ref(false)
 const page = ref(1), pageSize = ref(20), total = ref(0)
 const filters = reactive({ status: 'pending', search: '', user_id: '', start_date: '', end_date: '' })
@@ -104,6 +105,29 @@ function selectRows(keys: Array<string | number>) {
   const wanted = new Set(keys.map(Number))
   const records = new Map([...selected.value, ...invoices.value].map(invoice => [invoice.id, invoice]))
   selected.value = [...records.values()].filter(invoice => wanted.has(invoice.id))
+}
+function openDetail(row: InvoiceRequest) { detail.value = row; attachment.value = null }
+function selectAttachment(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0] || null
+  if (file && (file.size > 10 * 1024 * 1024 || !file.name.toLowerCase().endsWith('.pdf'))) {
+    attachment.value = null
+    ;(event.target as HTMLInputElement).value = ''
+    app.showError(t('invoices.invalidAttachment'))
+    return
+  }
+  attachment.value = file
+}
+async function sendAttachment() {
+  if (!detail.value || !attachment.value || sending.value) return
+  sending.value = true
+  try {
+    const updated = await adminInvoiceAPI.sendAttachment(detail.value.id, attachment.value)
+    detail.value = updated
+    attachment.value = null
+    app.showSuccess(t('invoices.attachmentSent'))
+    await loadInvoices()
+  } catch (err) { app.showError(extractI18nErrorMessage(err, t, 'invoices.errors', t('invoices.sendFailed'))) }
+  finally { sending.value = false }
 }
 async function markIssued() {
   if (marking.value || !selected.value.length) return

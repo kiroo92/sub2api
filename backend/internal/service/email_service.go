@@ -192,7 +192,22 @@ func (s *EmailService) SendEmailWithConfig(config *SMTPConfig, to, subject, body
 	if err != nil {
 		return err
 	}
+	return s.sendSMTPMessage(config, message)
+}
 
+func (s *EmailService) SendEmailWithAttachment(ctx context.Context, to, subject, body, filename string, attachment []byte) error {
+	config, err := s.GetSMTPConfig(ctx)
+	if err != nil {
+		return err
+	}
+	message, err := buildSMTPMessageWithAttachment(config, to, subject, body, filename, attachment)
+	if err != nil {
+		return err
+	}
+	return s.sendSMTPMessage(config, message)
+}
+
+func (s *EmailService) sendSMTPMessage(config *SMTPConfig, message smtpMessage) error {
 	client, err := s.connectSMTP(config)
 	if err != nil {
 		return err

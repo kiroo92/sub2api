@@ -20,4 +20,9 @@ export const adminInvoiceAPI = {
   async list(params: InvoiceListParams) { return (await apiClient.get<BasePaginationResponse<InvoiceRequest>>('/admin/payment/invoices', { params })).data },
   async get(id: number) { return (await apiClient.get<InvoiceRequest>(`/admin/payment/invoices/${id}`)).data },
   async markIssued(ids: number[]) { return (await apiClient.post('/admin/payment/invoices/mark-issued', { ids })).data },
+  async sendAttachment(id: number, file: File) {
+    const form = new FormData()
+    form.append('attachment', file)
+    return (await apiClient.post<InvoiceRequest>(`/admin/payment/invoices/${id}/send`, form, { headers: { 'Content-Type': undefined }, timeout: 60000 })).data
+  },
 }

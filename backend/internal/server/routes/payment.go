@@ -91,6 +91,7 @@ func RegisterPaymentRoutes(
 		adminGroup.PUT("/invoices/config", adminPaymentHandler.SaveInvoiceConfig)
 		adminGroup.GET("/invoices", adminPaymentHandler.ListInvoices)
 		adminGroup.GET("/invoices/:id", adminPaymentHandler.GetInvoice)
+		adminGroup.POST("/invoices/:id/send", adminPaymentHandler.SendInvoiceAttachment)
 		adminGroup.POST("/invoices/mark-issued", adminPaymentHandler.MarkInvoicesIssued)
 		adminGroup.GET("/discount-codes", adminPaymentHandler.ListDiscountCodes)
 		adminGroup.POST("/discount-codes", adminPaymentHandler.CreateDiscountCode)

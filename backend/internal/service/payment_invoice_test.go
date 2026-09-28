@@ -3,12 +3,21 @@
 package service
 
 import (
+	"context"
 	"math"
 	"testing"
 
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSendInvoiceAttachmentRejectsInvalidPDF(t *testing.T) {
+	svc := &PaymentService{}
+	for _, attachment := range [][]byte{nil, []byte("plain text"), append([]byte("%PDF-"), make([]byte, maxInvoiceAttachmentBytes)...)} {
+		_, err := svc.SendInvoiceAttachment(context.Background(), 1, 1, attachment)
+		require.ErrorContains(t, err, "upload a PDF invoice")
+	}
+}
 
 func TestInvoicePricing(t *testing.T) {
 	a, b, c := 500.0, 1000.0, 2000.0

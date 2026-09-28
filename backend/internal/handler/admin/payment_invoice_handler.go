@@ -1,11 +1,14 @@
 package admin
 
 import (
+	"io"
+	"net/http"
+	"strconv"
+
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
-	"strconv"
 )
 
 func (h *PaymentHandler) GetInvoiceConfig(c *gin.Context) {
@@ -69,4 +72,37 @@ func (h *PaymentHandler) MarkInvoicesIssued(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"success": true})
+}
+
+func (h *PaymentHandler) SendInvoiceAttachment(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "Admin authentication required")
+		return
+	}
+	id, ok := parseIDParam(c, "id")
+	if !ok {
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, (10<<20)+(1<<20))
+	file, header, err := c.Request.FormFile("attachment")
+	if c.Request.MultipartForm != nil {
+		defer func() { _ = c.Request.MultipartForm.RemoveAll() }()
+	}
+	if err != nil || header.Size > 10<<20 {
+		response.BadRequest(c, "Upload a PDF invoice up to 10 MB")
+		return
+	}
+	defer func() { _ = file.Close() }()
+	data, err := io.ReadAll(io.LimitReader(file, (10<<20)+1))
+	if err != nil || len(data) > 10<<20 {
+		response.BadRequest(c, "Upload a PDF invoice up to 10 MB")
+		return
+	}
+	result, err := h.paymentService.SendInvoiceAttachment(c.Request.Context(), subject.UserID, id, data)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
 }

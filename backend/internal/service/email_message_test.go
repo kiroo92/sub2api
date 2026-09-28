@@ -4,8 +4,10 @@ package service
 
 import (
 	"bytes"
+	"encoding/base64"
 	"io"
 	"mime"
+	"mime/multipart"
 	"mime/quotedprintable"
 	"net/mail"
 	"regexp"
@@ -14,6 +16,31 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestBuildSMTPMessageWithPDFAttachment(t *testing.T) {
+	attachment := []byte("%PDF-1.7\nexample invoice")
+	message, err := buildSMTPMessageWithAttachment(&SMTPConfig{Host: "smtp.example.com", From: "billing@example.com"}, "buyer@example.net", "电子发票", "<p>已开票</p>", "invoice-42.pdf", attachment)
+	require.NoError(t, err)
+	parsed, err := mail.ReadMessage(bytes.NewReader(message.data))
+	require.NoError(t, err)
+	mediaType, params, err := mime.ParseMediaType(parsed.Header.Get("Content-Type"))
+	require.NoError(t, err)
+	require.Equal(t, "multipart/mixed", mediaType)
+	parts := multipart.NewReader(parsed.Body, params["boundary"])
+	body, err := parts.NextPart()
+	require.NoError(t, err)
+	require.Equal(t, "text/html; charset=UTF-8", body.Header.Get("Content-Type"))
+	decodedBody, err := io.ReadAll(quotedprintable.NewReader(body))
+	require.NoError(t, err)
+	require.Contains(t, string(decodedBody), "已开票")
+	file, err := parts.NextPart()
+	require.NoError(t, err)
+	require.Equal(t, "invoice-42.pdf", file.FileName())
+	require.Equal(t, "application/pdf", file.Header.Get("Content-Type"))
+	decoded, err := io.ReadAll(base64.NewDecoder(base64.StdEncoding, file))
+	require.NoError(t, err)
+	require.Equal(t, attachment, decoded)
+}
 
 func TestBuildSMTPMessageProducesStandardsCompliantMIME(t *testing.T) {
 	config := &SMTPConfig{

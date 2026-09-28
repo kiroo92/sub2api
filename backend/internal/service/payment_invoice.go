@@ -64,20 +64,22 @@ type CreateInvoiceRequest struct {
 	QuoteFingerprint string  `json:"quote_fingerprint"`
 }
 type InvoiceResult struct {
-	ID          int64                `json:"id"`
-	UserID      int64                `json:"user_id"`
-	Status      string               `json:"status"`
-	TaxID       string               `json:"tax_id"`
-	Title       string               `json:"title"`
-	Email       string               `json:"email"`
-	Remarks     string               `json:"remarks"`
-	Quote       InvoiceQuote         `json:"quote"`
-	CreatedAt   time.Time            `json:"created_at"`
-	ExpiresAt   time.Time            `json:"expires_at"`
-	SubmittedAt *time.Time           `json:"submitted_at"`
-	IssuedAt    *time.Time           `json:"issued_at"`
-	IssuedBy    *int64               `json:"issued_by"`
-	Payment     *CreateOrderResponse `json:"payment,omitempty"`
+	ID             int64                `json:"id"`
+	UserID         int64                `json:"user_id"`
+	Status         string               `json:"status"`
+	TaxID          string               `json:"tax_id"`
+	Title          string               `json:"title"`
+	Email          string               `json:"email"`
+	Remarks        string               `json:"remarks"`
+	Quote          InvoiceQuote         `json:"quote"`
+	CreatedAt      time.Time            `json:"created_at"`
+	ExpiresAt      time.Time            `json:"expires_at"`
+	SubmittedAt    *time.Time           `json:"submitted_at"`
+	IssuedAt       *time.Time           `json:"issued_at"`
+	IssuedBy       *int64               `json:"issued_by"`
+	DeliveredAt    *time.Time           `json:"delivered_at"`
+	AttachmentName string               `json:"attachment_name,omitempty"`
+	Payment        *CreateOrderResponse `json:"payment,omitempty"`
 }
 type OrderInvoiceSummary struct {
 	ID          int64   `json:"id"`
@@ -345,6 +347,9 @@ func (s *PaymentService) GetInvoice(ctx context.Context, uid, id int64) (*Invoic
 	order, err := s.entClient.PaymentOrder.Query().Where(paymentorder.InvoiceRequestIDEQ(id)).Only(ctx)
 	if err == nil {
 		result.Payment = invoicePaymentResponse(order)
+		if err := s.loadInvoiceDelivery(ctx, []int64{order.ID}, map[int64]*InvoiceResult{order.ID: &result}); err != nil {
+			return nil, err
+		}
 	} else if !dbent.IsNotFound(err) {
 		return nil, err
 	}

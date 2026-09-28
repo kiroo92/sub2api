@@ -3,12 +3,15 @@ package service
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"mime"
+	"mime/multipart"
 	"mime/quotedprintable"
 	"net/mail"
+	"net/textproto"
 	"strings"
 	"time"
 )
@@ -20,6 +23,10 @@ type smtpMessage struct {
 }
 
 func buildSMTPMessage(config *SMTPConfig, to, subject, body string) (smtpMessage, error) {
+	return buildSMTPMessageWithAttachment(config, to, subject, body, "", nil)
+}
+
+func buildSMTPMessageWithAttachment(config *SMTPConfig, to, subject, body, filename string, attachment []byte) (smtpMessage, error) {
 	if config == nil {
 		return smtpMessage{}, errors.New("missing SMTP configuration")
 	}
@@ -57,16 +64,60 @@ func buildSMTPMessage(config *SMTPConfig, to, subject, body string) (smtpMessage
 	fmt.Fprintf(&message, "Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z))
 	fmt.Fprintf(&message, "Message-ID: %s\r\n", messageID)
 	fmt.Fprintf(&message, "Subject: %s\r\n", subjectHeader)
-	fmt.Fprint(&message, "MIME-Version: 1.0\r\n"+
-		"Content-Type: text/html; charset=UTF-8\r\n"+
-		"Content-Transfer-Encoding: quoted-printable\r\n\r\n")
-
-	bodyWriter := quotedprintable.NewWriter(&message)
-	if _, err := bodyWriter.Write([]byte(body)); err != nil {
-		return smtpMessage{}, fmt.Errorf("encode email body: %w", err)
-	}
-	if err := bodyWriter.Close(); err != nil {
-		return smtpMessage{}, fmt.Errorf("close email body encoder: %w", err)
+	fmt.Fprint(&message, "MIME-Version: 1.0\r\n")
+	if attachment == nil {
+		fmt.Fprint(&message, "Content-Type: text/html; charset=UTF-8\r\n"+
+			"Content-Transfer-Encoding: quoted-printable\r\n\r\n")
+		bodyWriter := quotedprintable.NewWriter(&message)
+		if _, err := bodyWriter.Write([]byte(body)); err != nil {
+			return smtpMessage{}, fmt.Errorf("encode email body: %w", err)
+		}
+		if err := bodyWriter.Close(); err != nil {
+			return smtpMessage{}, fmt.Errorf("close email body encoder: %w", err)
+		}
+	} else {
+		if strings.ContainsAny(filename, "\r\n") || filename == "" {
+			return smtpMessage{}, errors.New("invalid attachment filename")
+		}
+		var parts bytes.Buffer
+		writer := multipart.NewWriter(&parts)
+		bodyHeader := textproto.MIMEHeader{}
+		bodyHeader.Set("Content-Type", "text/html; charset=UTF-8")
+		bodyHeader.Set("Content-Transfer-Encoding", "quoted-printable")
+		bodyPart, err := writer.CreatePart(bodyHeader)
+		if err != nil {
+			return smtpMessage{}, err
+		}
+		bodyWriter := quotedprintable.NewWriter(bodyPart)
+		if _, err := bodyWriter.Write([]byte(body)); err != nil {
+			return smtpMessage{}, err
+		}
+		if err := bodyWriter.Close(); err != nil {
+			return smtpMessage{}, err
+		}
+		fileHeader := textproto.MIMEHeader{}
+		fileHeader.Set("Content-Type", "application/pdf")
+		fileHeader.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
+		fileHeader.Set("Content-Transfer-Encoding", "base64")
+		filePart, err := writer.CreatePart(fileHeader)
+		if err != nil {
+			return smtpMessage{}, err
+		}
+		for offset := 0; offset < len(attachment); offset += 57 {
+			end := offset + 57
+			if end > len(attachment) {
+				end = len(attachment)
+			}
+			line := base64.StdEncoding.EncodeToString(attachment[offset:end])
+			if _, err := fmt.Fprintf(filePart, "%s\r\n", line); err != nil {
+				return smtpMessage{}, err
+			}
+		}
+		if err := writer.Close(); err != nil {
+			return smtpMessage{}, err
+		}
+		fmt.Fprintf(&message, "Content-Type: multipart/mixed; boundary=%q\r\n\r\n", writer.Boundary())
+		message.Write(parts.Bytes())
 	}
 
 	return smtpMessage{

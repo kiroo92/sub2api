@@ -3,8 +3,8 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import AdminInvoicesView from '../AdminInvoicesView.vue'
 import type { InvoiceRequest } from '@/types/invoice'
 
-const mocks = vi.hoisted(() => ({ config: vi.fn(), saveConfig: vi.fn(), list: vi.fn(), mark: vi.fn(), workbook: vi.fn(), save: vi.fn() }))
-vi.mock('@/api/invoices', () => ({ adminInvoiceAPI: { config: mocks.config, saveConfig: mocks.saveConfig, list: mocks.list, markIssued: mocks.mark } }))
+const mocks = vi.hoisted(() => ({ config: vi.fn(), saveConfig: vi.fn(), list: vi.fn(), mark: vi.fn(), send: vi.fn(), workbook: vi.fn(), save: vi.fn() }))
+vi.mock('@/api/invoices', () => ({ adminInvoiceAPI: { config: mocks.config, saveConfig: mocks.saveConfig, list: mocks.list, markIssued: mocks.mark, sendAttachment: mocks.send } }))
 vi.mock('@/stores/app', () => ({ useAppStore: () => ({ showError: vi.fn(), showSuccess: vi.fn() }) }))
 vi.mock('vue-i18n', async (original) => ({ ...await original<typeof import('vue-i18n')>(), useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('../invoiceExport', () => ({ createInvoiceWorkbook: mocks.workbook }))
@@ -19,11 +19,12 @@ beforeEach(() => {
   mocks.config.mockResolvedValue({ enabled: false, item_name: 'Service', tax_rate: 3, tiers: [{ upper_amount: null, type: 'percentage', value: 3 }] })
   mocks.list.mockResolvedValue({ items: [invoice(1)], total: 1 })
   mocks.mark.mockResolvedValue({ success: true })
+  mocks.send.mockResolvedValue({ ...invoice(1), status: 'issued', delivered_at: '2026-09-28T00:00:00Z', attachment_name: 'invoice-1.pdf' })
   mocks.workbook.mockResolvedValue({ workbook: {}, XLSX: { write: () => new Uint8Array([1]) } })
 })
 afterEach(() => wrapper?.unmount())
 async function open() {
-  wrapper = mount(AdminInvoicesView, { global: { stubs: { AppLayout: { template: '<main><slot /></main>' }, DataTable: true, Pagination: true,
+  wrapper = mount(AdminInvoicesView, { global: { stubs: { AppLayout: { template: '<main><slot /></main>' }, DataTable: { name: 'DataTable', props: ['data'], template: '<div><slot v-if="data.length" name="cell-actions" :row="data[0]" /></div>' }, Pagination: true,
     BaseDialog: { props: ['show'], template: '<div v-if="show"><slot/><slot name="footer"/></div>' }, InvoicePreview: true,
   } } })
   await flushPromises(); return wrapper
@@ -46,5 +47,16 @@ describe('invoice administration', () => {
     expect(mocks.mark).not.toHaveBeenCalled()
     await w.findAll('button').find(b => b.text() === 'common.confirm')!.trigger('click'); await flushPromises()
     expect(mocks.mark).toHaveBeenCalledWith([1])
+  })
+  it('sends the selected PDF to the application email and shows its delivery record', async () => {
+    const w = await open()
+    await w.findAll('button').find(b => b.text() === 'common.view')!.trigger('click')
+    const file = new File(['%PDF-1.7'], 'invoice.pdf', { type: 'application/pdf' })
+    Object.defineProperty(w.get('#invoice-attachment').element, 'files', { value: [file] })
+    await w.get('#invoice-attachment').trigger('change')
+    await w.findAll('button').find(b => b.text() === 'invoices.sendAttachment')!.trigger('click')
+    await flushPromises()
+    expect(mocks.send).toHaveBeenCalledWith(1, file)
+    expect(w.text()).toContain('invoices.attachmentSent')
   })
 })

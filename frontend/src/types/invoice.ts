@@ -15,5 +15,6 @@ export interface UnpaidInvoice { id: number; total_amount: number; service_fee: 
 export interface InvoiceRequest extends InvoiceInformation {
   id: number; user_id: number; status: InvoiceStatus; quote: InvoiceQuote; payment?: CreateOrderResult
   created_at: string; expires_at: string; submitted_at: string | null; issued_at: string | null; issued_by: number | null
+  delivered_at?: string | null; attachment_name?: string
 }
 export interface InvoiceListParams { page?: number; page_size?: number; status?: string; search?: string; user_id?: number; start_date?: string; end_date?: string }
