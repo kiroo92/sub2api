@@ -68,22 +68,6 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if s.notificationEmailService != nil {
 		s.notificationEmailService.RememberRecipientLocale(ctx, req.UserID, user.Email, req.Locale)
 	}
-	orderAmount := req.Amount
-	limitAmount := req.Amount
-	if plan != nil {
-		orderAmount = plan.Price
-		limitAmount = plan.Price
-		if req.CouponCode != "" {
-			req.discount, err = subscriptionDiscount(ctx, s.entClient, req.UserID, plan, req.CouponCode, false)
-			if err != nil {
-				return nil, err
-			}
-			req.discount.USDToCNYRate = cfg.SubscriptionUSDToCNYRate
-			orderAmount, limitAmount = req.discount.Amount, req.discount.Amount
-		}
-	} else if req.OrderType == payment.OrderTypeBalance {
-		orderAmount = calculateCreditedBalance(req.Amount, cfg.BalanceRechargeMultiplier)
-	}
 	feeRate := cfg.RechargeFeeRate
 	if req.OrderType == payment.OrderTypeInvoiceFee {
 		feeRate = 0
@@ -97,6 +81,27 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	}
 	if req.OrderType == payment.OrderTypeInvoiceFee && methodCurrency != "CNY" {
 		return nil, infraerrors.BadRequest("INVOICE_CURRENCY_INVALID", "invoice fees require a CNY payment method")
+	}
+	orderAmount := req.Amount
+	limitAmount := req.Amount
+	bonusAmount := 0.0
+	if plan != nil {
+		orderAmount = plan.Price
+		limitAmount = plan.Price
+		if req.CouponCode != "" {
+			req.discount, err = subscriptionDiscount(ctx, s.entClient, req.UserID, plan, req.CouponCode, false)
+			if err != nil {
+				return nil, err
+			}
+			req.discount.USDToCNYRate = cfg.SubscriptionUSDToCNYRate
+			orderAmount, limitAmount = req.discount.Amount, req.discount.Amount
+		}
+	} else if req.OrderType == payment.OrderTypeBalance {
+		// 阈值按支付金额命中。赠金模式：到账 = 基数 + 赠送；折扣模式：到账 = 基数，实付基数按折扣减少。
+		quote := quoteRechargeBonus(cfg, req.Amount, methodCurrency)
+		limitAmount = quote.PayBase
+		bonusAmount = quote.Bonus
+		orderAmount = quote.Credited
 	}
 	payAmountStr, payAmount, err := calculateCreateOrderPayAmountForOrderType(limitAmount, feeRate, methodCurrency, req.OrderType, cfg.SubscriptionUSDToCNYRate)
 	if err != nil {
@@ -137,7 +142,7 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if oauthResp != nil {
 		return oauthResp, nil
 	}
-	order, err := s.createOrderInTx(ctx, req, user, plan, cfg, orderAmount, limitAmount, feeRate, payAmount, sel)
+	order, err := s.createOrderInTx(ctx, req, user, plan, cfg, orderAmount, limitAmount, feeRate, payAmount, bonusAmount, sel)
 	if err != nil {
 		if req.OrderType == payment.OrderTypeInvoiceFee && infraerrors.Reason(err) == "INVOICE_PAYMENT_EXISTS" {
 			existing, lookupErr := s.entClient.PaymentOrder.Query().Where(paymentorder.InvoiceRequestIDEQ(req.InvoiceRequestID)).Only(ctx)
@@ -199,7 +204,7 @@ func (s *PaymentService) validateSubOrder(ctx context.Context, req CreateOrderRe
 	return plan, nil
 }
 
-func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderRequest, user *User, plan *dbent.SubscriptionPlan, cfg *PaymentConfig, orderAmount, limitAmount, feeRate, payAmount float64, sel *payment.InstanceSelection) (*dbent.PaymentOrder, error) {
+func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderRequest, user *User, plan *dbent.SubscriptionPlan, cfg *PaymentConfig, orderAmount, limitAmount, feeRate, payAmount, bonusAmount float64, sel *payment.InstanceSelection) (*dbent.PaymentOrder, error) {
 	tx, err := s.entClient.Tx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
@@ -260,6 +265,7 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 		SetAmount(orderAmount).
 		SetPayAmount(payAmount).
 		SetFeeRate(feeRate).
+		SetBonusAmount(bonusAmount).
 		SetRechargeCode("").
 		SetOutTradeNo(outTradeNo).
 		SetPaymentType(req.PaymentType).
@@ -575,6 +581,7 @@ func (s *PaymentService) invokeProvider(ctx context.Context, order *dbent.Paymen
 	s.writeAuditLog(ctx, order.ID, "ORDER_CREATED", fmt.Sprintf("user:%d", req.UserID), map[string]any{
 		"paymentAmount":  req.Amount,
 		"creditedAmount": order.Amount,
+		"bonusAmount":    order.BonusAmount,
 		"payAmount":      order.PayAmount,
 		"paymentType":    req.PaymentType,
 		"orderType":      req.OrderType,
@@ -842,6 +849,7 @@ func buildCreateOrderResponse(order *dbent.PaymentOrder, req CreateOrderRequest,
 		Amount:           order.Amount,
 		PayAmount:        payAmount,
 		FeeRate:          order.FeeRate,
+		BonusAmount:      order.BonusAmount,
 		Status:           OrderStatusPending,
 		ResultType:       resultType,
 		PaymentType:      req.PaymentType,
