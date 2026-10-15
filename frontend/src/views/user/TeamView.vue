@@ -9,12 +9,13 @@ import type { Group } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { useClipboard } from '@/composables/useClipboard'
 import { formatCurrency, formatDateTime } from '@/utils/format'
-import { rememberTeamInvitation, takeTeamInvitation } from '@/utils/teamInvitation'
+import { rememberTeamInvitation, takeTeamInvitation, getTeamActivation, clearTeamActivation } from '@/utils/teamInvitation'
 
 const { t } = useI18n()
 const props = defineProps<{ adminTeamId?: number }>()
 const teamAPI = props.adminTeamId ? createTeamAPI(`/admin/teams/${props.adminTeamId}`) : userTeamAPI
 const invitationToken = ref('')
+const activationToken = ref('')
 const app = useAppStore()
 const { copyToClipboard } = useClipboard()
 const snapshot = ref<TeamSnapshot | null>(null)
@@ -35,13 +36,24 @@ const defaults = ref<TeamLimits>({ daily: 0, weekly: 0, monthly: 0 })
 const revealed = ref<number[]>([])
 const editingKey = ref<TeamKey | null>(null)
 const editingMember = ref<TeamMember | null>(null)
+const editingModels = ref<TeamMember | null>(null)
+const memberModels = ref<string[]>([])
+const availableModels = ref<string[]>([])
+const modelsLoading = ref(false)
+const modelsLoadFailed = ref(false)
+const modelSearch = ref('')
+const modelChoices = computed(() => [...new Set([...availableModels.value, ...memberModels.value])]
+  .filter(model => model.toLowerCase().includes(modelSearch.value.trim().toLowerCase()))
+  .sort())
 const memberLimits = ref<TeamLimits>({ daily: 0, weekly: 0, monthly: 0 })
 const confirmation = ref<{ title: string; message: string; run: () => Promise<unknown>; dissolve?: boolean } | null>(null)
 const confirmName = ref('')
 const showGuide = ref(false)
 
 function report(reason: unknown) {
-  error.value = reason && typeof reason === 'object' && 'message' in reason ? String(reason.message) : t('team.failed')
+  error.value = reason && typeof reason === 'object' && 'reason' in reason && reason.reason === 'TEAM_ACTIVATION_REQUIRED'
+    ? t('team.activationInvalid')
+    : reason && typeof reason === 'object' && 'message' in reason ? String(reason.message) : t('team.failed')
   app.showError(error.value)
 }
 async function load() {
@@ -52,6 +64,7 @@ async function load() {
   revealed.value = []
   groups.value = []
   if (state.team) {
+    if (!props.adminTeamId) clearTeamActivation()
     name.value = state.team.name
     selected.value = [...state.team.group_ids]
     defaults.value = { ...state.team.default_limits }
@@ -92,6 +105,28 @@ function editLimits(member: TeamMember) {
   editingMember.value = member
   memberLimits.value = { ...member.limits }
 }
+async function fetchModels() {
+  if (modelsLoading.value) return
+  modelsLoading.value = true
+  modelsLoadFailed.value = false
+  try { availableModels.value = await teamAPI.availableModels() }
+  catch (reason) { modelsLoadFailed.value = true; report(reason) }
+  finally { modelsLoading.value = false }
+}
+function editModels(member: TeamMember) {
+  if (!owner.value || busy.value || modelsLoading.value) return
+  editingModels.value = member
+  memberModels.value = [...(member.allowed_models || [])]
+  availableModels.value = []
+  modelSearch.value = ''
+  void fetchModels()
+}
+function saveModels() {
+  const member = editingModels.value
+  if (!member || !owner.value || modelsLoading.value || modelsLoadFailed.value) return
+  const models = [...memberModels.value]
+  void mutate(() => teamAPI.models(member.user_id, models), () => { editingModels.value = null })
+}
 function ask(title: string, message: string, run: () => Promise<unknown>, dissolve = false) {
   confirmName.value = ''
   confirmation.value = { title, message, run, dissolve }
@@ -106,11 +141,18 @@ function saveKey() {
   if (!key || !keyName.value.trim()) return
   void mutate(() => teamAPI.updateKey(key.id, { name: keyName.value.trim() }), () => { editingKey.value = null; keyName.value = '' })
 }
+function activate() {
+  void mutate(() => teamAPI.create(name.value.trim(), activationToken.value), () => {
+    activationToken.value = ''
+    clearTeamActivation()
+  })
+}
 onMounted(() => {
   if (!props.adminTeamId) {
     rememberTeamInvitation(window.location.hash)
     invitationToken.value = takeTeamInvitation()
-    if (invitationToken.value) window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search)
+    activationToken.value = getTeamActivation()
+    if (invitationToken.value || activationToken.value) window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search)
   }
   void refresh()
 })
@@ -127,19 +169,34 @@ onMounted(() => {
       <p v-if="error" role="alert" class="rounded-lg bg-red-50 p-3 text-red-700 dark:bg-red-950 dark:text-red-300">{{ error }}</p>
       <p v-if="loading" role="status" class="team-muted">{{ t('team.loading') }}</p>
       <template v-else-if="snapshot">
-        <p v-if="invitationToken && team" role="status" class="text-amber-700">{{ t('team.alreadyInTeam') }}</p>
+        <p v-if="(invitationToken || activationToken) && team" role="status" class="text-amber-700">{{ t('team.alreadyInTeam') }}</p>
         <template v-if="!team && !adminTeamId">
           <section v-if="invitationToken" class="space-y-3 border-b pb-5 dark:border-dark-700">
             <h2 class="font-semibold">{{ t('team.linkInvitation') }}</h2>
             <p class="text-sm text-gray-500">{{ t('team.invitationEmailHint') }}</p>
             <button class="btn btn-primary" :disabled="busy" @click="mutate(() => teamAPI.acceptToken(invitationToken), () => { invitationToken = '' })">{{ t('team.accept') }}</button>
           </section>
-          <form class="card max-w-xl space-y-4 p-6" @submit.prevent="mutate(() => teamAPI.create(name.trim()))">
-            <h2 class="text-lg font-semibold">{{ t('team.create') }}</h2>
+          <form v-if="activationToken" class="card max-w-xl space-y-4 p-6" @submit.prevent="activate">
+            <h2 class="text-lg font-semibold">{{ t('team.activate') }}</h2>
             <p class="text-sm text-gray-500">{{ t('team.createHint') }}</p>
             <label class="block">{{ t('team.name') }}<input v-model="name" class="input mt-2" required maxlength="100" :disabled="busy" /></label>
-            <button class="btn btn-primary" :disabled="busy || !name.trim()">{{ t('team.create') }}</button>
+            <button class="btn btn-primary" :disabled="busy || !name.trim()">{{ t('team.activate') }}</button>
           </form>
+          <section v-else-if="!invitationToken" class="team-enterprise" aria-labelledby="enterprise-title">
+            <span class="team-enterprise-badge"><Icon name="lock" size="sm" aria-hidden="true" />{{ t('team.invitationOnly') }}</span>
+            <h2 id="enterprise-title">{{ t('team.enterpriseActivation') }}</h2>
+            <p class="team-enterprise-intro">{{ t('team.enterpriseHint') }}</p>
+            <div class="team-enterprise-features">
+              <article v-for="feature in ['pools', 'panel', 'shared'] as const" :key="feature">
+                <h3>{{ t(`team.enterpriseFeatures.${feature}.title`) }}</h3>
+                <p>{{ t(`team.enterpriseFeatures.${feature}.description`) }}</p>
+              </article>
+            </div>
+            <div class="team-enterprise-contact">
+              <p>{{ t('team.contactAdmin') }}</p>
+              <p v-if="app.contactInfo" class="mt-2 whitespace-pre-wrap break-words">{{ app.contactInfo }}</p>
+            </div>
+          </section>
           <section v-if="snapshot.pending_invitations.length" class="card space-y-4 p-6">
             <h2 class="font-semibold">{{ t('team.pendingInvitations') }}</h2>
             <div v-for="invite in snapshot.pending_invitations" :key="invite.id" class="flex flex-wrap items-center justify-between gap-3 border-t pt-4 dark:border-dark-700">
@@ -160,6 +217,7 @@ onMounted(() => {
             </div>
           </div>
           <p v-if="team.status !== 'active'" role="status" class="rounded-lg bg-amber-50 p-3 text-amber-800 dark:bg-amber-950 dark:text-amber-200">{{ t('team.pausedHint') }}</p>
+          <p class="team-muted">{{ t('team.sharedQuotaHint') }}</p>
           <nav class="team-tabs" :aria-label="t('team.title')">
             <button v-for="item in (owner ? ['overview', 'keys', 'settings'] as const : ['overview', 'keys'] as const)" :key="item" :class="{ 'is-active': tab === item }" :aria-current="tab === item ? 'page' : undefined" @click="tab = item">{{ t(`team.${item}`) }}</button>
           </nav>
@@ -182,9 +240,10 @@ onMounted(() => {
                   <dl class="team-meters">
                     <div v-for="period in windows" :key="period"><dt>{{ t(`team.${period}`) }}</dt><dd>{{ formatCurrency(member.usage[period]) }} <span class="team-muted">/ {{ member.limits[period] === 0 ? t('team.unlimited') : formatCurrency(member.limits[period]) }}</span><p class="team-muted mt-1 text-xs">{{ t('team.resets') }}: {{ formatDateTime(member.resets[period]) }}</p></dd></div>
                   </dl>
+                  <p class="team-muted mt-4 break-all">{{ t('team.allowedModels') }}: {{ member.allowed_models?.length ? member.allowed_models.join(', ') : t('team.unlimited') }}</p>
                   <div class="mt-5 flex flex-wrap items-center justify-between gap-3">
                     <p class="team-muted">{{ t('team.total') }}: {{ formatCurrency(member.usage.total) }}</p>
-                    <div v-if="owner" class="flex flex-wrap gap-2"><button class="btn btn-secondary btn-sm" :disabled="busy" @click="editLimits(member)">{{ t('team.editLimits') }}</button><button v-if="member.role !== 'owner'" class="btn btn-danger btn-sm" :disabled="busy" @click="ask(t('team.remove'), t('team.removeHint'), () => teamAPI.remove(member.user_id))">{{ t('team.remove') }}</button></div>
+                    <div v-if="owner" class="flex flex-wrap gap-2"><button class="btn btn-secondary btn-sm" :disabled="busy" @click="editLimits(member)">{{ t('team.editLimits') }}</button><button class="btn btn-secondary btn-sm" :disabled="busy" @click="editModels(member)">{{ t('team.editModels') }}</button><button v-if="member.role !== 'owner'" class="btn btn-danger btn-sm" :disabled="busy" @click="ask(t('team.remove'), t('team.removeHint'), () => teamAPI.remove(member.user_id))">{{ t('team.remove') }}</button></div>
                   </div>
                 </div>
               </details>
@@ -242,6 +301,30 @@ onMounted(() => {
       <label v-if="confirmation?.dissolve" class="mt-4 block">{{ t('team.confirmName', { name: team?.name }) }}<input v-model="confirmName" class="input mt-2" :disabled="busy" autocomplete="off" /></label>
       <template #footer><div class="flex justify-end gap-3"><button class="btn btn-secondary" :disabled="busy" @click="confirmation = null">{{ t('team.cancel') }}</button><button class="btn btn-danger" :disabled="busy || (!!confirmation?.dissolve && confirmName !== team?.name)" @click="confirm">{{ t('team.confirm') }}</button></div></template>
     </BaseDialog>
+    <BaseDialog :show="!!editingModels" :title="t('team.editModels')" @close="!busy && (editingModels = null)">
+      <form class="space-y-4" @submit.prevent="saveModels">
+        <p class="break-all">{{ editingModels?.email }}</p>
+        <p class="text-sm text-gray-500">{{ t('team.modelsHint') }}</p>
+        <p v-if="!team?.group_ids.length" role="status" class="text-sm text-amber-700">{{ t('team.modelsRoutingHint') }}</p>
+        <p v-if="modelsLoading" role="status">{{ t('team.loading') }}</p>
+        <div v-else-if="modelsLoadFailed" role="alert" class="space-y-2">
+          <p>{{ t('team.modelsLoadFailed') }}</p>
+          <button type="button" class="btn btn-secondary" @click="fetchModels">{{ t('team.refresh') }}</button>
+        </div>
+        <template v-else>
+          <input v-model="modelSearch" class="input" :aria-label="t('team.searchModels')" :placeholder="t('team.searchModels')" />
+          <button type="button" class="btn btn-secondary btn-sm" :disabled="busy" @click="memberModels = []">{{ t('team.allModels') }}</button>
+          <div class="max-h-72 space-y-2 overflow-y-auto" :aria-label="t('team.allowedModels')">
+            <label v-for="model in modelChoices" :key="model" class="flex items-center gap-3 break-all">
+              <input v-model="memberModels" type="checkbox" :value="model" :disabled="busy" />
+              <span>{{ model }}<span v-if="!availableModels.includes(model)" class="ml-2 text-sm text-amber-600">{{ t('team.modelUnavailable') }}</span></span>
+            </label>
+            <p v-if="!modelChoices.length" class="text-sm text-gray-500">{{ t('team.noModels') }}</p>
+          </div>
+        </template>
+        <button class="btn btn-primary" :disabled="busy || modelsLoading || modelsLoadFailed">{{ t('team.save') }}</button>
+      </form>
+    </BaseDialog>
     <BaseDialog :show="!!editingMember" :title="t('team.editLimits')" @close="!busy && (editingMember = null)">
       <form class="space-y-4" @submit.prevent="mutate(() => teamAPI.limits(editingMember!.user_id, { ...memberLimits }), () => { editingMember = null })"><p class="break-all">{{ editingMember?.email }}</p><p class="text-sm text-gray-500">{{ t('team.limitsHint') }}</p><label v-for="period in windows" :key="period" class="block">{{ t(`team.${period}`) }}<input v-model.number="memberLimits[period]" class="input mt-1" type="number" min="0" step="any" required :disabled="busy" /></label><button class="btn btn-primary" :disabled="busy">{{ t('team.save') }}</button></form>
     </BaseDialog>
@@ -265,8 +348,18 @@ onMounted(() => {
 .team-layout :deep(.sidebar-link-active) { color: var(--team-accent); background: color-mix(in srgb, var(--team-accent) 12%, transparent); }
 .team-page { display: flex; flex-direction: column; gap: 20px; font-size: 14px; line-height: 1.5; }
 .team-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.team-heading > .btn { flex-shrink: 0; white-space: nowrap; }
 .team-heading h1 { font-size: 22px; font-weight: 700; line-height: 1.35; }
 .team-heading p { margin-top: 4px; color: var(--team-muted); font-size: 13px; }
+.team-enterprise { padding: clamp(24px, 4vw, 48px); border: 1px solid var(--team-border); border-radius: 12px; background: var(--team-surface); }
+.team-enterprise-badge { display: inline-flex; align-items: center; gap: 6px; color: var(--team-accent); font-size: 13px; }
+.team-enterprise h2 { margin-top: 16px; font-size: 28px; font-weight: 700; }
+.team-enterprise-intro { margin-top: 12px; max-width: 620px; color: var(--team-muted); line-height: 1.8; }
+.team-enterprise-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 24px; margin-top: 32px; }
+.team-enterprise-features article { border-top: 2px solid var(--team-accent); padding-top: 16px; }
+.team-enterprise-features h3 { font-size: 16px; font-weight: 600; }
+.team-enterprise-features p { margin-top: 8px; color: var(--team-muted); line-height: 1.8; }
+.team-enterprise-contact { margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--team-border); color: var(--team-muted); }
 .team-summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .team-name { overflow-wrap: anywhere; font-size: 21px; font-weight: 600; line-height: 1.3; }
 .team-muted { color: var(--team-muted); }

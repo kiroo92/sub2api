@@ -8,7 +8,7 @@
 name: sub2api
 services:
   sub2api:
-    image: sub2api-local:invoice-e4ad848e
+    image: sub2api-local:v0.2.14-20261008-team-models
     container_name: sub2api
     restart: unless-stopped
     dns:
@@ -19,7 +19,7 @@ services:
         soft: 100000
         hard: 100000
     ports:
-    - ${BIND_HOST:-127.0.0.1}:${SERVER_PORT:-18081}:8080
+    - ${BIND_HOST:-0.0.0.0}:${SERVER_PORT:-18081}:8080
     volumes:
     - ./data:/app/data
     extra_hosts:

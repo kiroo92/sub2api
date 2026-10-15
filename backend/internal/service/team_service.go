@@ -56,16 +56,17 @@ type Team struct {
 	CreatedAt     time.Time  `json:"created_at"`
 }
 type TeamMember struct {
-	ID       int64      `json:"id"`
-	UserID   int64      `json:"user_id"`
-	Email    string     `json:"email"`
-	Username string     `json:"username"`
-	Role     string     `json:"role"`
-	Active   bool       `json:"active"`
-	Limits   TeamLimits `json:"limits"`
-	Usage    TeamUsage  `json:"usage"`
-	Resets   TeamResets `json:"resets"`
-	JoinedAt time.Time  `json:"joined_at"`
+	ID            int64      `json:"id"`
+	UserID        int64      `json:"user_id"`
+	Email         string     `json:"email"`
+	Username      string     `json:"username"`
+	Role          string     `json:"role"`
+	Active        bool       `json:"active"`
+	Limits        TeamLimits `json:"limits"`
+	AllowedModels []string   `json:"allowed_models"`
+	Usage         TeamUsage  `json:"usage"`
+	Resets        TeamResets `json:"resets"`
+	JoinedAt      time.Time  `json:"joined_at"`
 }
 type TeamResets struct {
 	Daily   *time.Time `json:"daily"`
@@ -121,23 +122,29 @@ type TeamSettings struct {
 
 // TeamAttribution is request-local. Never put the payer or this snapshot in auth caches.
 type TeamAttribution struct {
-	TeamID       int64
-	MemberID     int64
-	MemberUserID int64
-	OwnerID      int64
-	GroupIDs     []int64
-	RequestID    string
+	TeamID        int64
+	MemberID      int64
+	MemberUserID  int64
+	OwnerID       int64
+	GroupIDs      []int64
+	AllowedModels []string
+	RequestModels []string
+	RequestID     string
 }
 type TeamRepository interface {
 	AdminList(context.Context, string, string, int, int) ([]TeamAdminItem, int, error)
 	AdminOwner(context.Context, int64) (int64, error)
 	Snapshot(context.Context, int64) (*TeamSnapshot, error)
-	Create(context.Context, int64, string) error
+	Create(context.Context, int64, string, string) error
+	ActivationInvitations(context.Context) ([]TeamActivationInvitation, error)
+	InviteActivation(context.Context, int64, string, string) (*TeamActivationInvitation, error)
+	RevokeActivation(context.Context, int64) error
 	Update(context.Context, int64, TeamSettings) error
 	Invite(context.Context, int64, string, string, int64) (*TeamInvitation, error)
 	RevokeInvite(context.Context, int64, int64) error
 	Accept(context.Context, int64, string, int64) error
 	SetLimits(context.Context, int64, int64, TeamLimits) error
+	SetModels(context.Context, int64, int64, []string) error
 	Leave(context.Context, int64, int64) error
 	Dissolve(context.Context, int64) error
 	Keys(context.Context, int64) ([]TeamKey, error)
@@ -200,12 +207,17 @@ func teamName(name string) (string, error) {
 	}
 	return name, nil
 }
-func (s *TeamService) Create(ctx context.Context, id int64, name string) error {
-	name, err := teamName(name)
+func (s *TeamService) Create(ctx context.Context, id int64, name, token string) error {
+	decoded, err := hex.DecodeString(token)
+	if err != nil || len(decoded) != 32 {
+		return ErrTeamActivationRequired
+	}
+	name, err = teamName(name)
 	if err != nil {
 		return err
 	}
-	return s.repo.Create(ctx, id, name)
+	hash := sha256.Sum256([]byte(token))
+	return s.repo.Create(ctx, id, name, hex.EncodeToString(hash[:]))
 }
 func (s *TeamService) Update(ctx context.Context, id int64, in TeamSettings) error {
 	if in.Name != nil {

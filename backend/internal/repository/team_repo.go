@@ -70,7 +70,7 @@ func noActiveTeam(ctx context.Context, tx *sql.Tx, id int64) error {
 	}
 	return nil
 }
-func (r *teamRepository) Create(ctx context.Context, id int64, name string) error {
+func (r *teamRepository) Create(ctx context.Context, id int64, name, hash string) error {
 	return r.transaction(ctx, func(tx *sql.Tx) error {
 		if err := lockTeamUser(ctx, tx, id); err != nil {
 			return err
@@ -78,11 +78,22 @@ func (r *teamRepository) Create(ctx context.Context, id int64, name string) erro
 		if err := noActiveTeam(ctx, tx, id); err != nil {
 			return err
 		}
+		var invitation int64
+		err := tx.QueryRowContext(ctx, `SELECT i.id FROM team_activation_invitations i JOIN users u ON lower(u.email)=i.email WHERE u.id=$1 AND i.token_hash=$2 AND i.status='pending' AND i.expires_at>NOW() FOR UPDATE OF i`, id, hash).Scan(&invitation)
+		if errors.Is(err, sql.ErrNoRows) {
+			return service.ErrTeamActivationRequired
+		}
+		if err != nil {
+			return err
+		}
 		var team int64
 		if err := tx.QueryRowContext(ctx, `INSERT INTO teams(owner_id,name) VALUES($1,$2) RETURNING id`, id, name).Scan(&team); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO team_members(team_id,user_id) VALUES($1,$2)`, team, id)
+		if _, err = tx.ExecContext(ctx, `INSERT INTO team_members(team_id,user_id) VALUES($1,$2)`, team, id); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE team_activation_invitations SET status='accepted' WHERE id=$1`, invitation)
 		return err
 	})
 }
@@ -111,14 +122,19 @@ func (r *teamRepository) Snapshot(ctx context.Context, id int64) (*service.TeamS
 			if t.OwnerID == id {
 				out.Role = "owner"
 			}
-			rows, err := tx.QueryContext(ctx, `SELECT m.id,m.user_id,u.email,COALESCE(u.username,''),m.active,m.daily_limit,m.weekly_limit,m.monthly_limit,m.daily_used,m.weekly_used,m.monthly_used,m.total_used,m.daily_start,m.weekly_start,m.monthly_start,m.joined_at FROM team_members m JOIN users u ON u.id=m.user_id WHERE m.team_id=$1 ORDER BY m.id`, t.ID)
+			rows, err := tx.QueryContext(ctx, `SELECT m.id,m.user_id,u.email,COALESCE(u.username,''),m.active,m.daily_limit,m.weekly_limit,m.monthly_limit,m.daily_used,m.weekly_used,m.monthly_used,m.total_used,m.daily_start,m.weekly_start,m.monthly_start,m.joined_at,m.allowed_models FROM team_members m JOIN users u ON u.id=m.user_id WHERE m.team_id=$1 ORDER BY m.id`, t.ID)
 			if err != nil {
 				return err
 			}
 			for rows.Next() {
 				var m service.TeamMember
+				var models []byte
 				var day, week, month *time.Time
-				if err = rows.Scan(&m.ID, &m.UserID, &m.Email, &m.Username, &m.Active, &m.Limits.Daily, &m.Limits.Weekly, &m.Limits.Monthly, &m.Usage.Daily, &m.Usage.Weekly, &m.Usage.Monthly, &m.Usage.Total, &day, &week, &month, &m.JoinedAt); err != nil {
+				if err = rows.Scan(&m.ID, &m.UserID, &m.Email, &m.Username, &m.Active, &m.Limits.Daily, &m.Limits.Weekly, &m.Limits.Monthly, &m.Usage.Daily, &m.Usage.Weekly, &m.Usage.Monthly, &m.Usage.Total, &day, &week, &month, &m.JoinedAt, &models); err != nil {
+					_ = rows.Close()
+					return err
+				}
+				if err = json.Unmarshal(models, &m.AllowedModels); err != nil {
 					_ = rows.Close()
 					return err
 				}
@@ -390,10 +406,10 @@ func (r *teamRepository) UpdateKey(ctx context.Context, id, key int64, name, sta
 }
 func (r *teamRepository) KeyAttribution(ctx context.Context, key int64) (*service.TeamAttribution, error) {
 	var a service.TeamAttribution
-	var groups []byte
+	var groups, models []byte
 	var active, revoked bool
 	var status, keyStatus string
-	err := r.db.QueryRowContext(ctx, `SELECT t.id,m.id,m.user_id,t.owner_id,t.group_ids,m.active,tk.revoked,t.status,k.status FROM team_api_keys tk JOIN team_members m ON m.id=tk.member_id JOIN teams t ON t.id=m.team_id JOIN api_keys k ON k.id=tk.api_key_id WHERE tk.api_key_id=$1`, key).Scan(&a.TeamID, &a.MemberID, &a.MemberUserID, &a.OwnerID, &groups, &active, &revoked, &status, &keyStatus)
+	err := r.db.QueryRowContext(ctx, `SELECT t.id,m.id,m.user_id,t.owner_id,t.group_ids,m.active,tk.revoked,t.status,k.status,m.allowed_models FROM team_api_keys tk JOIN team_members m ON m.id=tk.member_id JOIN teams t ON t.id=m.team_id JOIN api_keys k ON k.id=tk.api_key_id WHERE tk.api_key_id=$1`, key).Scan(&a.TeamID, &a.MemberID, &a.MemberUserID, &a.OwnerID, &groups, &active, &revoked, &status, &keyStatus, &models)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -404,6 +420,9 @@ func (r *teamRepository) KeyAttribution(ctx context.Context, key int64) (*servic
 		return nil, service.ErrTeamUnavailable
 	}
 	if err = json.Unmarshal(groups, &a.GroupIDs); err != nil {
+		return nil, err
+	}
+	if err = json.Unmarshal(models, &a.AllowedModels); err != nil {
 		return nil, err
 	}
 	return &a, nil
@@ -418,13 +437,21 @@ func (r *teamRepository) Admit(ctx context.Context, a *service.TeamAttribution, 
 		var revoked bool
 		var u service.TeamUsage
 		var l service.TeamLimits
+		var models []byte
 		var day, week, month *time.Time
-		err := tx.QueryRowContext(ctx, `SELECT m.active,t.status,(tk.revoked OR k.status!='active' OR k.deleted_at IS NOT NULL),m.daily_limit,m.weekly_limit,m.monthly_limit,m.daily_used,m.weekly_used,m.monthly_used,m.daily_start,m.weekly_start,m.monthly_start FROM team_members m JOIN teams t ON t.id=m.team_id JOIN team_api_keys tk ON tk.member_id=m.id JOIN api_keys k ON k.id=tk.api_key_id WHERE m.id=$1 AND t.id=$2 AND tk.api_key_id=$3 FOR UPDATE OF t,m`, a.MemberID, a.TeamID, key).Scan(&active, &status, &revoked, &l.Daily, &l.Weekly, &l.Monthly, &u.Daily, &u.Weekly, &u.Monthly, &day, &week, &month)
+		err := tx.QueryRowContext(ctx, `SELECT m.active,t.status,(tk.revoked OR k.status!='active' OR k.deleted_at IS NOT NULL),m.daily_limit,m.weekly_limit,m.monthly_limit,m.daily_used,m.weekly_used,m.monthly_used,m.daily_start,m.weekly_start,m.monthly_start,m.allowed_models FROM team_members m JOIN teams t ON t.id=m.team_id JOIN team_api_keys tk ON tk.member_id=m.id JOIN api_keys k ON k.id=tk.api_key_id WHERE m.id=$1 AND t.id=$2 AND tk.api_key_id=$3 FOR UPDATE OF t,m`, a.MemberID, a.TeamID, key).Scan(&active, &status, &revoked, &l.Daily, &l.Weekly, &l.Monthly, &u.Daily, &u.Weekly, &u.Monthly, &day, &week, &month, &models)
 		if err != nil {
 			return err
 		}
 		if !active || revoked || status != "active" {
 			return service.ErrTeamUnavailable
+		}
+		var allowed []string
+		if err = json.Unmarshal(models, &allowed); err != nil {
+			return err
+		}
+		if err = service.ValidateTeamModels(allowed, a.RequestModels, false); err != nil {
+			return err
 		}
 		var pendingBill bool
 		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM team_requests r WHERE r.member_id=$1 AND (r.unresolved OR EXISTS(SELECT 1 FROM team_billing_pending p WHERE p.admission_id=r.id)))`, a.MemberID).Scan(&pendingBill); err != nil {

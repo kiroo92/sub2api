@@ -53,7 +53,7 @@ func TestTeamPostgresMembershipBillingAndCleanup(t *testing.T) {
 	}
 	_, err = db.ExecContext(ctx, `ALTER TABLE usage_logs ADD COLUMN account_stats_cost NUMERIC(20,10), ADD COLUMN session_id VARCHAR(255); CREATE UNIQUE INDEX team_test_usage_dedup ON usage_logs(request_id,api_key_id)`)
 	require.NoError(t, err)
-	for _, file := range []string{"033_ops_monitoring_vnext.sql", "054_ops_system_logs.sql", "071_add_usage_billing_dedup.sql", "073_add_usage_billing_dedup_archive.sql", "135_content_moderation.sql", "145_deleted_api_key_audit.sql", "154_add_ops_system_logs_api_key_id.sql", "181_prompt_audit.sql", "183_ops_ingress_reject_aggregates.sql", "241_team_billing.sql", "242_team_billing_recovery.sql"} {
+	for _, file := range []string{"033_ops_monitoring_vnext.sql", "054_ops_system_logs.sql", "071_add_usage_billing_dedup.sql", "073_add_usage_billing_dedup_archive.sql", "135_content_moderation.sql", "145_deleted_api_key_audit.sql", "154_add_ops_system_logs_api_key_id.sql", "181_prompt_audit.sql", "183_ops_ingress_reject_aggregates.sql", "241_team_billing.sql", "242_team_billing_recovery.sql", "246_team_activation_invitations.sql", "247_team_member_models.sql"} {
 		b, err := migrations.FS.ReadFile(file)
 		require.NoError(t, err)
 		_, err = db.ExecContext(ctx, string(b))
@@ -65,7 +65,54 @@ func TestTeamPostgresMembershipBillingAndCleanup(t *testing.T) {
 	_, err = client.User.UpdateOneID(owner.ID).SetBalance(100).Save(ctx)
 	require.NoError(t, err)
 	repo := NewTeamRepository(db, nil)
-	require.NoError(t, repo.Create(ctx, owner.ID, "Shared"))
+	admin := mustCreateAPIKeyRepoUser(t, ctx, client, "team-admin@example.com")
+	_, err = client.User.UpdateOneID(admin.ID).SetRole(service.RoleAdmin).Save(ctx)
+	require.NoError(t, err)
+	require.ErrorIs(t, repo.Create(ctx, owner.ID, "Shared", ""), service.ErrTeamActivationRequired)
+	_, err = repo.InviteActivation(ctx, member.ID, owner.Email, "forged-activation")
+	require.ErrorIs(t, err, service.ErrTeamForbidden)
+	activation, err := repo.InviteActivation(ctx, admin.ID, owner.Email, "activation-expired")
+	require.NoError(t, err)
+	require.ErrorIs(t, repo.Create(ctx, outsider.ID, "Wrong email", "activation-expired"), service.ErrTeamActivationRequired)
+	_, err = db.ExecContext(ctx, `UPDATE team_activation_invitations SET expires_at=NOW()-INTERVAL '1 second' WHERE id=$1`, activation.ID)
+	require.NoError(t, err)
+	require.ErrorIs(t, repo.Create(ctx, owner.ID, "Shared", "activation-expired"), service.ErrTeamActivationRequired)
+	_, err = repo.InviteActivation(ctx, admin.ID, owner.Email, "activation-revoked")
+	require.NoError(t, err)
+	require.NoError(t, repo.RevokeActivation(ctx, activation.ID))
+	require.ErrorIs(t, repo.Create(ctx, owner.ID, "Shared", "activation-revoked"), service.ErrTeamActivationRequired)
+	_, err = repo.InviteActivation(ctx, admin.ID, owner.Email, "activation-old")
+	require.NoError(t, err)
+	_, err = repo.InviteActivation(ctx, admin.ID, owner.Email, "activation-valid")
+	require.NoError(t, err)
+	require.ErrorIs(t, repo.Create(ctx, owner.ID, "Shared", "activation-old"), service.ErrTeamActivationRequired)
+	pending, err := repo.ActivationInvitations(ctx)
+	require.NoError(t, err)
+	require.Len(t, pending, 1)
+	// Concurrent uses of a single activation link can create only one team.
+	var activationWG sync.WaitGroup
+	activationResults := make(chan error, 2)
+	for range 2 {
+		activationWG.Add(1)
+		go func() {
+			defer activationWG.Done()
+			activationResults <- repo.Create(ctx, owner.ID, "Shared", "activation-valid")
+		}()
+	}
+	activationWG.Wait()
+	close(activationResults)
+	activationWins := 0
+	for result := range activationResults {
+		if result == nil {
+			activationWins++
+		} else {
+			require.ErrorIs(t, result, service.ErrTeamConflict)
+		}
+	}
+	require.Equal(t, 1, activationWins)
+	pending, err = repo.ActivationInvitations(ctx)
+	require.NoError(t, err)
+	require.Empty(t, pending)
 	adminItems, adminTotal, err := repo.AdminList(ctx, "team-owner@example.com", "active", 1, 20)
 	require.NoError(t, err)
 	require.Equal(t, 1, adminTotal)
@@ -81,7 +128,7 @@ func TestTeamPostgresMembershipBillingAndCleanup(t *testing.T) {
 	renamed := "Shared by admin"
 	require.ErrorIs(t, repo.Update(wrongAdminCtx, owner.ID, service.TeamSettings{Name: &renamed}), service.ErrTeamForbidden)
 	require.NoError(t, repo.Update(adminCtx, owner.ID, service.TeamSettings{Name: &renamed}))
-	require.ErrorIs(t, repo.Create(ctx, owner.ID, "Again"), service.ErrTeamConflict)
+	require.ErrorIs(t, repo.Create(ctx, owner.ID, "Again", "activation-valid"), service.ErrTeamConflict)
 	require.ErrorIs(t, repo.SetLimits(ctx, member.ID, owner.ID, service.TeamLimits{Daily: 1}), service.ErrTeamForbidden)
 	invite, err := repo.Invite(ctx, owner.ID, member.Email, "invite-hash", 0)
 	require.NoError(t, err)
@@ -100,7 +147,7 @@ func TestTeamPostgresMembershipBillingAndCleanup(t *testing.T) {
 	require.NoError(t, err)
 	require.ErrorIs(t, repo.Accept(ctx, member.ID, "invite-hash", 0), service.ErrTeamConflict)
 	require.NoError(t, repo.Accept(ctx, member.ID, "renewed-hash", 0))
-	require.ErrorIs(t, repo.Create(ctx, member.ID, "Another"), service.ErrTeamConflict)
+	require.ErrorIs(t, repo.Create(ctx, member.ID, "Another", "activation-valid"), service.ErrTeamConflict)
 	require.NoError(t, repo.SetLimits(ctx, owner.ID, member.ID, service.TeamLimits{Daily: 1, Weekly: 2, Monthly: 3}))
 	key, err := repo.CreateKey(ctx, member.ID, "Member key", "sk-team-member-test")
 	require.NoError(t, err)
@@ -121,6 +168,25 @@ func TestTeamPostgresMembershipBillingAndCleanup(t *testing.T) {
 	require.ErrorIs(t, repo.UpdateKey(ctx, member.ID, ownerKey.ID, "hack", "active", false), service.ErrTeamForbidden)
 	a, err := repo.KeyAttribution(ctx, key.ID)
 	require.NoError(t, err)
+	// Model permissions share the owner/admin authorization and remain fresh for cached keys.
+	require.ErrorIs(t, repo.SetModels(ctx, member.ID, member.ID, []string{"gpt-5"}), service.ErrTeamForbidden)
+	require.ErrorIs(t, repo.SetModels(wrongAdminCtx, owner.ID, member.ID, []string{"gpt-5"}), service.ErrTeamForbidden)
+	require.ErrorIs(t, repo.SetModels(ctx, owner.ID, outsider.ID, []string{"gpt-5"}), service.ErrTeamForbidden)
+	require.NoError(t, repo.SetModels(adminCtx, owner.ID, member.ID, []string{"gpt-5"}))
+	fresh, err := repo.KeyAttribution(ctx, key.ID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"gpt-5"}, fresh.AllowedModels)
+	memberState, err := repo.Snapshot(ctx, member.ID)
+	require.NoError(t, err)
+	require.Equal(t, []string{"gpt-5"}, memberState.Members[0].AllowedModels)
+	a.RequestID = "model-denied"
+	a.RequestModels = []string{"other-model"}
+	require.ErrorIs(t, repo.Admit(ctx, a, key.ID), service.ErrTeamModelForbidden, "admission rechecks changed permissions after routing")
+	a.RequestModels = []string{"gpt-5"}
+	require.NoError(t, repo.Admit(ctx, a, key.ID))
+	require.NoError(t, repo.Release(ctx, a.RequestID))
+	require.NoError(t, repo.SetModels(ctx, owner.ID, member.ID, nil))
+	a.RequestModels = nil
 	a.RequestID = "request-1"
 	require.NoError(t, repo.Admit(ctx, a, key.ID))
 	require.ErrorIs(t, repo.Dissolve(ctx, owner.ID), service.ErrTeamRequestsPending)
@@ -243,6 +309,11 @@ CREATE TRIGGER reject_team_test_debit BEFORE UPDATE OF balance ON users FOR EACH
 	require.NoError(t, err)
 	require.Zero(t, snapshot.PendingBilling)
 	require.NoError(t, repo.Admit(ctx, a, key.ID))
+	// Each member's models are independent and persist across leave/rejoin.
+	require.NoError(t, repo.SetModels(ctx, owner.ID, member.ID, []string{"gpt-5"}))
+	ownerAttribution, err := repo.KeyAttribution(ctx, ownerKey.ID)
+	require.NoError(t, err)
+	require.Empty(t, ownerAttribution.AllowedModels)
 	// Late settlement retains the original member after departure.
 	require.NoError(t, repo.Leave(ctx, member.ID, 0))
 	_, err = repo.KeyAttribution(ctx, key.ID)
@@ -258,6 +329,8 @@ CREATE TRIGGER reject_team_test_debit BEFORE UPDATE OF balance ON users FOR EACH
 	require.NoError(t, err)
 	next, err := repo.KeyAttribution(ctx, newKey.ID)
 	require.NoError(t, err)
+	require.Equal(t, []string{"gpt-5"}, next.AllowedModels)
+	require.NoError(t, repo.SetModels(ctx, owner.ID, member.ID, nil))
 	next.RequestID = "blocked"
 	require.Equal(t, a.MemberID, next.MemberID)
 	require.ErrorIs(t, repo.Admit(ctx, next, newKey.ID), service.ErrTeamLimit)
@@ -331,13 +404,21 @@ CREATE TRIGGER reject_team_test_debit BEFORE UPDATE OF balance ON users FOR EACH
 	_, err = client.APIKey.Get(ctx, personal.ID)
 	require.NoError(t, err)
 	// Create/accept races have exactly one winner, across processes via the user lock.
-	require.NoError(t, repo.Create(ctx, owner.ID, "Race"))
+	require.ErrorIs(t, repo.Create(ctx, owner.ID, "Replay", "activation-valid"), service.ErrTeamActivationRequired)
+	_, err = repo.InviteActivation(ctx, admin.ID, owner.Email, "activation-race-owner")
+	require.NoError(t, err)
+	require.NoError(t, repo.Create(ctx, owner.ID, "Race", "activation-race-owner"))
+	_, err = repo.InviteActivation(ctx, admin.ID, outsider.Email, "activation-race-outsider")
+	require.NoError(t, err)
 	invite, err = repo.Invite(ctx, owner.ID, outsider.Email, "race", 0)
 	require.NoError(t, err)
 	var wg sync.WaitGroup
 	results := make(chan error, 2)
 	wg.Add(2)
-	go func() { defer wg.Done(); results <- repo.Create(ctx, outsider.ID, "Competing") }()
+	go func() {
+		defer wg.Done()
+		results <- repo.Create(ctx, outsider.ID, "Competing", "activation-race-outsider")
+	}()
 	go func() { defer wg.Done(); results <- repo.Accept(ctx, outsider.ID, "", invite.ID) }()
 	wg.Wait()
 	close(results)

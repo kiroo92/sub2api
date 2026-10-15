@@ -8,6 +8,7 @@ export interface Team {
 }
 export interface TeamMember {
   username?: string
+  allowed_models: string[]
   user_id: number; email: string; role: 'owner' | 'member'; limits: TeamLimits
   usage: TeamLimits & { total: number }; resets: Record<keyof TeamLimits, string | null>; joined_at: string
 }
@@ -30,7 +31,7 @@ export function createTeamAPI(base = '/team') {
   return {
     recoverBilling: () => apiClient.post(`${base}/billing/recover`),
     get: async () => (await apiClient.get<TeamSnapshot>(base)).data,
-    create: (name: string) => apiClient.post(base, { name }),
+    create: (name: string, activation_token: string) => apiClient.post(base, { name, activation_token }),
     update: (data: Partial<Pick<Team, 'name' | 'status' | 'group_ids' | 'default_limits'>>) => apiClient.put(base, data),
     dissolve: (confirm_name: string) => apiClient.delete(base, { data: { confirm_name } }),
     leave: () => apiClient.post(`${base}/leave`),
@@ -40,6 +41,8 @@ export function createTeamAPI(base = '/team') {
     accept: (invitation_id: number) => apiClient.post(`${base}/invitations/accept`, { invitation_id }),
     acceptToken: (token: string) => apiClient.post(`${base}/invitations/accept`, { token }),
     limits: (userID: number, limits: TeamLimits) => apiClient.put(`${base}/members/${userID}/limits`, limits),
+    availableModels: async () => (await apiClient.get<string[]>(`${base}/models`)).data,
+    models: (userID: number, allowed_models: string[]) => apiClient.put(`${base}/members/${userID}/models`, { allowed_models }),
     remove: (userID: number) => apiClient.delete(`${base}/members/${userID}`),
     groups: async () => (await apiClient.get<Group[]>(`${base}/groups`)).data,
     keys: async () => (await apiClient.get<TeamKey[]>(`${base}/keys`)).data,
@@ -51,7 +54,11 @@ export function createTeamAPI(base = '/team') {
 export const teamAPI = createTeamAPI()
 
 export interface TeamAdminItem { id: number; name: string; owner_id: number; owner_email: string; status: string; member_count: number; total_usage: number }
+export interface TeamActivationInvitation { id: number; email: string; expires_at: string; created_at: string }
 export const adminTeamsAPI = {
+  activationInvitations: async () => (await apiClient.get<TeamActivationInvitation[]>('/admin/teams/activation-invitations')).data,
+  inviteActivation: async (email: string) => (await apiClient.post<{ invitation_url: string }>('/admin/teams/activation-invitations', { email })).data,
+  revokeActivation: (id: number) => apiClient.delete(`/admin/teams/activation-invitations/${id}`),
   list: async (params: { search: string; status: string; page: number; page_size: number }) => (await apiClient.get<{ items: TeamAdminItem[]; total: number }>('/admin/teams', { params })).data,
   config: async () => (await apiClient.get<{ frontend_url: string }>('/admin/teams/config')).data,
   saveConfig: (frontend_url: string) => apiClient.put('/admin/teams/config', { frontend_url })

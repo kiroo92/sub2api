@@ -21,6 +21,7 @@ import (
 
 const (
 	NotificationEmailEventTeamInvitation              = "team.invitation"
+	NotificationEmailEventTeamActivation              = "team.activation"
 	NotificationEmailEventAuthVerifyCode              = "auth.verify_code"
 	NotificationEmailEventAuthPasswordReset           = "auth.password_reset"
 	NotificationEmailEventNotificationEmailVerifyCode = "notification_email.verify_code"
@@ -519,9 +520,12 @@ func (s *NotificationEmailService) sampleVariables(ctx context.Context, event, l
 		variables[key] = value
 	}
 	variables["site_name"] = s.siteName(ctx)
-	if event == NotificationEmailEventTeamInvitation {
+	if event == NotificationEmailEventTeamInvitation || event == NotificationEmailEventTeamActivation {
 		variables["team_name"] = "Example Team"
 		variables["invitation_url"] = "https://example.com/team#invite=preview"
+		if event == NotificationEmailEventTeamActivation {
+			variables["invitation_url"] = "https://example.com/team#activate=preview"
+		}
 		variables["expiry_time"] = "2099-01-01T00:00:00Z"
 	}
 	if variables["unsubscribe_url"] == "" && info.Optional {
@@ -708,7 +712,7 @@ func validateNotificationEmailTemplate(event, subject, htmlBody string) error {
 		return fmt.Errorf("email html cannot exceed %d bytes", notificationEmailMaxHTMLLength)
 	}
 	allowed := notificationEmailAllowedPlaceholderSet(event)
-	if event == NotificationEmailEventTeamInvitation {
+	if event == NotificationEmailEventTeamInvitation || event == NotificationEmailEventTeamActivation {
 		found := false
 		for _, p := range notificationEmailPlaceholdersIn(htmlBody) {
 			if p == "invitation_url" {
@@ -1052,9 +1056,11 @@ var notificationEmailEventOrder = []string{
 	NotificationEmailEventOpsAlert,
 	NotificationEmailEventOpsScheduledReport,
 	NotificationEmailEventTeamInvitation,
+	NotificationEmailEventTeamActivation,
 }
 
 var notificationEmailEventDefinitions = map[string]NotificationEmailEventInfo{
+	NotificationEmailEventTeamActivation: {Event: NotificationEmailEventTeamActivation, Label: "Enterprise activation / 企业开通邀请", Description: "Platform administrator invitation to activate an enterprise team.", Category: "team", Optional: false, Placeholders: append(append([]string{}, notificationEmailCommonPlaceholders...), "invitation_url", "expiry_time")},
 	NotificationEmailEventTeamInvitation: {Event: NotificationEmailEventTeamInvitation, Label: "Team invitation / 团队邀请", Description: "Invitation to join a team using the configured frontend URL.", Category: "team", Optional: false, Placeholders: append(append([]string{}, notificationEmailCommonPlaceholders...), "team_name", "invitation_url", "expiry_time")},
 	NotificationEmailEventAuthVerifyCode: {
 		Event:        NotificationEmailEventAuthVerifyCode,
@@ -1174,6 +1180,10 @@ var notificationEmailEventDefinitions = map[string]NotificationEmailEventInfo{
 }
 
 var notificationEmailOfficialTemplates = map[string]map[string]notificationEmailOfficialTemplate{
+	NotificationEmailEventTeamActivation: {
+		notificationEmailDefaultLocale: {Subject: "[{{site_name}}] Activate your enterprise panel", HTML: notificationEmailCard("#0ea5e9", "Enterprise activation invitation", `<p>Hello {{recipient_name}},</p><p>A platform administrator has invited you to activate an enterprise team. Your enterprise panel lets you invite members, set daily, weekly and monthly limits, and share the team's usage allowance.</p><p><a class="button" href="{{invitation_url}}">Activate enterprise panel</a></p><p>Sign in using {{recipient_email}} and choose a team name to activate. This single-use invitation expires at {{expiry_time}}.</p><p class="muted">{{invitation_url}}</p>`)},
+		notificationEmailLocaleChinese: {Subject: "[{{site_name}}] 企业面板开通邀请", HTML: notificationEmailCard("#0ea5e9", "企业面板开通邀请", `<p>{{recipient_name}}，您好：</p><p>平台管理员邀请您开通企业团队。开通后可通过企业面板自主邀请成员、设置日限额、周限额、月限额，团队成员共享使用额度。</p><p><a class="button" href="{{invitation_url}}">开通企业面板</a></p><p>请使用 {{recipient_email}} 登录并填写团队名称完成开通。链接仅可使用一次，有效期至 {{expiry_time}}。</p><p class="muted">{{invitation_url}}</p>`)},
+	},
 	NotificationEmailEventTeamInvitation: {
 		notificationEmailDefaultLocale: {Subject: "[{{site_name}}] Invitation to {{team_name}}", HTML: notificationEmailCard("#0ea5e9", "Team invitation", `<p>Hello {{recipient_name}},</p><p>You have been invited to <strong>{{team_name}}</strong>.</p><p><a class="button" href="{{invitation_url}}">View invitation</a></p><p>Sign in using {{recipient_email}} to accept. This invitation expires at {{expiry_time}}.</p><p class="muted">{{invitation_url}}</p><p>If you were not expecting this invitation, you can ignore it.</p>`)},
 		notificationEmailLocaleChinese: {Subject: "[{{site_name}}] 邀请加入 {{team_name}}", HTML: notificationEmailCard("#0ea5e9", "团队邀请", `<p>{{recipient_name}}，您好：</p><p>您被邀请加入 <strong>{{team_name}}</strong>。</p><p><a class="button" href="{{invitation_url}}">查看邀请</a></p><p>请使用 {{recipient_email}} 登录后接受邀请。有效期至 {{expiry_time}}。</p><p class="muted">{{invitation_url}}</p><p>如果您不认识邀请方，请忽略本邮件。</p>`)},

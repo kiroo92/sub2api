@@ -1,4 +1,20 @@
 export default {
+  allowedModels: '可用模型', editModels: '模型限制', searchModels: '搜索模型', allModels: '取消勾选，全部可用',
+  modelsHint: '从团队支持的模型中勾选该成员可用的模型；没有勾选任何模型时，全部可用。仅团队所有者和平台管理员可修改，保存后对该成员所有团队密钥的新请求生效。',
+  modelsLoadFailed: '模型列表加载失败，请重试。', noModels: '暂无匹配的模型', modelUnavailable: '当前不可用',
+  modelsRoutingHint: '团队尚未选择账号池，当前展示所有者可用分组支持的模型，可先配置成员限制。实际调用前请在团队设置中选择账号池。',
+  activationInvalid: '开通邀请无效、已过期或已使用。请确认当前登录邮箱与受邀邮箱一致，或联系平台管理员重发邀请。',
+  enterpriseActivation: '企业定制开通', invitationOnly: '管理员邀请开通', activate: '开通企业面板',
+  enterpriseHint: '企业定制提供主/备用号池保障与专属企业面板，让团队共享额度，统一管理成员和用量。',
+  contactAdmin: '请联系平台管理员咨询企业定制，收到开通邀请链接后，使用受邀邮箱登录即可开通。',
+  sharedQuotaHint: '团队成员共享所有者配置的使用额度，并受各自日、周、月限额约束。',
+  enterpriseFeatures: {
+    pools: { title: '主 / 备用号池保障', description: '企业定制配备主号池与备用号池，为团队使用提供稳定保障。' },
+    panel: { title: '企业面板', description: '自主邀请成员，设置日限额、周限额、月限额，集中管理团队密钥和用量。' },
+    shared: { title: '团队共享额度', description: '成员共享团队使用额度，由所有者统一承担费用，按成员查看用量。' }
+  },
+  activationInvitations: '开通邀请', activationInviteHint: '向企业负责人发送开通链接。对方使用受邀邮箱登录并接受后才能创建团队；链接 7 天内有效，仅可使用一次。重发会使旧链接失效。',
+  sendActivation: '发送开通邀请', activationSent: '开通邀请已发送', activationLink: '开通邀请链接', noActivationInvitations: '暂无待接受的开通邀请',
   memberCount: '{count}名成员', usageDetails: '用量与限额', noInvitations: '暂无邀请', platformAdmin: '平台管理员',
   guide: '功能引导', closeGuide: '知道了',
   guideSteps: {
@@ -16,9 +32,9 @@ export default {
   retryBilling: '重试结算',
   teamUsage: '团队用量（包含已退出成员）',
   supportedEndpoints: '仅支持文本 HTTP / WebSocket 请求，不支持图片生成、视频或 Live。',
-  title: '团队', description: '管理成员、团队密钥、限额和用量',
+  title: '企业面板', description: '邀请成员、设置用量限额，共享团队额度',
   refresh: '刷新', loading: '加载中…', failed: '操作失败，请重试', saved: '已保存',
-  create: '创建团队', createHint: '填写名称后创建团队。每人只能属于一个团队，包含自己创建的团队。', name: '团队名称',
+  create: '创建团队', createHint: '您收到平台管理员的开通邀请。请使用受邀邮箱登录，填写团队名称完成开通。每人只能属于一个团队。', name: '团队名称',
   pendingInvitations: '收到的邀请', expires: '有效期至', accept: '接受邀请',
   active: '正常', paused: '已暂停', disabled: '已禁用', owner: '所有者', member: '成员',
   pausedHint: '团队已暂停，全部团队密钥暂时不可用，所有者恢复团队后才可继续使用。',

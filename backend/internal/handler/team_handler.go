@@ -84,13 +84,14 @@ func (h *TeamHandler) Create(c *gin.Context) {
 		return
 	}
 	var in struct {
-		Name string `json:"name" binding:"required"`
+		Name  string `json:"name" binding:"required"`
+		Token string `json:"activation_token"`
 	}
 	if c.ShouldBindJSON(&in) != nil {
 		response.BadRequest(c, "Team name is required")
 		return
 	}
-	teamResult(c, nil, h.service.Create(c.Request.Context(), id, in.Name))
+	teamResult(c, nil, h.service.Create(c.Request.Context(), id, in.Name, in.Token))
 }
 func (h *TeamHandler) Update(c *gin.Context) {
 	id, ok := teamSubject(c)
@@ -136,6 +137,25 @@ func (h *TeamHandler) RemoveMember(c *gin.Context) {
 	}
 	teamResult(c, nil, h.service.Leave(c.Request.Context(), id, member))
 }
+func (h *TeamHandler) Models(c *gin.Context) {
+	id, ok := teamSubject(c)
+	if !ok {
+		return
+	}
+	member, ok := teamParam(c, "user_id")
+	if !ok {
+		return
+	}
+	var in struct {
+		AllowedModels *[]string `json:"allowed_models"`
+	}
+	if c.ShouldBindJSON(&in) != nil || in.AllowedModels == nil {
+		response.BadRequest(c, "allowed_models must be an array of model IDs")
+		return
+	}
+	teamResult(c, nil, h.service.SetModels(c.Request.Context(), id, member, *in.AllowedModels))
+}
+
 func (h *TeamHandler) Limits(c *gin.Context) {
 	id, ok := teamSubject(c)
 	if !ok {

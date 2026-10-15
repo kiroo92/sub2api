@@ -341,6 +341,11 @@ function localText(zh: string, en: string): string {
 }
 
 const eventDisplayMeta: Record<string, EventDisplayMeta> = {
+  "team.activation": {
+    label: "企业开通邀请",
+    timing: "平台管理员邀请企业负责人开通团队时发送，链接绑定受邀邮箱，7 天内有效。",
+    categoryLabel: "团队",
+  },
   "team.invitation": {
     label: "团队邀请",
     timing: "团队所有者或管理员邀请成员时发送，链接使用后台配置的前端地址。",
@@ -409,6 +414,11 @@ const eventDisplayMeta: Record<string, EventDisplayMeta> = {
 };
 
 const eventDisplayMetaEn: Record<string, EventDisplayMeta> = {
+  "team.activation": {
+    label: "Enterprise activation invitation",
+    timing: "Sent when a platform administrator invites an enterprise owner to activate a team. Bound to the invited email and valid for 7 days.",
+    categoryLabel: "Team",
+  },
   "team.invitation": {
     label: "Team invitation",
     timing: "Sent when a team owner or administrator invites a member, using the configured frontend URL.",

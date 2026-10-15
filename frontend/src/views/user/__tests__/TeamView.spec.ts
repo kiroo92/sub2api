@@ -4,7 +4,7 @@ import TeamView from '../TeamView.vue'
 import type { TeamSnapshot } from '@/api/team'
 
 const { api, showError, copy, createAPI } = vi.hoisted(() => ({
-  api: { get: vi.fn(), keys: vi.fn(), groups: vi.fn(), update: vi.fn(), dissolve: vi.fn(), accept: vi.fn(), acceptToken: vi.fn(), create: vi.fn(), recoverBilling: vi.fn() },
+  api: { get: vi.fn(), keys: vi.fn(), groups: vi.fn(), update: vi.fn(), dissolve: vi.fn(), accept: vi.fn(), acceptToken: vi.fn(), create: vi.fn(), recoverBilling: vi.fn(), models: vi.fn(), availableModels: vi.fn() },
   createAPI: vi.fn(),
   showError: vi.fn(), copy: vi.fn()
 }))
@@ -16,7 +16,7 @@ vi.mock('vue-i18n', async (original) => ({ ...await original<typeof import('vue-
 function state(role: 'owner' | 'member' = 'owner'): TeamSnapshot {
   return {
     team: { id: 1, name: 'Example', owner_id: 1, status: 'active', group_ids: [10, 20], default_limits: { daily: 0, weekly: 0, monthly: 0 }, created_at: '' },
-    role, members: [{ user_id: 1, email: 'owner@example.com', role: 'owner', limits: { daily: 0, weekly: 0, monthly: 0 }, usage: { daily: 1, weekly: 2, monthly: 3, total: 4 }, resets: { daily: null, weekly: null, monthly: null }, joined_at: '' }],
+    role, members: [{ user_id: 1, email: 'owner@example.com', role: 'owner', allowed_models: [], limits: { daily: 0, weekly: 0, monthly: 0 }, usage: { daily: 1, weekly: 2, monthly: 3, total: 4 }, resets: { daily: null, weekly: null, monthly: null }, joined_at: '' }],
     invitations: [], pending_invitations: []
   }
 }
@@ -42,6 +42,7 @@ beforeEach(() => {
   api.get.mockResolvedValue(state())
   api.keys.mockResolvedValue([{ id: 7, user_id: 2, email: 'member@example.com', name: 'Member key', key: 'sk-test-secret', status: 'active', quota_used: 5, last_used_at: null }])
   api.groups.mockResolvedValue([{ id: 10, name: 'Subscription', subscription_type: 'subscription', rate_multiplier: 1 }, { id: 20, name: 'Balance', subscription_type: 'standard', rate_multiplier: 1 }])
+  api.availableModels.mockResolvedValue(['gpt-5', 'claude-sonnet-4', 'other-model'])
   api.update.mockResolvedValue({})
 })
 
@@ -156,11 +157,12 @@ describe('team management', () => {
     wrapper.unmount()
   })
 
-  it('shows creation and recipient invitations only without a team', async () => {
+  it('shows enterprise activation information and recipient invitations without public creation', async () => {
     api.get.mockResolvedValue({ ...state(), team: null, role: null, members: [], pending_invitations: [{ id: 9, team_name: 'Invited team', expires_at: '2099-01-01T00:00:00Z' }] })
     api.accept.mockResolvedValue({})
     const wrapper = await open()
-    expect(wrapper.text()).toContain('team.create')
+    expect(wrapper.text()).toContain('team.enterpriseActivation')
+    expect(wrapper.text()).not.toContain('team.create')
     expect(api.keys).not.toHaveBeenCalled()
     await button(wrapper, 'team.accept').trigger('click')
     await flushPromises()
@@ -181,9 +183,125 @@ describe('team management', () => {
     await button(wrapper, 'team.confirm').trigger('click')
     await flushPromises()
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('team.create')
+    expect(wrapper.text()).toContain('team.enterpriseActivation')
+    expect(wrapper.text()).not.toContain('team.create')
     expect(wrapper.text()).not.toContain('sk-test-secret')
     expect(wrapper.text()).not.toContain('Example')
     wrapper.unmount()
   })
+})
+
+
+it('requires the administrator link and keeps it available when activation fails', async () => {
+  const token = 'b'.repeat(64)
+  window.history.replaceState({}, '', `/team#activate=${token}`)
+  api.get.mockResolvedValue({ ...state(), team: null, role: null, members: [] })
+  api.create.mockRejectedValueOnce({reason: 'TEAM_ACTIVATION_REQUIRED', message: 'Invitation expired'})
+  let wrapper = await open()
+  expect(window.location.hash).toBe('')
+  expect(api.create).not.toHaveBeenCalled()
+  expect(wrapper.text()).toContain('team.activate')
+  await wrapper.get('form input').setValue('Enterprise')
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  expect(api.create).toHaveBeenCalledWith('Enterprise', token)
+  expect(showError).toHaveBeenCalledWith('team.activationInvalid')
+  wrapper.unmount()
+  wrapper = await open()
+  expect(wrapper.text()).toContain('team.activate')
+  await wrapper.get('form input').setValue('Enterprise')
+  api.create.mockResolvedValueOnce({})
+  api.get.mockResolvedValue(state())
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  expect(sessionStorage.getItem('pending_team_activation')).toBeNull()
+  expect(wrapper.text()).toContain('team.sharedQuotaHint')
+  wrapper.unmount()
+})
+
+for (const adminTeamId of [undefined, 7]) {
+  it(`saves and clears member model restrictions (${adminTeamId ? 'admin' : 'owner'})`, async () => {
+    api.models.mockResolvedValue({})
+    const wrapper = await open(adminTeamId)
+    await button(wrapper, 'team.editModels').trigger('click')
+    await flushPromises()
+    expect(api.availableModels).toHaveBeenCalledOnce()
+    const dialog = wrapper.get('[role="dialog"]')
+    await dialog.get('input[value="gpt-5"]').setValue(true)
+    await dialog.get('input[value="claude-sonnet-4"]').setValue(true)
+    await dialog.get('form').trigger('submit')
+    await flushPromises()
+    expect(api.models).toHaveBeenLastCalledWith(1, ['gpt-5', 'claude-sonnet-4'])
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
+    await button(wrapper, 'team.editModels').trigger('click')
+    await flushPromises()
+    await button(wrapper, 'team.allModels').trigger('click')
+    await wrapper.get('[role="dialog"] form').trigger('submit')
+    await flushPromises()
+    expect(api.models).toHaveBeenLastCalledWith(1, [])
+    wrapper.unmount()
+  })
+}
+
+it('shows member model restrictions without editing controls', async () => {
+  const restricted = state('member')
+  restricted.members[0].allowed_models = ['gpt-5']
+  api.get.mockResolvedValue(restricted)
+  const wrapper = await open()
+  expect(wrapper.text()).toContain('gpt-5')
+  expect(wrapper.text()).not.toContain('team.editModels')
+  expect(api.availableModels).not.toHaveBeenCalled()
+  expect(api.models).not.toHaveBeenCalled()
+  wrapper.unmount()
+})
+
+it('preserves existing restrictions when a model becomes unavailable and supports search', async () => {
+  const restricted = state()
+  restricted.members[0].allowed_models = ['old-model', 'gpt-5']
+  api.get.mockResolvedValue(restricted)
+  const wrapper = await open()
+  await button(wrapper, 'team.editModels').trigger('click')
+  await flushPromises()
+  const dialog = wrapper.get('[role="dialog"]')
+  expect((dialog.get('input[value="old-model"]').element as HTMLInputElement).checked).toBe(true)
+  expect(dialog.text()).toContain('team.modelUnavailable')
+  await dialog.get('input[aria-label="team.searchModels"]').setValue('gpt')
+  expect(dialog.findAll('input[type="checkbox"]')).toHaveLength(1)
+  api.models.mockResolvedValue({})
+  await dialog.get('form').trigger('submit')
+  await flushPromises()
+  expect(api.models).toHaveBeenCalledWith(1, ['old-model', 'gpt-5'])
+  wrapper.unmount()
+})
+
+it('blocks saving on catalog failure and retries without clearing restrictions', async () => {
+  api.availableModels.mockRejectedValueOnce(new Error('Unavailable'))
+  const restricted = state()
+  restricted.members[0].allowed_models = ['gpt-5']
+  api.get.mockResolvedValue(restricted)
+  const wrapper = await open()
+  await button(wrapper, 'team.editModels').trigger('click')
+  await flushPromises()
+  const dialog = wrapper.get('[role="dialog"]')
+  expect(dialog.text()).toContain('team.modelsLoadFailed')
+  expect(dialog.findAll('button').find(node => node.text() === 'team.save')!.attributes('disabled')).toBeDefined()
+  await dialog.get('form').trigger('submit')
+  expect(api.models).not.toHaveBeenCalled()
+  await dialog.findAll('button').find(node => node.text() === 'team.refresh')!.trigger('click')
+  await flushPromises()
+  expect((dialog.get('input[value="gpt-5"]').element as HTMLInputElement).checked).toBe(true)
+  wrapper.unmount()
+})
+
+it('explains the model preview when the team has no routing pools', async () => {
+  const unconfigured = state()
+  unconfigured.team!.group_ids = []
+  api.get.mockResolvedValue(unconfigured)
+  const wrapper = await open()
+  await button(wrapper, 'team.editModels').trigger('click')
+  await flushPromises()
+  expect(wrapper.get('[role="dialog"]').text()).toContain('team.modelsRoutingHint')
+  expect(wrapper.get('[role="dialog"] input[value="gpt-5"]').exists()).toBe(true)
+  expect(api.update).not.toHaveBeenCalled()
+  wrapper.unmount()
 })

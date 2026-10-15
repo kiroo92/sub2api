@@ -11,6 +11,45 @@ import (
 
 const teamAdminOwnerContext = "team_admin_owner"
 
+func (h *TeamHandler) AdminActivationInvitations(c *gin.Context) {
+	if !teamPlatformAdmin(c) {
+		return
+	}
+	items, err := h.service.ActivationInvitations(c.Request.Context())
+	teamResult(c, items, err)
+}
+
+func (h *TeamHandler) AdminInviteActivation(c *gin.Context) {
+	if !teamPlatformAdmin(c) {
+		return
+	}
+	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not found in context")
+		return
+	}
+	var in struct {
+		Email string `json:"email" binding:"required"`
+	}
+	if c.ShouldBindJSON(&in) != nil {
+		response.BadRequest(c, "Email is required")
+		return
+	}
+	link, err := h.service.InviteActivation(c.Request.Context(), subject.UserID, in.Email)
+	teamResult(c, gin.H{"invitation_url": link}, err)
+}
+
+func (h *TeamHandler) AdminRevokeActivation(c *gin.Context) {
+	if !teamPlatformAdmin(c) {
+		return
+	}
+	id, ok := teamParam(c, "id")
+	if !ok {
+		return
+	}
+	teamResult(c, nil, h.service.RevokeActivation(c.Request.Context(), id))
+}
+
 func teamPlatformAdmin(c *gin.Context) bool {
 	if c.GetString(string(middleware.ContextKeyUserRole)) != service.RoleAdmin {
 		response.Forbidden(c, "Administrator access required")

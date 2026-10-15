@@ -68,7 +68,7 @@ func TestTeamAdminScopeUsesResolvedOwnerAndPreservesActor(t *testing.T) {
 
 func TestTeamAdminEndpointsRejectNonAdminWithoutTouchingServices(t *testing.T) {
 	h := NewTeamHandler(nil)
-	for _, fn := range []gin.HandlerFunc{h.AdminList, h.AdminConfig, h.AdminScope} {
+	for _, fn := range []gin.HandlerFunc{h.AdminList, h.AdminConfig, h.AdminScope, h.AdminActivationInvitations, h.AdminInviteActivation, h.AdminRevokeActivation} {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest(http.MethodGet, "/admin/teams", nil)
@@ -86,4 +86,19 @@ func TestTeamModelDiscoveryOmitsImageGenerationOnlyForTeams(t *testing.T) {
 	models := h.subscriptionModelIDs(context.WithValue(ctx, ctxkey.TeamBilling, true), groups)
 	require.Contains(t, models, "gpt-5")
 	require.NotContains(t, models, "gpt-image-1")
+}
+
+func TestTeamCreateRejectsMissingAdministratorInvitation(t *testing.T) {
+	h := NewTeamHandler(service.NewTeamService(nil, nil, nil, nil, nil))
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 99})
+	})
+	router.POST("/team", h.Create)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/team", strings.NewReader(`{"name":"Unauthorized"}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "TEAM_ACTIVATION_REQUIRED")
 }

@@ -1149,7 +1149,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 func (h *GatewayHandler) Models(c *gin.Context) {
 	apiKey, _ := middleware2.GetAPIKeyFromContext(c)
 	if apiKey.UsesDynamicRouting() {
-		writeModelsList(c, "", h.subscriptionModelIDs(c.Request.Context(), apiKey.SubscriptionGroups))
+		writeModelsList(c, "", service.FilterTeamModels(apiKey, h.subscriptionModelIDs(c.Request.Context(), apiKey.SubscriptionGroups)))
 		return
 	}
 
@@ -1267,7 +1267,7 @@ func (h *GatewayHandler) subscriptionModelIDs(ctx context.Context, groups []*ser
 func (h *GatewayHandler) CodexModels(c *gin.Context) {
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
 	if apiKey.UsesDynamicRouting() {
-		models := h.subscriptionModelIDs(c.Request.Context(), apiKey.SubscriptionGroups)
+		models := service.FilterTeamModels(apiKey, h.subscriptionModelIDs(c.Request.Context(), apiKey.SubscriptionGroups))
 		body, err := h.gatewayService.BuildCodexModelsManifestForGroup(c.Request.Context(), nil, "", models)
 		if err != nil {
 			h.errorResponse(c, http.StatusInternalServerError, "api_error", "Failed to build models manifest")

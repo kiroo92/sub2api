@@ -58,9 +58,27 @@ func (s *SubscriptionService) selectTeamForRequest(ctx context.Context, key *API
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := ValidateTeamModels(key.Team.AllowedModels, request.Models, request.Discovery); err != nil {
+		return nil, nil, err
+	}
+	key.Team.RequestModels = append([]string(nil), request.Models...)
 	result := *key
 	result.SubscriptionGroups = nil
-	for _, id := range key.Team.GroupIDs {
+	groupIDs := key.Team.GroupIDs
+	// Discovery previews owner-accessible sources for an unconfigured team.
+	// Execution still requires explicitly configured team routing sources.
+	if request.Discovery && len(groupIDs) == 0 {
+		catalog := &APIKeyService{userRepo: s.teamUsers, groupRepo: s.groupRepo, userSubRepo: s.userSubRepo}
+		groups, err := catalog.GetAvailableGroups(ctx, key.Team.OwnerID)
+		if err != nil {
+			return nil, nil, err
+		}
+		groupIDs = make([]int64, 0, len(groups))
+		for _, group := range groups {
+			groupIDs = append(groupIDs, group.ID)
+		}
+	}
+	for _, id := range groupIDs {
 		group, err := s.groupRepo.GetByID(ctx, id)
 		if errors.Is(err, ErrGroupNotFound) {
 			continue

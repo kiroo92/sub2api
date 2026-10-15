@@ -1,4 +1,20 @@
 export default {
+  allowedModels: 'Allowed models', editModels: 'Model restrictions', searchModels: 'Search models', allModels: 'Clear selection: allow all models',
+  modelsHint: 'Select the models this member may use from the team’s supported models. No selection allows all models. Only the team owner and platform administrators can edit this; changes apply to new requests across all of the member’s team keys.',
+  modelsLoadFailed: 'Failed to load models. Please retry.', noModels: 'No matching models', modelUnavailable: 'Currently unavailable',
+  modelsRoutingHint: 'No account pools are selected for this team. Models from the owner’s available groups are shown so member restrictions can be configured in advance. Select account pools in team settings before making requests.',
+  activationInvalid: 'This activation invitation is invalid, expired or already used. Sign in with the invited email or ask a platform administrator to resend it.',
+  enterpriseActivation: 'Custom enterprise access', invitationOnly: 'Administrator invitation required', activate: 'Activate enterprise panel',
+  enterpriseHint: 'Enterprise plans include primary and backup account pools and an enterprise panel to share allowance and manage members and usage.',
+  contactAdmin: 'Contact a platform administrator about an enterprise plan. Open your activation invitation link and sign in with the invited email address to get started.',
+  sharedQuotaHint: 'Team members share the owner’s configured allowance, subject to their individual daily, weekly and monthly limits.',
+  enterpriseFeatures: {
+    pools: { title: 'Primary and backup account pools', description: 'Enterprise plans provide primary and backup account pools to keep your team running reliably.' },
+    panel: { title: 'Enterprise panel', description: 'Invite members, set daily, weekly and monthly limits, and manage team keys and usage in one place.' },
+    shared: { title: 'Shared team allowance', description: 'Members share the team allowance, funded by the owner, with usage tracked per member.' }
+  },
+  activationInvitations: 'Activation invitations', activationInviteHint: 'Send an activation link to the enterprise owner. They must sign in with the invited email and accept before creating a team. Links expire after 7 days and can only be used once. Resending invalidates the previous link.',
+  sendActivation: 'Send activation invitation', activationSent: 'Activation invitation sent', activationLink: 'Activation invitation link', noActivationInvitations: 'No pending activation invitations',
   memberCount: '{count} members', usageDetails: 'Usage & limits', noInvitations: 'No invitations', platformAdmin: 'Platform administrator',
   guide: 'Quick guide', closeGuide: 'Got it',
   guideSteps: {
@@ -16,9 +32,9 @@ export default {
   retryBilling: 'Retry Settlement',
   teamUsage: 'Team usage (including former members)',
   supportedEndpoints: 'Text HTTP / WebSocket requests only. Image generation, video and Live are not supported.',
-  title: 'Team', description: 'Manage members, team keys, limits and usage',
+  title: 'Enterprise Panel', description: 'Invite members, set usage limits and share the team allowance',
   refresh: 'Refresh', loading: 'Loading…', failed: 'Unable to complete the operation', saved: 'Saved',
-  create: 'Create team', createHint: 'Choose a name to start. You can belong to one team, including a team you own.', name: 'Team name',
+  create: 'Create team', createHint: 'A platform administrator has invited you to activate a team. Sign in with the invited email and choose a team name. You can belong to one team.', name: 'Team name',
   pendingInvitations: 'Your invitations', expires: 'Expires', accept: 'Accept invitation',
   active: 'Active', paused: 'Paused', disabled: 'Disabled', owner: 'Owner', member: 'Member',
   pausedHint: 'This team is paused. All team keys are unavailable until the owner resumes the team.',
