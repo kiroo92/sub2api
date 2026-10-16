@@ -46,6 +46,8 @@ func RegisterAdminRoutes(
 		// 账号管理
 		registerAccountRoutes(admin, h, stepUpAuth)
 
+		admin.GET("/lucky-draw", h.LuckyDraw.AdminGet)
+		admin.PUT("/lucky-draw/config", h.LuckyDraw.Configure)
 		admin.GET("/lottery", h.Lottery.AdminGet)
 		admin.PUT("/lottery/config", h.Lottery.Configure)
 		admin.GET("/teams", h.Team.AdminList)

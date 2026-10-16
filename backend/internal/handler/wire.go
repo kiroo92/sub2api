@@ -185,6 +185,7 @@ func ProvideAdminSettingHandler(settingService *service.SettingService, emailSer
 func ProvideHandlers(
 	teamHandler *TeamHandler,
 	lotteryHandler *LotteryHandler,
+	luckyDrawHandler *LuckyDrawHandler,
 	authHandler *AuthHandler,
 	userHandler *UserHandler,
 	apiKeyHandler *APIKeyHandler,
@@ -213,6 +214,7 @@ func ProvideHandlers(
 	return &Handlers{
 		Team:             teamHandler,
 		Lottery:          lotteryHandler,
+		LuckyDraw:        luckyDrawHandler,
 		Auth:             authHandler,
 		User:             userHandler,
 		APIKey:           apiKeyHandler,
@@ -241,6 +243,7 @@ func ProvideHandlers(
 var ProviderSet = wire.NewSet(
 	NewTeamHandler,
 	NewLotteryHandler,
+	NewLuckyDrawHandler,
 	// Top-level handlers
 	NewAuthHandler,
 	NewUserHandler,

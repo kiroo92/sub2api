@@ -265,6 +265,14 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/lucky-draw', name: 'LuckyDraw', component: () => import('@/views/user/LuckyDrawView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: false, title: 'Lucky draw', titleKey: 'luckyDraw.title', descriptionKey: 'luckyDraw.description' }
+  },
+  {
+    path: '/admin/lucky-draw', name: 'AdminLuckyDraw', component: () => import('@/views/admin/LuckyDrawView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Lucky draw management', titleKey: 'luckyDraw.adminTitle', descriptionKey: 'luckyDraw.adminDescription' }
+  },
+  {
     path: '/lottery', name: 'Lottery', component: () => import('@/views/user/LotteryView.vue'),
     meta: { requiresAuth: true, requiresAdmin: false, title: 'Prize draw', titleKey: 'lottery.title', descriptionKey: 'lottery.description' }
   },
@@ -1031,6 +1039,8 @@ router.beforeEach(async (to, _from, next) => {
   if (authStore.isSimpleMode) {
     const restrictedPaths = [
       '/lottery',
+      '/lucky-draw',
+      '/admin/lucky-draw',
       '/admin/lottery',
       '/admin/subscriptions',
       '/admin/redeem',

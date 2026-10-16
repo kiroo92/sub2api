@@ -140,6 +140,7 @@ docs/*
 !docs/ASYNC_IMAGE_TASKS.md
 !docs/BATCH_IMAGE_MVP.md
 !docs/lottery.md
+!docs/lucky-draw.md
 !docs/team-requirements.md
 !docs/team-api.md
 !docs/team-billing.md

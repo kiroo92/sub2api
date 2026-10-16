@@ -142,6 +142,8 @@ func RegisterUserRoutes(
 		}
 
 		// 抽奖活动（JWT 用户身份，参与无需支付）。
+		authenticated.GET("/lucky-draw", h.LuckyDraw.Get)
+		authenticated.POST("/lucky-draw/draw", panelRateLimiter.Heavy(), h.LuckyDraw.Draw)
 		authenticated.GET("/lottery", h.Lottery.Get)
 		authenticated.POST("/lottery/join", h.Lottery.Join)
 

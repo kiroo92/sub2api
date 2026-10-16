@@ -1,3 +1,4 @@
+import luckyDraw from './luckyDraw'
 import lottery from './lottery'
 import modelMarketplace from './modelMarketplace'
 import invoices from './invoices'
@@ -16,6 +17,7 @@ export default {
   invoices,
   team,
   ...lottery,
+  ...luckyDraw,
   ...landing,
   ...common,
   ...dashboard,

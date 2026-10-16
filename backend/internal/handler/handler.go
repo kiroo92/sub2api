@@ -49,6 +49,7 @@ type AdminHandlers struct {
 type Handlers struct {
 	Team             *TeamHandler
 	Lottery          *LotteryHandler
+	LuckyDraw        *LuckyDrawHandler
 	Auth             *AuthHandler
 	User             *UserHandler
 	APIKey           *APIKeyHandler

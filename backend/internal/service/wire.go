@@ -859,6 +859,7 @@ func ProvideSubscriptionService(groupRepo GroupRepository, userSubRepo UserSubsc
 var ProviderSet = wire.NewSet(
 	NewTeamService,
 	NewLotteryService,
+	NewLuckyDrawService,
 	NewLotteryCaptchaService,
 	// Core services
 	ProvideAuthService,
