@@ -47,6 +47,8 @@ func RegisterAdminRoutes(
 		registerAccountRoutes(admin, h, stepUpAuth)
 
 		admin.GET("/lucky-draw", h.LuckyDraw.AdminGet)
+		admin.GET("/lucky-draw/stats", h.LuckyDraw.Stats)
+		admin.POST("/lucky-draw/grants", h.LuckyDraw.Grant)
 		admin.PUT("/lucky-draw/config", h.LuckyDraw.Configure)
 		admin.GET("/lottery", h.Lottery.AdminGet)
 		admin.PUT("/lottery/config", h.Lottery.Configure)

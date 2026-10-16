@@ -28,11 +28,12 @@ type LuckyDrawPrize struct {
 }
 
 type LuckyDrawConfig struct {
-	Enabled         bool             `json:"enabled"`
-	Version         int64            `json:"version"`
-	RechargePerDraw float64          `json:"recharge_per_draw"`
-	GuaranteeAfter  int              `json:"guarantee_after"`
-	Prizes          []LuckyDrawPrize `json:"prizes"`
+	Enabled          bool             `json:"enabled"`
+	Version          int64            `json:"version"`
+	RechargePerDraw  float64          `json:"recharge_per_draw"`
+	GuaranteeAfter   int              `json:"guarantee_after"`
+	Prizes           []LuckyDrawPrize `json:"prizes"`
+	RechargeStartsAt time.Time        `json:"recharge_starts_at"`
 }
 
 func (c LuckyDrawConfig) Validate() error {
@@ -73,6 +74,7 @@ type LuckyDrawSnapshot struct {
 	TotalRecharged float64           `json:"total_recharged"`
 	Chances        int64             `json:"chances"`
 	DrawsUsed      int64             `json:"draws_used"`
+	ManualChances  int64             `json:"manual_chances"`
 	Misses         int               `json:"misses"`
 	History        []LuckyDrawRecord `json:"history"`
 }
@@ -82,6 +84,9 @@ type LuckyDrawRepository interface {
 	Snapshot(context.Context, int64) (*LuckyDrawSnapshot, error)
 	Configure(context.Context, LuckyDrawConfig) error
 	Draw(context.Context, int64, string, int64, LuckyDrawPicker) (*LuckyDrawRecord, error)
+	DrawBatch(context.Context, int64, string, int64, int, LuckyDrawPicker) (*LuckyDrawBatch, error)
+	AdminStats(context.Context, string, int) (*LuckyDrawAdminStats, error)
+	GrantChances(context.Context, int64, int64, string, int, string) (*LuckyDrawGrant, error)
 }
 
 type LuckyDrawService struct {
@@ -95,6 +100,19 @@ func NewLuckyDrawService(repo LuckyDrawRepository, billing *BillingCacheService,
 }
 func (s *LuckyDrawService) Snapshot(ctx context.Context, userID int64) (*LuckyDrawSnapshot, error) {
 	return s.repo.Snapshot(ctx, userID)
+}
+func (s *LuckyDrawService) AdminStats(ctx context.Context, search string, page int) (*LuckyDrawAdminStats, error) {
+	if page < 1 {
+		page = 1
+	}
+	if page > 1000000 {
+		page = 1000000
+	}
+	search = strings.TrimSpace(search)
+	if len(search) > 200 {
+		return nil, infraerrors.BadRequest("INVALID_SEARCH", "搜索内容过长")
+	}
+	return s.repo.AdminStats(ctx, search, page)
 }
 func (s *LuckyDrawService) Configure(ctx context.Context, c LuckyDrawConfig) error {
 	if err := c.Validate(); err != nil {
@@ -112,18 +130,42 @@ func (s *LuckyDrawService) Draw(ctx context.Context, userID int64, requestID str
 		return nil, err
 	}
 	if result.PrizeAmount > 0 {
-		cacheCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		if s.billing != nil {
-			if err := s.billing.InvalidateUserBalance(cacheCtx, userID); err != nil {
-				slog.Warn("lucky draw balance cache invalidation failed", "user_id", userID, "error", err)
-			}
-		}
-		if s.auth != nil {
-			s.auth.InvalidateAuthCacheByUserID(cacheCtx, userID)
-		}
+		s.invalidateAwardCaches(ctx, userID)
 	}
 	return result, nil
+}
+
+type LuckyDrawBatch struct {
+	RequestID    string            `json:"request_id"`
+	Records      []LuckyDrawRecord `json:"records"`
+	TotalAwarded float64           `json:"total_awarded"`
+}
+
+func (s *LuckyDrawService) DrawBatch(ctx context.Context, userID int64, requestID string, version int64, count int) (*LuckyDrawBatch, error) {
+	id, err := uuid.Parse(requestID)
+	if err != nil || id == uuid.Nil || version < 1 || userID < 1 || (count != 1 && count != 5 && count != 10) {
+		return nil, infraerrors.BadRequest("INVALID_LUCKY_DRAW_REQUEST", "无效的连抽请求")
+	}
+	result, err := s.repo.DrawBatch(ctx, userID, id.String(), version, count, pickLuckyDrawPrize)
+	if err != nil {
+		return nil, err
+	}
+	if result.TotalAwarded > 0 {
+		s.invalidateAwardCaches(ctx, userID)
+	}
+	return result, nil
+}
+func (s *LuckyDrawService) invalidateAwardCaches(ctx context.Context, userID int64) {
+	cacheCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if s.billing != nil {
+		if err := s.billing.InvalidateUserBalance(cacheCtx, userID); err != nil {
+			slog.Warn("lucky draw balance cache invalidation failed", "user_id", userID, "error", err)
+		}
+	}
+	if s.auth != nil {
+		s.auth.InvalidateAuthCacheByUserID(cacheCtx, userID)
+	}
 }
 
 func pickLuckyDrawPrize(prizes []LuckyDrawPrize, guaranteed bool) (int, error) {

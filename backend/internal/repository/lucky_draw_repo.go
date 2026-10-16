@@ -6,6 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/google/uuid"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
@@ -16,13 +20,13 @@ func NewLuckyDrawRepository(db *sql.DB) service.LuckyDrawRepository {
 	return &luckyDrawRepository{db: db}
 }
 
-const luckyConfigColumns = `enabled,version,recharge_per_draw,guarantee_after,prizes`
+const luckyConfigColumns = `enabled,version,recharge_per_draw,guarantee_after,prizes,recharge_starts_at`
 const luckyRecordColumns = `id,request_id,config_version,prize_index,prize_name,prize_amount,guaranteed,created_at`
 
 func scanLuckyConfig(row lotteryScanner) (service.LuckyDrawConfig, error) {
 	var c service.LuckyDrawConfig
 	var prizes []byte
-	err := row.Scan(&c.Enabled, &c.Version, &c.RechargePerDraw, &c.GuaranteeAfter, &prizes)
+	err := row.Scan(&c.Enabled, &c.Version, &c.RechargePerDraw, &c.GuaranteeAfter, &prizes, &c.RechargeStartsAt)
 	if err != nil {
 		return c, err
 	}
@@ -84,7 +88,7 @@ func (r *luckyDrawRepository) Snapshot(ctx context.Context, userID int64) (*serv
 		return nil, err
 	}
 	if userID > 0 {
-		err = tx.QueryRowContext(ctx, `SELECT u.total_recharged,COALESCE(s.draws_used,0),COALESCE(s.misses,0),GREATEST(0,FLOOR(GREATEST(u.total_recharged,0)/$2::numeric)-COALESCE(s.draws_used,0))::bigint FROM users u LEFT JOIN lucky_draw_users s ON s.user_id=u.id WHERE u.id=$1 AND u.deleted_at IS NULL`, userID, lotteryMoney(out.Config.RechargePerDraw)).Scan(&out.TotalRecharged, &out.DrawsUsed, &out.Misses, &out.Chances)
+		err = tx.QueryRowContext(ctx, `SELECT r.amount,COALESCE(s.draws_used,0),COALESCE(s.misses,0),COALESCE(s.manual_chances,0),GREATEST(0,FLOOR(r.amount/$2::numeric)+COALESCE(s.manual_chances,0)-COALESCE(s.draws_used,0))::bigint FROM users u LEFT JOIN lucky_draw_users s ON s.user_id=u.id CROSS JOIN LATERAL (SELECT COALESCE(SUM(`+luckyRechargeNet+`),0) AS amount FROM payment_orders p WHERE p.user_id=u.id AND `+luckyRechargeEligible+`) r WHERE u.id=$1 AND u.deleted_at IS NULL`, userID, lotteryMoney(out.Config.RechargePerDraw), out.Config.RechargeStartsAt).Scan(&out.TotalRecharged, &out.DrawsUsed, &out.Misses, &out.ManualChances, &out.Chances)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, service.ErrUserNotFound
 		}
@@ -116,6 +120,17 @@ func (r *luckyDrawRepository) Snapshot(ctx context.Context, userID int64) (*serv
 }
 
 func (r *luckyDrawRepository) Draw(ctx context.Context, userID int64, requestID string, version int64, pick service.LuckyDrawPicker) (*service.LuckyDrawRecord, error) {
+	batch, err := r.DrawBatch(ctx, userID, requestID, version, 1, pick)
+	if err != nil {
+		return nil, err
+	}
+	return &batch.Records[0], nil
+}
+func (r *luckyDrawRepository) DrawBatch(ctx context.Context, userID int64, requestID string, version int64, count int, pick service.LuckyDrawPicker) (*service.LuckyDrawBatch, error) {
+	if count != 1 && count != 5 && count != 10 {
+		return nil, infraerrors.BadRequest("INVALID_LUCKY_DRAW_REQUEST", "无效的连抽次数")
+	}
+
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -126,9 +141,29 @@ func (r *luckyDrawRepository) Draw(ctx context.Context, userID int64, requestID 
 	if err != nil {
 		return nil, err
 	}
+	var saved []byte
+	var savedCount int
+	err = tx.QueryRowContext(ctx, `SELECT draw_count,result FROM lucky_draw_batches WHERE user_id=$1 AND request_id=$2`, userID, requestID).Scan(&savedCount, &saved)
+	if err == nil {
+		if savedCount != count {
+			return nil, infraerrors.Conflict("LUCKY_DRAW_REQUEST_CONFLICT", "同一请求不能更改连抽次数")
+		}
+		var batch service.LuckyDrawBatch
+		if err = json.Unmarshal(saved, &batch); err != nil {
+			return nil, err
+		}
+		return &batch, tx.Commit()
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	// Preserve recovery of single draws issued before batch support existed.
 	previous, err := scanLuckyRecord(tx.QueryRowContext(ctx, `SELECT `+luckyRecordColumns+` FROM lucky_draw_records WHERE user_id=$1 AND request_id=$2`, userID, requestID))
 	if err == nil {
-		return previous, tx.Commit()
+		if count != 1 {
+			return nil, infraerrors.Conflict("LUCKY_DRAW_REQUEST_CONFLICT", "同一请求不能更改连抽次数")
+		}
+		return &service.LuckyDrawBatch{RequestID: requestID, Records: []service.LuckyDrawRecord{*previous}, TotalAwarded: previous.PrizeAmount}, tx.Commit()
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
@@ -141,7 +176,7 @@ func (r *luckyDrawRepository) Draw(ctx context.Context, userID int64, requestID 
 	}
 	var earned int64
 	var status string
-	err = tx.QueryRowContext(ctx, `SELECT FLOOR(GREATEST(total_recharged,0)/$2::numeric)::bigint,status FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, userID, lotteryMoney(c.RechargePerDraw)).Scan(&earned, &status)
+	err = tx.QueryRowContext(ctx, `SELECT status FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, userID).Scan(&status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, service.ErrUserNotFound
 	}
@@ -151,53 +186,75 @@ func (r *luckyDrawRepository) Draw(ctx context.Context, userID int64, requestID 
 	if status != service.StatusActive {
 		return nil, service.ErrLuckyDrawNoChances
 	}
+	if err = tx.QueryRowContext(ctx, `SELECT FLOOR(COALESCE(SUM(`+luckyRechargeNet+`),0)/$2::numeric)::bigint FROM payment_orders p WHERE p.user_id=$1 AND `+luckyRechargeEligible, userID, lotteryMoney(c.RechargePerDraw), c.RechargeStartsAt).Scan(&earned); err != nil {
+		return nil, err
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO lucky_draw_users (user_id) VALUES ($1) ON CONFLICT DO NOTHING`, userID); err != nil {
 		return nil, err
 	}
-	var used int64
+	var used, manual int64
 	var misses int
-	if err = tx.QueryRowContext(ctx, `SELECT draws_used,misses FROM lucky_draw_users WHERE user_id=$1 FOR UPDATE`, userID).Scan(&used, &misses); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT draws_used,misses,manual_chances FROM lucky_draw_users WHERE user_id=$1 FOR UPDATE`, userID).Scan(&used, &misses, &manual); err != nil {
 		return nil, err
 	}
-	if used >= earned {
+	if int64(count) > earned+manual-used {
 		return nil, service.ErrLuckyDrawNoChances
 	}
-	guaranteed := c.GuaranteeAfter > 0 && misses >= c.GuaranteeAfter-1
-	index, err := pick(c.Prizes, guaranteed)
-	if err != nil {
-		return nil, err
-	}
-	if index < 0 || index >= len(c.Prizes) || (guaranteed && c.Prizes[index].Amount <= 0) {
-		return nil, fmt.Errorf("invalid lucky draw picker result: %d", index)
-	}
-	prize := c.Prizes[index]
 	rules, err := json.Marshal(c)
 	if err != nil {
 		return nil, err
 	}
-	result, err := scanLuckyRecord(tx.QueryRowContext(ctx, `INSERT INTO lucky_draw_records (user_id,request_id,config_version,prize_index,prize_name,prize_amount,guaranteed,rules) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING `+luckyRecordColumns, userID, requestID, c.Version, index, prize.Name, lotteryMoney(prize.Amount), guaranteed, string(rules)))
-	if err != nil {
-		return nil, err
-	}
-	// Misses can grow indefinitely while guarantees are disabled; cap the stored counter.
-	if misses < 1000 {
-		misses++
-	}
-	if prize.Amount > 0 {
-		misses = 0
-		if _, err = tx.ExecContext(ctx, `UPDATE users SET balance=balance+$2::numeric,updated_at=NOW() WHERE id=$1`, userID, lotteryMoney(prize.Amount)); err != nil {
+	batch := &service.LuckyDrawBatch{RequestID: requestID, Records: make([]service.LuckyDrawRecord, 0, count)}
+	totalCents := int64(0)
+	for i := 0; i < count; i++ {
+		recordRequestID := requestID
+		if count > 1 {
+			recordRequestID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(fmt.Sprintf("lucky:%d:%s:%d", userID, requestID, i))).String()
+		}
+		guaranteed := c.GuaranteeAfter > 0 && misses >= c.GuaranteeAfter-1
+		index, err := pick(c.Prizes, guaranteed)
+		if err != nil {
 			return nil, err
 		}
-		// Promotion awards must not increment total_recharged. Persist cache invalidation.
+		if index < 0 || index >= len(c.Prizes) || (guaranteed && c.Prizes[index].Amount <= 0) {
+			return nil, fmt.Errorf("invalid lucky draw picker result: %d", index)
+		}
+		prize := c.Prizes[index]
+		result, err := scanLuckyRecord(tx.QueryRowContext(ctx, `INSERT INTO lucky_draw_records (user_id,request_id,config_version,prize_index,prize_name,prize_amount,guaranteed,rules) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING `+luckyRecordColumns, userID, recordRequestID, c.Version, index, prize.Name, lotteryMoney(prize.Amount), guaranteed, string(rules)))
+		if err != nil {
+			return nil, err
+		}
+		batch.Records = append(batch.Records, *result)
+		// Misses can grow indefinitely while guarantees are disabled; cap the stored counter.
+		if misses < 1000 {
+			misses++
+		}
+		if prize.Amount > 0 {
+			misses = 0
+			totalCents += int64(math.Round(prize.Amount * 100))
+		}
+	}
+	batch.TotalAwarded = float64(totalCents) / 100
+	if totalCents > 0 {
+		if _, err = tx.ExecContext(ctx, `UPDATE users SET balance=balance+$2::numeric,updated_at=NOW() WHERE id=$1`, userID, lotteryMoney(batch.TotalAwarded)); err != nil {
+			return nil, err
+		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO auth_cache_invalidation_outbox (cache_key) SELECT encode(sha256(convert_to(key,'UTF8')),'hex') FROM api_keys WHERE user_id=$1 AND deleted_at IS NULL AND key<>''`, userID); err != nil {
 			return nil, err
 		}
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE lucky_draw_users SET draws_used=draws_used+1,misses=$2 WHERE user_id=$1`, userID, misses); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE lucky_draw_users SET draws_used=draws_used+$3,misses=$2 WHERE user_id=$1`, userID, misses, count); err != nil {
+		return nil, err
+	}
+	saved, err = json.Marshal(batch)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO lucky_draw_batches (user_id,request_id,draw_count,result) VALUES ($1,$2,$3,$4)`, userID, requestID, count, string(saved)); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
-	return result, nil
+	return batch, nil
 }

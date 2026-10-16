@@ -58,3 +58,19 @@ func (r *luckyPickerRepo) Draw(_ context.Context, _ int64, _ string, _ int64, pi
 	r.index = index
 	return &service.LuckyDrawRecord{}, err
 }
+
+func (r *luckyPickerRepo) AdminStats(context.Context, string, int) (*service.LuckyDrawAdminStats, error) {
+	return &service.LuckyDrawAdminStats{}, nil
+}
+
+func (r *luckyPickerRepo) GrantChances(context.Context, int64, int64, string, int, string) (*service.LuckyDrawGrant, error) {
+	return &service.LuckyDrawGrant{}, nil
+}
+
+func (r *luckyPickerRepo) DrawBatch(ctx context.Context, userID int64, requestID string, version int64, count int, pick service.LuckyDrawPicker) (*service.LuckyDrawBatch, error) {
+	d, err := r.Draw(ctx, userID, requestID, version, pick)
+	if err != nil {
+		return nil, err
+	}
+	return &service.LuckyDrawBatch{Records: []service.LuckyDrawRecord{*d}}, nil
+}

@@ -12,7 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type luckyHandlerRepo struct{ userID int64 }
+type luckyHandlerRepo struct {
+	userID, adminID int64
+	grantCount      int
+}
 
 func (r *luckyHandlerRepo) Snapshot(_ context.Context, userID int64) (*service.LuckyDrawSnapshot, error) {
 	r.userID = userID
@@ -56,4 +59,60 @@ func TestLuckyDrawHandlerRejectsInvalidRequest(t *testing.T) {
 	h = NewLuckyDrawHandler(nil, &config.Config{RunMode: config.RunModeSimple})
 	h.Draw(c)
 	require.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func (r *luckyHandlerRepo) AdminStats(context.Context, string, int) (*service.LuckyDrawAdminStats, error) {
+	return &service.LuckyDrawAdminStats{}, nil
+}
+
+func TestLuckyDrawStatsRejectsInvalidPageAndSimpleMode(t *testing.T) {
+	h := NewLuckyDrawHandler(service.NewLuckyDrawService(&luckyHandlerRepo{}, nil, nil), &config.Config{})
+	for _, query := range []string{"page=0", "page=-1", "page=abc", "page=1000001"} {
+		c, w := lotteryHandlerContext("")
+		c.Request.URL.RawQuery = query
+		h.Stats(c)
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	}
+	c, w := lotteryHandlerContext("")
+	h.Stats(c)
+	require.Equal(t, http.StatusOK, w.Code)
+	c, w = lotteryHandlerContext("")
+	h = NewLuckyDrawHandler(nil, &config.Config{RunMode: config.RunModeSimple})
+	h.Stats(c)
+	require.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func (r *luckyHandlerRepo) GrantChances(_ context.Context, adminID, userID int64, _ string, count int, _ string) (*service.LuckyDrawGrant, error) {
+	r.adminID = adminID
+	r.userID = userID
+	r.grantCount = count
+	return &service.LuckyDrawGrant{AdminID: adminID, UserID: userID, Chances: count}, nil
+}
+func TestLuckyDrawGrantUsesAuthenticatedAdmin(t *testing.T) {
+	repo := &luckyHandlerRepo{}
+	h := NewLuckyDrawHandler(service.NewLuckyDrawService(repo, nil, nil), &config.Config{})
+	c, w := lotteryHandlerContext(`{"admin_id":999,"user_id":7,"request_id":"d66d1ae0-9bea-4567-8ab7-9198e788cb6f","count":10,"note":"活动补发"}`)
+	c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 42})
+	h.Grant(c)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.EqualValues(t, 42, repo.adminID)
+	require.EqualValues(t, 7, repo.userID)
+	require.Equal(t, 10, repo.grantCount)
+	c, w = lotteryHandlerContext(`{}`)
+	h.Grant(c)
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+	for _, body := range []string{`{"user_id":7,"request_id":"d66d1ae0-9bea-4567-8ab7-9198e788cb6f","count":0}`, `{"user_id":7,"request_id":"d66d1ae0-9bea-4567-8ab7-9198e788cb6f","count":10001}`} {
+		c, w = lotteryHandlerContext(body)
+		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 42})
+		h.Grant(c)
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	}
+}
+
+func (r *luckyHandlerRepo) DrawBatch(ctx context.Context, userID int64, requestID string, version int64, count int, pick service.LuckyDrawPicker) (*service.LuckyDrawBatch, error) {
+	d, err := r.Draw(ctx, userID, requestID, version, pick)
+	if err != nil {
+		return nil, err
+	}
+	return &service.LuckyDrawBatch{Records: []service.LuckyDrawRecord{*d}}, nil
 }
